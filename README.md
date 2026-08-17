@@ -62,8 +62,8 @@ docker compose up -d
 
 Open **http://localhost:8080** and:
 
-1. **Settings** (gear icon) → set your real exam date. The countdown and the study plan both
-   remap against it immediately.
+1. **Settings** (small ⚙ button, bottom-left of the sidebar, next to Search) → set your real exam
+   date. The countdown and the study plan both remap against it immediately.
 2. **Dashboard** → the "Start" card always points at Domain 1 (the heaviest-weighted domain) —
    click straight into practice, or open **Study plan** in the sidebar to follow the day-by-day
    checklist instead.
@@ -71,8 +71,18 @@ Open **http://localhost:8080** and:
    scored, **Flashcards** for quick review, **Analytics** to see readiness by domain once you've
    taken a few.
 
-Full command reference (rebuild-vs-restart, logs, stopping) is in
-[Quick start (Docker)](#quick-start-docker) below.
+Progress persists to a local `./data/` folder (gitignored — that one's yours). Edit a markdown
+file and `docker compose restart` to pick up the change; edit the app's own source and run
+`docker compose build` again.
+
+```bash
+docker compose logs      # boot order: "/data is writable" -> content summary -> "Serving on :8080"
+docker compose down      # stop
+```
+
+If a markdown file has a genuine structural problem — a malformed question, a mock-exam question
+that can't be matched to a domain — the container **refuses to start** and prints exactly what's
+wrong and where, rather than serving a broken app silently.
 
 ### Option B — Claude Code (interactive)
 
@@ -114,30 +124,6 @@ Anything Claude Code adds or edits in `SnowPro_Notes_and_Questions/` shows up in
 next `docker compose restart` (or immediately in `npm run build:content:watch`, see
 [Local development](#local-development-without-docker)) — the two approaches share one source of
 truth, so switching between them costs nothing.
-
-## Quick start (Docker)
-
-```bash
-git clone <this-repo-url> snowpro-core-prep
-cd snowpro-core-prep
-docker compose build
-docker compose up -d
-```
-
-Open **http://localhost:8080**. The container reads markdown from `SnowPro_Notes_and_Questions/`
-(this repo's own content — configurable in `docker-compose.yml`), regenerates its content at every
-boot, and persists your quiz progress to a local `./data/` folder (gitignored — that one's yours).
-Edit a markdown file and `docker compose restart` to pick up the change; edit the app's own source
-and run `docker compose build` again.
-
-```bash
-docker compose logs      # boot order: "/data is writable" -> content summary -> "Serving on :8080"
-docker compose down      # stop
-```
-
-If a markdown file has a genuine structural problem — a malformed question, a mock-exam question
-that can't be matched to a domain — the container **refuses to start** and prints exactly what's
-wrong and where, rather than serving a broken app silently.
 
 ## Adding or editing content
 
