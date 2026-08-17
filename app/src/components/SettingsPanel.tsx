@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import { useContent } from "../lib/useContent";
-import { resetProgress, updateProgress, useProgress } from "../lib/progress";
+import { getStorageBackend, resetProgress, updateProgress, useProgress } from "../lib/progress";
 
 const DEFAULT_EXAM_DATE = "2026-08-19";
 const RESET_PHRASE = "RESET";
@@ -82,6 +82,8 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         </div>
 
         <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", lineHeight: 1.6 }}>
+          store: {getStorageBackend() === "http" ? "container (/data)" : "browser (localStorage)"}
+          <br />
           {content ? (
             <>
               content {content.bankVersion.slice(0, 15)}…

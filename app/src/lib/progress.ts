@@ -1,10 +1,11 @@
 /**
- * Progress storage adapter, per spec §4's Progress schema. Only the localStorage backend exists
- * so far — the real two-route adapter (GET/PUT /api/progress, backed by the Docker volume) is
- * build-order step 15. This module is written as the seam that step 15 will swap the backend
- * behind, per the plan's own note: "Build the storage adapter early... so no screen ever talks
- * to localStorage directly" — callers use `useProgress()`/`updateProgress()`, never
- * `localStorage` directly.
+ * Progress storage adapter, per spec §4's Progress schema. Backed by the container's two-route
+ * HTTP adapter (GET/PUT /api/progress, itself backed by the mounted /data volume — see
+ * pipeline/src/server.ts) when one is available, falling back to localStorage otherwise (e.g.
+ * `vite dev`, or the built files opened directly without the container) — see
+ * `hydrateFromServer()`/`persist()` below for the switch. Every caller in the app goes through
+ * `useProgress()`/`updateProgress()`, never `localStorage` or `fetch` directly, which is exactly
+ * what let this backend swap happen without touching a single call site.
  *
  * `inProgress` is an additive field beyond the spec's literal example: the schema shows
  * `attempts[]` holding only finalized records, but "answer state is written to storage on every
@@ -91,19 +92,56 @@ let state: ProgressState = loadFromStorage();
 const listeners = new Set<() => void>();
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
+// --- Backend: localStorage by default (today's behavior, and the fallback spec §4 calls for
+// "when opened as plain files"), switching to the container's two-route HTTP adapter once a
+// one-time boot probe confirms one exists. Everything above this point — and every caller in the
+// app — is unaffected; only persist() below cares which backend is active. ---
+type Backend = "localStorage" | "http";
+let backend: Backend = "localStorage";
+
+function setState(next: ProgressState): void {
+  state = next;
+  listeners.forEach((l) => l());
+}
+
+async function hydrateFromServer(): Promise<void> {
+  try {
+    const res = await fetch("/api/progress");
+    if (!res.ok) return; // no such route (e.g. `vite dev`, or opened as plain static files)
+    const server = await res.json();
+    backend = "http";
+    setState({ ...defaultState(), ...server });
+  } catch {
+    // network error / opened as plain files — stay on localStorage
+  }
+}
+if (typeof window !== "undefined") hydrateFromServer();
+
+function persist(): void {
+  if (backend === "http") {
+    fetch("/api/progress", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(state),
+    }).catch((err) => console.error("progress PUT failed", err));
+  } else {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+}
+
 function writeNow(): void {
   if (saveTimer) {
     clearTimeout(saveTimer);
     saveTimer = null;
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  persist();
 }
 
 function scheduleWrite(): void {
   if (saveTimer) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    persist();
   }, DEBOUNCE_MS);
 }
 
@@ -114,6 +152,12 @@ if (typeof window !== "undefined") {
 
 export function getProgress(): ProgressState {
   return state;
+}
+
+/** Which store is actually backing reads/writes right now — spec §8's risk mitigation ("the
+ *  header shows which store is active so the two can't be silently mixed"), surfaced in Settings. */
+export function getStorageBackend(): Backend {
+  return backend;
 }
 
 /** Always writes the whole object — no partial merges — per spec §4. */

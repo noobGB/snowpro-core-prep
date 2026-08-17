@@ -1,0 +1,18 @@
+services:
+  snowprep:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: snowprep-core-prep:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../SnowPro_Core_Certification:/content
+      - ./data:/data
+    environment:
+      PORT: "8080"
+      SNOWPRO_CONTENT_SOURCE: /content
+      SNOWPRO_CONTENT_OUTPUT: /app/content
+      SNOWPRO_DATA_DIR: /data
+      SNOWPRO_DIST_DIR: /app/dist
+    restart: unless-stopped

@@ -1,16 +1,22 @@
 /**
- * CLI entry point for the content pipeline: reads the SnowPro Core Prep markdown study folder
- * and writes content.json + notes/<domainId>.json + search-index.json. See the plan file
- * ("SnowPro Core Prep — Content Pipeline") for the full design; this module is just the
- * orchestrator that wires each parser together in the order spec §5 implies (notes and
- * domain-authored questions first, since the mock exam's dedup pass depends on them).
+ * Content pipeline core + CLI entry point: reads the SnowPro Core Prep markdown study folder and
+ * produces content.json + notes/<domainId>.json + search-index.json. See the plan file
+ * ("SnowPro Core Prep — Content Pipeline") for the full design; this module wires each parser
+ * together in the order spec §5 implies (notes and domain-authored questions first, since the
+ * mock exam's dedup pass depends on them).
+ *
+ * `runPipeline()` is the reusable core — parse, assemble, validate, but never write or print.
+ * `main()` is the CLI wrapper (resolve config, run, print, write on success). The container
+ * server (server.ts) calls `runPipeline()` directly at boot instead of spawning this as a
+ * subprocess, so both entry points share one implementation and can never drift.
  *
  * Nothing is written until every stage — parsing and post-assembly validation alike — has run
- * against one shared ErrorCollector. If it's non-empty for any reason, the run prints the full
- * grouped report and exits 1 with no output written at all.
+ * against one shared ErrorCollector. If it's non-empty for any reason, the run reports the full
+ * grouped failure and nothing is written at all.
  */
 
-import { resolveConfig } from "./config.js";
+import { pathToFileURL } from "node:url";
+import { resolveConfig, type PipelineConfig } from "./config.js";
 import { classifyFiles } from "./discovery.js";
 import { ErrorCollector } from "./errors.js";
 import { listMarkdownFiles, readSourceFile } from "./util/fs.js";
@@ -26,11 +32,20 @@ import { parseStudyPlan } from "./parsers/studyPlan.js";
 import { parseResources } from "./parsers/resources.js";
 import { parseSetupLog } from "./parsers/setupLog.js";
 import { writeOutput } from "./write/output.js";
-import { printFailure, printNotices, printSuccess } from "./report.js";
-import type { ContentBundle, Domain, DomainNotes, Question } from "./types.js";
+import { printFailure, printNotices, printSuccess, type RunStats } from "./report.js";
+import type { ContentBundle, Domain, DomainNotes, Question, SearchIndexEntry } from "./types.js";
 
-function main(): void {
-  const config = resolveConfig();
+export interface PipelineResult {
+  success: boolean;
+  bundle?: ContentBundle;
+  notesByDomain?: Map<string, DomainNotes>;
+  searchIndex?: SearchIndexEntry[];
+  stats?: RunStats;
+  notices: string[];
+  collector: ErrorCollector;
+}
+
+export function runPipeline(config: PipelineConfig): PipelineResult {
   const collector = new ErrorCollector();
   const notices: string[] = [];
 
@@ -128,25 +143,44 @@ function main(): void {
   const searchIndex = buildSearchIndex(bundle, notesByDomain);
   validateBundle(bundle, collector, { statedMockSplits });
 
-  printNotices(notices);
-
   if (collector.hasErrors) {
-    printFailure(collector);
-    process.exitCode = 1;
-    return;
+    return { success: false, notices, collector };
   }
 
-  writeOutput(config.outputDir, bundle, notesByDomain, searchIndex);
-  printSuccess(
+  return {
+    success: true,
     bundle,
-    {
+    notesByDomain,
+    searchIndex,
+    stats: {
       domainQuestions: domainQuestions.length,
       mockDedupedReused,
       mockNewlyTagged,
       mockTotal: mockSets.reduce((sum, s) => sum + s.questionIds.length, 0),
     },
-    config.outputDir,
-  );
+    notices,
+    collector,
+  };
 }
 
-main();
+function main(): void {
+  const config = resolveConfig();
+  const result = runPipeline(config);
+  printNotices(result.notices);
+
+  if (!result.success) {
+    printFailure(result.collector);
+    process.exitCode = 1;
+    return;
+  }
+
+  writeOutput(config.outputDir, result.bundle!, result.notesByDomain!, result.searchIndex!);
+  printSuccess(result.bundle!, result.stats!, config.outputDir);
+}
+
+// Only auto-run when this file is executed directly (the CLI) — not when server.ts imports
+// `runPipeline` from it, which would otherwise also trigger this CLI's own resolveConfig()/main()
+// as an import-time side effect, racing the server's own explicit call.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

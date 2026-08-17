@@ -9,6 +9,10 @@ pipeline/dist/
 # regenerated from the markdown source folder at container start, not source-controlled.
 content/
 
+# The app's own progress volume (spec §9) once you run the container — an operator's personal
+# quiz progress, never source-controlled, same reasoning as content/ above.
+data/
+
 # Design-tool artifacts: a stale duplicate of the markdown source plus the copyrighted
 # Snowflake study guide PDF — spec §8 explicitly flags the PDF as not for the repo.
 uploads/

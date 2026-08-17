@@ -1,0 +1,14 @@
+**/node_modules
+app/dist
+pipeline/dist
+content/
+data/
+.git
+uploads
+_ds
+*.dc.html
+doc-page.js
+support.js
+*.log
+.DS_Store
+Thumbs.db
