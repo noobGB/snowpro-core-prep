@@ -1,8 +1,8 @@
 # Study Plan — SnowPro Core (COF-C03)
 
 **A 7-day template, anchored on the 2026-08-13 → 2026-08-19 reference dates below.** The app
-remaps every day relative to whatever exam date you set in Settings — these are day offsets, not
-a fixed schedule (see `CLAUDE.md` in this folder). Weekend-heavy by design (light on weekday
+remaps every day relative to whatever exam date you set on the Dashboard — these are day offsets,
+not a fixed schedule (see `CLAUDE.md` in this folder). Weekend-heavy by design (light on weekday
 evenings, heavy on Sat/Sun).
 
 Exam facts: 100 questions (multiple-choice/multiple-select), 115 minutes, pass mark 750/1000,

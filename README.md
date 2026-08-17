@@ -26,21 +26,45 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
 
 - **Domain notes** — a proper reading view (table of contents, scrollspy, "quiz me on this
   section") generated from your markdown, not just links out to it.
-- **Practice & mock exams** — one question per screen, arrow-key navigation, flag-for-review, and
-  a jump palette, closer to how the real exam interface paces you than a long scrolling quiz page.
+- **Practice** — one card per domain (question count, weight, last score). Runs the whole set
+  untimed, no configuration step. Every wrong answer automatically joins a **missed-question
+  notebook** (Practice page → filter toggle) — click **Retry these** to start a fresh session
+  containing just those questions.
+- **Mock exams** — full-length, timed, matching the real exam's question count and domain split.
+  A pre-start screen states the rules (no pause, auto-submits at zero) before the clock starts.
+  Closing the tab doesn't stop the clock, but does leave it resumable — only one in-progress mock
+  at a time.
+- **One question per screen** (shared by Practice and Mock) — Prev/Next, arrow-key navigation,
+  flag-for-review, and a jump palette showing answered/flagged/current at a glance, closer to how
+  the real exam interface paces you than a long scrolling quiz page.
+- **Results & review** — after any attempt: wrong answers first, then partial credit, then
+  unanswered, with everything-correct collapsed by default so review time goes to your mistakes.
+  Each question shows every option marked right/picked/wrong, its explanation, and a **"Read the
+  note →"** link straight back to the relevant domain section.
 - **Flashcards** — flip-card drilling with a minimal knew-it/missed-it rating that biases which
   cards resurface first next session.
 - **Study plan** — a day-by-day checklist that remaps itself against your actual exam date, not a
   fixed calendar.
 - **Analytics** — a weighted readiness score, per-domain breakdown, and pacing feedback benchmarked
   against the real exam's time budget.
+- **Resources** — official links plus per-domain study resources, with a standing caution against
+  "exam dump" sites.
+- **Setup** — a checkable, step-by-step walkthrough for hands-on practice against a real Snowflake
+  account (CLI install, key-pair auth, a least-privilege sandbox role) — commands are copyable,
+  each step is its own checkbox.
 - **⌘K/Ctrl+K search** — one command palette across pages, notes, and questions.
+- **Responsive** — a sidebar on desktop, a bottom-tab nav + "More" sheet under 900px wide.
 - **Fully offline** — progress persists to a local file (via Docker) or `localStorage` (without
   it); nothing ever leaves your machine.
-- **Backup/restore** — Settings → Backup → Export downloads your entire progress (attempts, exam
-  date, flashcard grades, checklists) as one JSON file; Import loads it back — useful for moving
-  between browsers/devices, or just as a safety net before clearing site data. Import replaces
-  your current progress wholesale, it doesn't merge.
+- **Settings** (gear icon, bottom of the sidebar) — three things live here:
+  - **Backup** — Export downloads your entire progress (attempts, exam date, flashcard grades,
+    checklists) as one JSON file; Import loads one back. Useful for moving between browsers/
+    devices, or as a safety net before clearing site data. Import replaces your current progress
+    wholesale, it doesn't merge — anything since your last export is overwritten.
+  - **Reset all progress** — type `RESET` into the field to enable the button, then confirm.
+    Wipes every attempt, flashcard grade, and checklist back to a blank slate. **There is no
+    undo** — Export first if there's any chance you'll want this data back.
+  - **Light mode** — present in the UI but not implemented yet (dark theme only for now).
 
 ![Study plan](.github/screenshot-plan.png)
 
@@ -66,14 +90,15 @@ docker compose up -d
 
 Open **http://localhost:8080** and:
 
-1. **Settings** (small ⚙ button, bottom-left of the sidebar, next to Search) → set your real exam
-   date. The countdown and the study plan both remap against it immediately.
-2. **Dashboard** → the "Start" card always points at Domain 1 (the heaviest-weighted domain) —
+1. **Dashboard's Exam card** → set your real exam date in the date field. The countdown and the
+   study plan both remap against it immediately.
+2. Same Dashboard → the "Start" card always points at Domain 1 (the heaviest-weighted domain) —
    click straight into practice, or open **Study plan** in the sidebar to follow the day-by-day
    checklist instead.
 3. Come back daily: **Study plan** for today's tasks, **Practice**/**Mock exams** to drill and get
    scored, **Flashcards** for quick review, **Analytics** to see readiness by domain once you've
-   taken a few.
+   taken a few. **Settings** (gear icon, bottom of the sidebar) has backup and reset — see
+   [Features](#features) above.
 
 Progress persists to a local `./data/` folder (gitignored — that one's yours). Edit a markdown
 file and `docker compose restart` to pick up the change; edit the app's own source and run
@@ -198,8 +223,8 @@ which question and line.
 
 `00_Study_Plan.md`'s day headings look like `### Thu 2026-08-13 (tonight, ~2-3 hrs)` or
 `### Wed 2026-08-19 — Exam day`. These dates are **offsets**, not literal — the app remaps every
-day relative to whichever exam date you set in Settings, anchored on the plan's own last day. Add
-or remove days freely; edit the checklist items under each heading same as any markdown list.
+day relative to whichever exam date you set on the Dashboard, anchored on the plan's own last day.
+Add or remove days freely; edit the checklist items under each heading same as any markdown list.
 
 ### Flashcards & resources
 
