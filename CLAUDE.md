@@ -8,14 +8,36 @@ A local, offline-first study app for the Snowflake SnowPro Core certification (C
 product/design spec — information architecture, visual design tokens, data model, screen-by-screen
 wireframes, and a 15-step build order — lives in **`SnowPro Core Prep - Spec.dc.html`**; read it
 before making any architectural or visual decision, since it's the source of truth this whole
-project is built from. The other `*.dc.html` files (`Dashboard.dc.html`, `Notes.dc.html`, etc.) are
-grey-box wireframes for each screen, and `Nav.dc.html` covers the sidebar/nav. `doc-page.js` and
-`support.js` are the design tool's rendering runtime for those files, not app code — don't edit them.
+project was built from. The other `*.dc.html` files (`Dashboard.dc.html`, `Notes.dc.html`, etc.)
+are grey-box wireframes for each screen, and `Nav.dc.html` covers the sidebar/nav.
 
-**Steps 1-3 of the spec's 15-step build order** are implemented so far: the shell/sidebar (step 1)
-and Dashboard (step 2) in `app/`, and the content pipeline (step 3) in `pipeline/`. The quiz
-runner, results/analytics, and the Docker/volumes setup described in spec §9 have not been
-started.
+**All 15 steps of the spec's build order are complete**, including the Docker packaging in step 15
+(storage adapter, `Dockerfile`, `docker-compose.yml`). A subsequent UI/UX review pass (an
+engineering review plus a design critique, both driving the running app with Playwright) produced
+17 follow-up fixes, also complete — see recent commit messages for the full list. There is no
+pending build-order work; changes from here are maintenance, new features, or content updates.
+
+## Running it
+
+The normal path is Docker — one container serves the built frontend plus a small API, backed by
+two host-mounted volumes:
+
+```
+docker compose build
+docker compose up -d
+docker compose logs      # boot order: "/data is writable" -> pipeline summary -> "Serving on :8080"
+docker compose down
+```
+
+Open `http://localhost:8080`. `docker-compose.yml` mounts `../SnowPro_Core_Certification` (the
+markdown source, a sibling directory outside this repo) to `/content`, and a local `./data/`
+folder to `/data` for progress persistence — both gitignored. Editing markdown + `docker compose
+restart` picks up content changes; editing `app/`/`pipeline/` source needs `docker compose build`
+again, since the frontend bundle and pipeline are baked into the image, not mounted.
+
+For local dev without Docker, run the pipeline and the Vite dev server directly (see each
+subsection's commands below) — `app/`'s dev server falls back to `localStorage` for progress when
+no `/api/progress` route exists (i.e., outside the container), so both paths work without config.
 
 ## Content pipeline (`pipeline/`)
 
@@ -36,6 +58,7 @@ npm run build:content:watch    # re-run on source changes
 npm run typecheck              # tsc --noEmit
 npm test                       # vitest run
 npx vitest run test/questionCore.spec.ts   # run a single test file
+npm start                      # tsx src/server.ts — the container's actual entry point (§ below)
 ```
 
 The pipeline **fails loudly and writes nothing** if any source file has a problem — a genuine parse
@@ -46,9 +69,12 @@ every error grouped by file.
 
 ### Architecture
 
-`src/index.ts` is the orchestrator. Everything before it is a leaf module; everything reads/writes
-through one shared `ErrorCollector` (`src/errors.ts`) rather than throwing on content problems —
-only a genuine I/O failure (a file that can't be read at all) throws directly.
+`src/index.ts` exports the pipeline's orchestration as `runPipeline(config)`, with a thin CLI
+wrapper (`main()`) around it; `src/server.ts` calls `runPipeline()` directly at container boot
+(before binding the HTTP port), reusing the exact same logic and error report as the CLI. Everything
+before `index.ts` is a leaf module; everything reads/writes through one shared `ErrorCollector`
+(`src/errors.ts`) rather than throwing on content problems — only a genuine I/O failure (a file
+that can't be read at all) throws directly.
 
 - **`src/discovery.ts`** classifies source files by filename pattern (spec §5's table) — domain
   notes (`01`-`05`), practice questions (`10`-`14`), any mock exam (`1[6-9]|[2-9]\d_Mock_Exam_N.md`,
@@ -66,13 +92,19 @@ only a genuine I/O failure (a file that can't be read at all) throws directly.
   tag added directly to the mock's markdown. A question with neither is collected as an
   `unresolved-domain` error, not thrown — see `SnowPro_Core_Certification/16_Mock_Exam_1.md` for the
   tagging convention already in use there.
+- **`src/parsers/studyPlan.ts`** emits each plan day's *original* source date verbatim, not a
+  pre-offset one — the frontend (`app/src/lib/planDates.ts`) remaps every day by the delta between
+  the plan's own last day and the live exam date, and computes a plan-length-derived default (never
+  a hardcoded calendar date) when no exam date is set yet.
 - **`src/assemble/validate.ts`** runs structural cross-reference checks after everything else has
   parsed (every `questionIds` reference resolves, no duplicate ids, a mock set's `domainSplit` is
   independently recomputed from its questions and cross-checked against both the stored value and
   the split stated in the mock's own intro prose). These feed the same `ErrorCollector`, so a
   validation failure and a parse failure can show up in the same report.
-- **`src/write/output.ts`** writes to a temp directory and renames it into place, so a crash
-  mid-write can't leave a half-updated `content/`.
+- **`src/write/output.ts`** writes to a temp directory (a sibling of the output dir, same volume)
+  and renames it into place, so a crash mid-write can't leave a half-updated `content/`. In the
+  container, this means the runtime user needs write access to `/app`'s parent directory itself,
+  not just `/app/content` — see the Dockerfile's `chown` comment if this ever regresses.
 - **`src/util/markdown.ts`'s `flattenText()`** collapses whitespace (including literal newlines
   mdast preserves for a markdown soft line-wrap) — always flatten mdast nodes to plain text through
   this helper, not a bare `mdast-util-to-string` call, or a regex anchored with `.`/`$` against the
@@ -87,9 +119,9 @@ stable across unrelated content edits.
 
 ## Frontend app (`app/`)
 
-Vite + React + TypeScript SPA (`react-router-dom` for routing). Not an npm workspace with
-`pipeline/` yet — `src/lib/content.ts`'s types are hand-duplicated from `pipeline/src/types.ts`;
-keep them in sync manually until that's worth consolidating.
+Vite + React 19 + TypeScript SPA (`react-router-dom` for routing, dark theme only — light mode is
+stubbed in Settings but not built). Not an npm workspace with `pipeline/` — `src/lib/content.ts`'s
+types are hand-duplicated from `pipeline/src/types.ts`; keep them in sync manually.
 
 ### Commands (run from `app/`)
 
@@ -99,25 +131,54 @@ npm run dev         # dev server — check its own log for the actual port; 5173
                      # taken by another local project on this machine, and Vite silently shifts
                      # to 5174+ without asking
 npm run build        # production build
-npx tsc -b --noEmit   # typecheck
+npx tsc --noEmit      # typecheck
 ```
 
 ### Architecture
 
 `vite.config.ts` points `publicDir` at `../content` (the content pipeline's output), so
 `content.json` / `notes/*.json` / `search-index.json` are served at the site root with no copy
-step — `src/lib/content.ts`'s `loadContent()` just `fetch("/content.json")`s it. Re-run the
-pipeline and refresh the browser to pick up content changes; nothing in `app/` parses markdown.
+step in dev — `src/lib/content.ts`'s `loadContent()` just `fetch("/content.json")`s it. In the
+container, `pipeline/src/server.ts` serves both the pipeline's output and the built frontend from
+the same origin instead. Re-run the pipeline and refresh the browser to pick up content changes;
+nothing in `app/` parses markdown.
 
-`src/components/AppShell.tsx` (sidebar + main content column) wraps every route defined in
+`src/components/AppShell.tsx` (sidebar + main content column on desktop; a top bar + fixed bottom
+nav under 900px, via `.desktop-only`/`.mobile-only` in `tokens.css`) wraps every route defined in
 `src/App.tsx`. `src/components/Sidebar.tsx` reads `content.json` itself (via the same cached
-`useContent()` hook every page uses) to populate its meta-count badges — those are real counts,
-not fixture data. Routes without a built screen yet render `src/pages/Placeholder.tsx` so
-navigation never dead-ends while the rest of the build order is in progress.
+`useContent()` hook every page uses) to populate its meta-count badges — those are real counts, not
+fixture data. `src/pages/NotFound.tsx` catches any unmatched route so a bad URL never renders blank.
 
-There is no progress/persistence layer yet (spec §4's Progress schema and two-route storage
-adapter are build-order step 15) — anything that looks like user state today (the Dashboard's exam
-date, today's-task checkboxes) is local `useState`, resets on reload, and should be treated as a
-placeholder for the real thing, not extended in place. The Dashboard always renders the spec's
-documented "no attempts yet" empty state honestly (real day-one plan tasks, not fabricated
-readiness numbers) rather than faking progress data that doesn't exist.
+**Progress/persistence** (`src/lib/progress.ts`) is a `useSyncExternalStore`-backed module store,
+not React context. It tries `GET /api/progress` once on load; a 200 switches it to the container's
+HTTP backend (`PUT /api/progress`, backed by the mounted `/data` volume), and any failure (dev
+server, or the built files opened directly) falls back to `localStorage` — `getStorageBackend()`
+exposes which one is active, shown in Settings so the two can't be silently mixed. Every write
+replaces the whole `ProgressState` object (no partial merges). **Nested fields added after initial
+release need `?? {}` at their read sites** — `loadFromStorage()`'s merge with `defaultState()` is
+shallow, so old stored data has the parent key present but missing a newly-added child field, not
+the parent key absent entirely (see `flashcards.grades` for the pattern, and its own doc comment
+for why this bit a real bug once).
+
+**Settings and the ⌘K palette** (`src/lib/settingsStore.ts`, `src/lib/paletteStore.ts`) are both
+tiny external stores following the same pattern, mounted once at the App root (`src/App.tsx`) so
+their global keyboard shortcuts work on every route including the session runner, which has no
+sidebar. The two are mutually exclusive full-screen overlays — each closes the other on open; see
+either store's doc comment before adding a third overlay of this kind.
+
+**The question runner** (`src/pages/Runner.tsx`, shared by Practice and Mock) shows one question
+per screen with Prev/Next, arrow-key navigation, flag-for-review (session-only, not persisted), and
+a jump palette — not a long scroll. Scoring/timing/resume logic is untouched by that shape: a mock
+attempt's elapsed time is always recomputed from a stored start timestamp (never a decrementing
+counter, so closing the tab doesn't stop the clock), and a practice session left mid-way finalizes
+as `"partial"` on unmount while a mock stays resumable. Question/option/explanation text renders
+through `src/lib/inlineMarkdown.tsx`'s `renderInline()` (real React elements for `**bold**`/`` `code` ``/
+`*italic*`, not `dangerouslySetInnerHTML`) — content authors write inline markdown in the source
+`.md` files and every display site (Runner, Results, Practice's missed-review, Analytics) needs to
+render it, not just Notes' pre-rendered HTML sections.
+
+**A recurring gotcha, hit twice in this codebase**: calling a store's synchronous-subscriber-
+notifying update function (e.g. `updateProgress()`) from *inside* another `setState`'s functional
+updater trips "Cannot update a component while rendering a different component." Always call
+side-effecting store updates as sibling statements in an event handler or effect, never nested
+inside another component's `setState` updater callback.

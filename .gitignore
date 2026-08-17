@@ -18,6 +18,16 @@ data/
 uploads/
 .thumbnail
 
+# More design-tool internals: doc-page.js/support.js are the wireframe-preview tool's own
+# rendering runtime (support.js says so itself: "GENERATED from dc-runtime/src/*.ts — do not
+# edit"), and _ds/ is a whole alternate ("Classical") design system that was attached to the
+# project but never adopted — the spec's own text confirms the dark theme was used instead. None
+# of this is app code or needed to build/run/understand the app; the *.dc.html wireframes and the
+# spec itself stay tracked since those genuinely document what the app was built from.
+doc-page.js
+support.js
+_ds/
+
 # OS / editor
 .DS_Store
 Thumbs.db
