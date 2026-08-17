@@ -11,12 +11,7 @@ import { Link } from "react-router-dom";
 import { useContent } from "../lib/useContent";
 import { useProgress, updateProgress } from "../lib/progress";
 import { overallReadiness } from "../lib/readiness";
-
-const DEFAULT_EXAM_DATE = "2026-08-19";
-
-function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+import { defaultExamDate, isoDate, remapPlan } from "../lib/planDates";
 
 function daysBetween(today: Date, exam: Date): number {
   const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -52,7 +47,7 @@ export function Dashboard() {
   const progress = useProgress();
 
   const today = useMemo(() => new Date(), []);
-  const examDate = progress.examDate ?? DEFAULT_EXAM_DATE;
+  const examDate = progress.examDate ?? (content ? defaultExamDate(content.plan) : isoDate(today));
   const [ey, em, ed] = examDate.split("-").map(Number);
   const exam = new Date(ey!, em! - 1, ed!);
   const days = daysBetween(today, exam);
@@ -85,7 +80,7 @@ export function Dashboard() {
   const set1 = content.sets.find((s) => s.id === "set-d1");
   const mockSet = content.sets.find((s) => s.kind === "mock");
   const planDayOne = content.plan[0];
-  const todayPlan = content.plan.find((p) => p.date === isoDate(today));
+  const todayPlan = remapPlan(content.plan, examDate).find((p) => p.displayDate === isoDate(today));
   const doneCount = todayPlan?.tasks.filter((t) => progress.plan.checked.includes(t.id)).length ?? 0;
 
   const hasData = progress.attempts.length > 0;

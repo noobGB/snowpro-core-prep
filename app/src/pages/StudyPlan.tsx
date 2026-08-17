@@ -4,53 +4,23 @@
  * the Dashboard's "Today" card reads, so checking a task in either place stays in sync.
  *
  * The pipeline deliberately emits each day's ORIGINAL source date, not a pre-baked offset (see
- * pipeline's studyPlan.ts docs) — the app is responsible for remapping every day by the delta
- * between the plan's own last day and the user's live exam date. That remap happens here.
+ * pipeline's studyPlan.ts docs) — remapping against the live exam date (or a content-derived
+ * default when none is set) lives in lib/planDates.ts, shared with Dashboard and Settings so the
+ * three screens can't drift out of sync on what "today"/"exam date" mean.
  */
 
 import { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useContent } from "../lib/useContent";
 import { updateProgress, useProgress } from "../lib/progress";
-import type { PlanDay } from "../lib/content";
-
-const DEFAULT_EXAM_DATE = "2026-08-19";
-
-function parseIso(iso: string): Date {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y!, m! - 1, d!);
-}
-
-function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function addDays(iso: string, days: number): string {
-  const d = parseIso(iso);
-  d.setDate(d.getDate() + days);
-  return isoDate(d);
-}
-
-function daysBetweenIso(a: string, b: string): number {
-  return Math.round((parseIso(b).getTime() - parseIso(a).getTime()) / 86400000);
-}
-
-interface RemappedDay extends PlanDay {
-  displayDate: string;
-}
-
-function remapPlan(plan: PlanDay[], examDate: string): RemappedDay[] {
-  if (plan.length === 0) return [];
-  const anchor = plan[plan.length - 1]!.date;
-  return plan.map((day) => ({ ...day, displayDate: addDays(examDate, daysBetweenIso(anchor, day.date)) }));
-}
+import { daysBetweenIso, defaultExamDate, isoDate, parseIso, remapPlan } from "../lib/planDates";
 
 export function StudyPlan() {
   const { content, error } = useContent();
   const progress = useProgress();
   const todayRef = useRef<HTMLDivElement>(null);
 
-  const examDate = progress.examDate ?? DEFAULT_EXAM_DATE;
+  const examDate = progress.examDate ?? (content ? defaultExamDate(content.plan) : isoDate(new Date()));
   const today = isoDate(new Date());
   const days = content ? remapPlan(content.plan, examDate) : [];
 
@@ -87,7 +57,7 @@ export function StudyPlan() {
           const isPast = day.displayDate < today;
           const isToday = day.displayDate === today;
           const doneCount = day.tasks.filter((t) => progress.plan.checked.includes(t.id)).length;
-          const label = new Date(parseIso(day.displayDate)).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+          const label = parseIso(day.displayDate).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
 
           if (isPast) {
             return (

@@ -6,8 +6,8 @@
 import { useState } from "react";
 import { useContent } from "../lib/useContent";
 import { getStorageBackend, resetProgress, updateProgress, useProgress } from "../lib/progress";
+import { defaultExamDate, isoDate } from "../lib/planDates";
 
-const DEFAULT_EXAM_DATE = "2026-08-19";
 const RESET_PHRASE = "RESET";
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
@@ -16,7 +16,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [resetInput, setResetInput] = useState("");
   const [resetDone, setResetDone] = useState(false);
 
-  const examDate = progress.examDate ?? DEFAULT_EXAM_DATE;
+  const examDate = progress.examDate ?? (content ? defaultExamDate(content.plan) : isoDate(new Date()));
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(5,5,6,.6)", display: "flex", alignItems: "flex-start", justifyContent: "flex-end", padding: 16, zIndex: 60 }}>
