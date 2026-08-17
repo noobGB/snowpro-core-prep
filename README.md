@@ -5,6 +5,10 @@ turns a folder of markdown notes into a full study tool: domain notes, practice 
 mock exams, flashcards, a day-by-day plan, and analytics. No account, no cloud service, no
 telemetry — your content and your progress both stay on your machine.
 
+> **🤖 If you're an AI coding agent working in this repo, read [`CLAUDE.md`](CLAUDE.md) first** —
+> architecture, file layout, data flow, and known gotchas, written specifically for that. The rest
+> of this README (below) is written for humans: what the app does, how to run it, how to use it.
+
 ![Dashboard](.github/screenshot-dashboard.png)
 *Exam countdown, weighted readiness, and today's plan tasks — all in one view.*
 
