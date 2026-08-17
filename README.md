@@ -301,6 +301,10 @@ useful for a human doing the same.
 TypeScript throughout · React 19 · Vite · `react-router-dom` · `unified`/`remark`/`remark-gfm` for
 markdown parsing · Vitest · Express (two routes) · Docker.
 
+New to one of these? [`TECH_STACK.md`](TECH_STACK.md) explains what each one is, the problem it
+solves, and exactly where it's used in this codebase — written for learning the stack, not just
+running the app.
+
 ## License
 
 [MIT](LICENSE).

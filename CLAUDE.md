@@ -1,6 +1,8 @@
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+For a human learning the stack itself (what each technology is, why it's here) rather than this
+codebase's own structure, see [`TECH_STACK.md`](TECH_STACK.md) instead.
 
 ## What this repo is
 
