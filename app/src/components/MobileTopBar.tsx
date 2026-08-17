@@ -1,6 +1,7 @@
 /** Narrow-viewport top bar replacing the sidebar's logo + search trigger, per the wireframes'
  *  mobile layout (logo, search button — no nav links here, those move to the bottom bar). */
 
+import { Link } from "react-router-dom";
 import { openPalette } from "../lib/paletteStore";
 
 export function MobileTopBar() {
@@ -19,10 +20,10 @@ export function MobileTopBar() {
         zIndex: 30,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <Link to="/" style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <div style={{ width: 14, height: 14, border: "1.5px solid var(--accent)", borderRadius: 3, transform: "rotate(45deg)" }} />
         <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-heading)" }}>SnowPro Core Prep</span>
-      </div>
+      </Link>
       <button
         type="button"
         onClick={openPalette}

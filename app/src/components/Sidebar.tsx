@@ -4,7 +4,7 @@
  * edge. Meta badges (domain/question/mock counts) come from content.json.
  */
 
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import { useContent } from "../lib/useContent";
 import { closePalette, openPalette } from "../lib/paletteStore";
 import { closeSettings, openSettings } from "../lib/settingsStore";
@@ -52,7 +52,7 @@ export function Sidebar() {
         gap: 2,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "4px 8px 18px" }}>
+      <Link to="/" style={{ display: "flex", alignItems: "center", gap: 9, padding: "4px 8px 18px" }}>
         <div
           style={{
             width: 16,
@@ -65,7 +65,7 @@ export function Sidebar() {
         <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-heading)", letterSpacing: "-0.01em" }}>
           SnowPro Core Prep
         </span>
-      </div>
+      </Link>
 
       {items.map((item) => (
         <NavLink
