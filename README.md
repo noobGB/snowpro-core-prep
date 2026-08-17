@@ -6,6 +6,7 @@ mock exams, flashcards, a day-by-day plan, and analytics. No account, no cloud s
 telemetry — your content and your progress both stay on your machine.
 
 ![Dashboard](.github/screenshot-dashboard.png)
+*Exam countdown, weighted readiness, and today's plan tasks — all in one view.*
 
 ## Why this exists
 
@@ -66,9 +67,20 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
     undo** — Export first if there's any chance you'll want this data back.
   - **Light mode** — present in the UI but not implemented yet (dark theme only for now).
 
-![Study plan](.github/screenshot-plan.png)
-
 ![Practice runner](.github/screenshot-runner.png)
+*One question per screen, arrow-key navigation, flag-for-review, and a jump palette.*
+
+![Results & review](.github/screenshot-results.png)
+*Wrong answers explained first, each with a direct link back to the note that covers it.*
+
+![Flashcards](.github/screenshot-flashcards.png)
+*A knew-it/missed-it rating biases which cards resurface first next session.*
+
+![Study plan](.github/screenshot-plan.png)
+*A day-by-day plan that remaps itself to whatever exam date you set — not a fixed calendar.*
+
+![Analytics](.github/screenshot-analytics.png)
+*Readiness weighted by real exam domain weights, plus pacing against the actual time budget.*
 
 ## Start preparing in minutes
 
