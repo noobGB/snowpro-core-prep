@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+<style>
+  html, body { margin: 0; background: #08090a; }
+  * { box-sizing: border-box; }
+  a { color: #2bd4d9; text-decoration: none; }
+  a:hover { color: #7ceaee; }
+  ::selection { background: rgba(43,212,217,.25); }
+</style>
+</helmet>
+<div style="min-height:100vh; display:flex; background:#08090a; font-family:Inter, system-ui, sans-serif; color:#d0d6e0; -webkit-font-smoothing:antialiased;">
+  <dc-import name="Nav" active="Flashcards" style="align-self:stretch; flex:0 0 240px;" hint-size="240px,100vh"></dc-import>
+
+  <main style="flex:1; min-width:0; padding:32px 40px 96px; max-width:1000px; display:flex; flex-direction:column;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#62666d; margin-bottom:10px;">From the cheatsheet · hard numbers only</div>
+    <h1 style="margin:0 0 24px; font-size:32px; font-weight:500; letter-spacing:-0.02em; color:#ffffff;">Flashcards</h1>
+
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:22px;">
+      <div style="display:flex; gap:6px; flex-wrap:wrap;">
+        <sc-for list="{{ decks }}" as="d" hint-placeholder-count="6">
+          <button type="button" onClick="{{ d.select }}" style="padding:7px 12px; min-height:38px; border:1px solid {{ d.border }}; background:{{ d.bg }}; color:{{ d.fg }}; border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:12px; cursor:pointer;">{{ d.label }}</button>
+        </sc-for>
+      </div>
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#62666d;">{{ counter }}</span>
+    </div>
+
+    <button type="button" onClick="{{ flip }}" style="width:100%; min-height:320px; background:#0f1011; border:1px solid {{ cardBorder }}; border-radius:12px; padding:48px 40px; cursor:pointer; font-family:Inter,sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; text-align:center;" style-hover="border-color:#383b3f;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#62666d;">{{ faceLabel }}</span>
+      <span style="font-size:{{ faceSize }}; line-height:1.35; font-weight:400; color:#ffffff; letter-spacing:-0.014em; max-width:22ch;">{{ face }}</span>
+      <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#62666d;">{{ hint }}</span>
+    </button>
+
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:16px;">
+      <button type="button" onClick="{{ prev }}" style="flex:1; min-height:48px; background:transparent; border:1px solid #23252a; border-radius:6px; color:#d0d6e0; font-family:Inter,sans-serif; font-size:14px; cursor:pointer;" style-hover="border-color:#383b3f;">← Previous</button>
+      <button type="button" onClick="{{ next }}" style="flex:1; min-height:48px; background:transparent; border:1px solid #23252a; border-radius:6px; color:#d0d6e0; font-family:Inter,sans-serif; font-size:14px; cursor:pointer;" style-hover="border-color:#383b3f;">Next →</button>
+    </div>
+
+    <div style="display:flex; gap:3px; margin-top:20px;">
+      <sc-for list="{{ ticks }}" as="t" hint-placeholder-count="12">
+        <div style="flex:1; height:3px; border-radius:2px; background:{{ t.color }};"></div>
+      </sc-for>
+    </div>
+
+    <p style="margin:22px 0 0; font-size:13px; line-height:1.65; color:#62666d; max-width:40em;">Click the card or press space to flip; arrow keys move. Position is remembered, so the deck resumes where you stopped. No grading — these are for rehearsal, not assessment.</p>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900}}">
+const CARDS = [
+  { d: "D5", f: "Fail-safe retention", b: "7 days, fixed, permanent tables only — Snowflake support recovery only" },
+  { d: "D5", f: "Time Travel — Standard edition", b: "1 day (default, can be set to 0)" },
+  { d: "D5", f: "Time Travel — Enterprise and above", b: "Up to 90 days via DATA_RETENTION_TIME_IN_DAYS" },
+  { d: "D1", f: "Micro-partition size", b: "~50-500MB uncompressed, columnar, immutable" },
+  { d: "D1", f: "Warehouse credits per hour", b: "XS=1, doubling per step: S=2, M=4, L=8, XL=16, 2XL=32 … 6XL" },
+  { d: "D1", f: "Warehouse billing", b: "Per-second, with a 60-second minimum per resume" },
+  { d: "D1", f: "Max cluster count by size", b: "XS/S/M = 300, L = 160, XL = 80, 2XL = 40, 3XL = 20, 4XL+ = 10 · default always 10" },
+  { d: "D4", f: "Result cache", b: "Cloud Services, 24 hours, refreshed on reuse up to 31 days, zero compute cost" },
+  { d: "D4", f: "Economy scaling threshold", b: "6 minutes of estimated queued work, both to start and to shut down a cluster" },
+  { d: "D3", f: "COPY INTO load history", b: "64 days, used for automatic deduplication" },
+  { d: "D3", f: "Ideal bulk-load file size", b: "Roughly 100-250MB compressed" },
+  { d: "D3", f: "VARIANT column limit", b: "~16MB compressed per value" },
+  { d: "D2", f: "Resource monitor actions", b: "Notify → Suspend (lets queries finish) → Suspend Immediately (kills them)" },
+  { d: "D2", f: "Role hierarchy, broadest first", b: "ORGADMIN → ACCOUNTADMIN → SECURITYADMIN → USERADMIN → SYSADMIN → custom → PUBLIC" },
+  { d: "D5", f: "Who pays for querying shared data", b: "The consumer, using their own compute — never the provider" },
+  { d: "D1", f: "Exam logistics", b: "100 questions, 115 minutes, pass at 750/1000, $175 per attempt" }
+];
+
+class Component extends DCLogic {
+  state = { deck: "All", i: 0, flipped: false };
+
+  componentDidMount() {
+    this._k = (e) => {
+      if (e.key === " ") { e.preventDefault(); this.setState((s) => ({ flipped: !s.flipped })); }
+      if (e.key === "ArrowRight") this.step(1);
+      if (e.key === "ArrowLeft") this.step(-1);
+    };
+    window.addEventListener("keydown", this._k);
+  }
+  componentWillUnmount() { window.removeEventListener("keydown", this._k); }
+
+  pool() {
+    return this.state.deck === "All" ? CARDS : CARDS.filter((c) => c.d === this.state.deck);
+  }
+  step(n) {
+    const len = this.pool().length;
+    this.setState((s) => ({ i: (s.i + n + len) % len, flipped: false }));
+  }
+
+  renderVals() {
+    const pool = this.pool();
+    const i = Math.min(this.state.i, pool.length - 1);
+    const card = pool[i] || CARDS[0];
+    const flipped = this.state.flipped;
+
+    return {
+      decks: ["All", "D1", "D2", "D3", "D4", "D5"].map((k) => {
+        const on = k === this.state.deck;
+        const n = k === "All" ? CARDS.length : CARDS.filter((c) => c.d === k).length;
+        return {
+          label: k + " · " + n,
+          border: on ? "#2bd4d9" : "#23252a",
+          bg: on ? "#161718" : "transparent",
+          fg: on ? "#ffffff" : "#8a8f98",
+          select: () => this.setState({ deck: k, i: 0, flipped: false })
+        };
+      }),
+      counter: (i + 1) + " / " + pool.length,
+      face: flipped ? card.b : card.f,
+      faceSize: flipped ? "26px" : "32px",
+      faceLabel: flipped ? "Answer · " + card.d : "Prompt · " + card.d,
+      cardBorder: flipped ? "#2bd4d9" : "#23252a",
+      hint: flipped ? "click to hide" : "click to reveal",
+      flip: () => this.setState((s) => ({ flipped: !s.flipped })),
+      next: () => this.step(1),
+      prev: () => this.step(-1),
+      ticks: pool.map((c, n) => ({ color: n === i ? "#2bd4d9" : n < i ? "#383b3f" : "#1a1c1e" }))
+    };
+  }
+}
+</script>
+</body>
+</html>

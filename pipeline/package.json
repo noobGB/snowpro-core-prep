@@ -1,0 +1,28 @@
+{
+  "name": "snowprep-content-pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Parses the SnowPro Core Prep markdown study folder into content.json + notes/*.json + search-index.json.",
+  "type": "module",
+  "scripts": {
+    "build:content": "tsx src/index.ts",
+    "build:content:watch": "tsx watch src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "mdast-util-to-string": "^4.0.0",
+    "rehype-stringify": "^10.0.0",
+    "remark-gfm": "^4.0.0",
+    "remark-parse": "^11.0.0",
+    "remark-rehype": "^11.1.0",
+    "unified": "^11.0.5",
+    "unist-util-visit": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}

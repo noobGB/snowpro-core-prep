@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+<style>
+  doc-page:not(:defined) { visibility: hidden; }
+  body { margin: 0; background: #050506; }
+  a { color: #2bd4d9; text-decoration: none; border-bottom: 1px solid rgba(43,212,217,.35); }
+  a:hover { color: #7ceaee; border-bottom-color: #7ceaee; }
+  .wf, .keep { break-inside: avoid; }
+  table { break-inside: auto; }
+  tr, td, th { break-inside: avoid; }
+</style>
+<script src="./doc-page.js"></script>
+</helmet>
+<doc-page margin="0.7in" style="--doc-sheet-bg:#08090a; --doc-sheet-fg:#d0d6e0; --doc-desk-bg:#050506; background:#08090a; color:#d0d6e0; font-family:Inter, system-ui, sans-serif; -webkit-print-color-adjust:exact; print-color-adjust:exact;">
+
+<div style="display:flex; justify-content:space-between; align-items:baseline; gap:16px; padding-bottom:10px; border-bottom:1px solid #23252a;">
+  <span style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#62666d;">Product &amp; design specification</span>
+  <span style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.06em; color:#62666d;">v0.1 · 2026-08-16</span>
+</div>
+
+<h1 style="font-size:52px; font-weight:500; line-height:1.02; letter-spacing:-0.022em; color:#ffffff; margin:28px 0 14px;">SnowPro Core Prep</h1>
+<p style="font-size:19px; line-height:1.5; color:#8a8f98; margin:0 0 10px; max-width:34em;">A local, offline-first study app for the Snowflake SnowPro Core certification (COF-C03), built on an existing folder of verified domain notes, practice questions and mock exams.</p>
+<p style="font-size:14px; line-height:1.6; color:#62666d; margin:0 0 6px; max-width:38em;">This document is written to be built from without the author in the loop. It is stack-agnostic: it specifies behaviour, content structure and visual tokens, not a framework.</p>
+
+<div style="margin:26px 0 0; padding:14px 16px; border:1px solid #3a3520; background:rgba(228,242,34,.05); border-radius:6px;">
+  <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#c9bb4a; margin-bottom:6px;">Open decision</div>
+  <p style="font-size:14px; line-height:1.6; color:#d0d6e0; margin:0;">The brief supplied a dark "midnight precision" style reference, and a light editorial design system (Classical) was also attached to the project. This spec follows the dark reference. If the Classical system is the real intent, the token table in §3 is the only section that has to change — every layout below survives the swap.</p>
+</div>
+
+<h2 style="font-size:13px; font-family:'JetBrains Mono',monospace; letter-spacing:.14em; text-transform:uppercase; color:#62666d; font-weight:400; margin:40px 0 14px; padding-top:14px; border-top:1px solid #23252a;">Contents</h2>
+<ol style="columns:2; column-gap:36px; font-size:14px; line-height:2; color:#d0d6e0; margin:0; padding-left:20px;">
+  <li>Overview and locked decisions</li>
+  <li>Information architecture</li>
+  <li>Design language</li>
+  <li>Data model</li>
+  <li>Content pipeline</li>
+  <li>Screens, states and wireframes</li>
+  <li>Build order</li>
+  <li>Risks and open questions</li>
+  <li>Shipping the open-source version</li>
+</ol>
+
+<h2 style="font-size:32px; font-weight:500; letter-spacing:-0.02em; color:#ffffff; margin:48px 0 4px; padding-top:18px; border-top:1px solid #23252a;">1 &nbsp;Overview</h2>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:14px 0 0; max-width:36em;">The study material already exists as markdown: five domain files verified against the official COF-C03 guide, fifty domain-tagged practice questions, a hundred-question mock, a cheatsheet of hard numbers, a day-by-day plan, a resource list and a hands-on setup log. The app's job is to turn reading material into measured practice — to answer "am I ready, and where am I weakest" with numbers rather than a feeling.</p>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:14px 0 0; max-width:36em;">It runs locally with no account and no backend. Progress lives in browser storage. Content is generated from the markdown by a script, so the notes stay the human-editable source of truth and new mock exams can be dropped into the folder later.</p>
+
+<h3 style="font-size:20px; font-weight:500; letter-spacing:-0.012em; color:#ffffff; margin:30px 0 10px;">Principles</h3>
+<ul style="font-size:15px; line-height:1.75; color:#d0d6e0; margin:0; padding-left:20px; max-width:36em;">
+  <li><strong style="color:#fff; font-weight:500;">Exam-faithful.</strong> Scaled 0–1000 scoring against the 750 line, strict mock timing, answers withheld until submit.</li>
+  <li><strong style="color:#fff; font-weight:500;">Content grows, app adapts.</strong> Nothing about the app assumes one mock or fifty questions.</li>
+  <li><strong style="color:#fff; font-weight:500;">Measurement over decoration.</strong> Every number on screen changes what you study next.</li>
+  <li><strong style="color:#fff; font-weight:500;">Quiet surface.</strong> Near-black canvas, hairline borders, one accent, no ornament.</li>
+</ul>
+
+<h3 style="font-size:20px; font-weight:500; letter-spacing:-0.012em; color:#ffffff; margin:30px 0 10px;">Locked decisions</h3>
+<table style="width:100%; border-collapse:collapse; font-size:13.5px; line-height:1.5;">
+  <thead><tr>
+    <th style="text-align:left; padding:8px 10px 8px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500; width:32%;">Area</th>
+    <th style="text-align:left; padding:8px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500;">Decision</th>
+  </tr></thead>
+  <tbody>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Deliverable</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e;">Working clickable app: real quiz logic, real local progress.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Audience</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e;">Personal first, open-source later. Evergreen: the user sets their own exam date.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Navigation</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e;">Persistent sidebar of nine links, plus ⌘K search across pages, note text and questions.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Quiz feedback</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e;">Answers at the end, never during. All questions on one scrolling page with a sticky progress bar.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Scoring</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e;">Scaled 0–1000 against 750. Multi-select earns partial credit.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Mock rules</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e;">Strict: 115 minutes, no pause, warning at 10 minutes, auto-submit at zero.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Practice rules</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e;">Whole domain set by default, untimed. Leaving halfway scores what was answered and logs a partial attempt.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Review</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e;">Explanation per question; misses first, correct answers collapsed; every question links to its domain note.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Wrong-answer notebook</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e;">A filter on the practice page, not its own destination.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Content</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e;">A script converts the markdown to JSON. Filename convention drives discovery. Unparseable content fails loudly.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Progress</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e;">Persisted to a mounted Docker volume when the app runs in its container; browser storage is the fallback when opened as plain files. Settings hold exam date, reset, and a light-mode switch stubbed for later.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Runtime</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e;">Docker, with volumes for content and data so notes and progress survive restarts and image rebuilds.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Responsive</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e;">Desktop-first; mobile fully usable but not optimised.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Out of v1</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e;">Official sample questions page, spaced repetition, progress export/import, accounts.</td></tr>
+  </tbody>
+</table>
+
+<h2 style="font-size:32px; font-weight:500; letter-spacing:-0.02em; color:#ffffff; margin:48px 0 4px; padding-top:18px; border-top:1px solid #23252a;">2 &nbsp;Information architecture</h2>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:14px 0 18px; max-width:36em;">Nine destinations, flat. The sidebar carries the nine links and nothing else — no counters, no countdown, no nested domain list. Settings sits at the sidebar foot as a quiet icon row.</p>
+<table style="width:100%; border-collapse:collapse; font-size:13.5px; line-height:1.5;">
+  <thead><tr>
+    <th style="text-align:left; padding:8px 10px 8px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500; width:20%;">Route</th>
+    <th style="text-align:left; padding:8px 10px 8px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500; width:22%;">Screen</th>
+    <th style="text-align:left; padding:8px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500;">Job</th>
+  </tr></thead>
+  <tbody>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px; color:#2bd4d9;">/</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">Dashboard</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Days left, readiness, resume</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px; color:#2bd4d9;">/notes/:domain</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">Notes reader</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Read domains 1–5</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px; color:#2bd4d9;">/practice</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">Practice</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Domain sets, misses filter</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px; color:#2bd4d9;">/session/:id</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">Question runner</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Shared by practice and mock</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px; color:#2bd4d9;">/results/:id</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">Results</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Score and review</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px; color:#2bd4d9;">/mocks</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">Mock exams</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Pick a mock, start strict</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px; color:#2bd4d9;">/drill</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">Flashcards</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Cheatsheet flip cards</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px; color:#2bd4d9;">/plan</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">Study plan</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Day-by-day checklist</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px; color:#2bd4d9;">/analytics</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">Analytics</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Trend, domain bars, timing</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px; color:#2bd4d9;">/resources</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">Resources</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Links grouped by domain</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px; color:#2bd4d9;">/setup</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">Hands-on setup</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Trial, CLI, Claude Code, sandbox</td></tr>
+  </tbody>
+</table>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:16px 0 0; max-width:36em;">⌘K (Ctrl+K) opens a search overlay indexing page names, domain names, every note heading and paragraph, and every question stem. Results are grouped by type; Enter navigates, arrows move, Escape closes. Selecting a note result deep-links to the heading anchor; selecting a question opens it in review if it has been answered, otherwise it opens its domain set.</p>
+
+<h2 style="font-size:32px; font-weight:500; letter-spacing:-0.02em; color:#ffffff; margin:48px 0 4px; padding-top:18px; border-top:1px solid #23252a;">3 &nbsp;Design language</h2>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:14px 0 18px; max-width:36em;">Near-black substrate, paper-white headings, hairline borders instead of shadows, and a single accent used only for the primary action and the active nav state. Weights stay in the 300–600 band; nothing is bold.</p>
+
+<h3 style="font-size:20px; font-weight:500; letter-spacing:-0.012em; color:#ffffff; margin:26px 0 10px;">Colour</h3>
+<div class="keep" style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px;">
+  <div style="border:1px solid #23252a; border-radius:6px; overflow:hidden;"><div style="height:34px; background:#08090a; border-bottom:1px solid #23252a;"></div><div style="padding:6px 8px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#8a8f98;">canvas<br />#08090a</div></div>
+  <div style="border:1px solid #23252a; border-radius:6px; overflow:hidden;"><div style="height:34px; background:#0f1011; border-bottom:1px solid #23252a;"></div><div style="padding:6px 8px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#8a8f98;">card<br />#0f1011</div></div>
+  <div style="border:1px solid #23252a; border-radius:6px; overflow:hidden;"><div style="height:34px; background:#161718; border-bottom:1px solid #23252a;"></div><div style="padding:6px 8px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#8a8f98;">raised<br />#161718</div></div>
+  <div style="border:1px solid #23252a; border-radius:6px; overflow:hidden;"><div style="height:34px; background:#23252a; border-bottom:1px solid #23252a;"></div><div style="padding:6px 8px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#8a8f98;">hairline<br />#23252a</div></div>
+  <div style="border:1px solid #23252a; border-radius:6px; overflow:hidden;"><div style="height:34px; background:#8a8f98; border-bottom:1px solid #23252a;"></div><div style="padding:6px 8px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#8a8f98;">muted text<br />#8a8f98</div></div>
+  <div style="border:1px solid #23252a; border-radius:6px; overflow:hidden;"><div style="height:34px; background:#d0d6e0; border-bottom:1px solid #23252a;"></div><div style="padding:6px 8px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#8a8f98;">body text<br />#d0d6e0</div></div>
+  <div style="border:1px solid #23252a; border-radius:6px; overflow:hidden;"><div style="height:34px; background:#ffffff; border-bottom:1px solid #23252a;"></div><div style="padding:6px 8px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#8a8f98;">headings<br />#ffffff</div></div>
+  <div style="border:1px solid #23252a; border-radius:6px; overflow:hidden;"><div style="height:34px; background:#2bd4d9; border-bottom:1px solid #23252a;"></div><div style="padding:6px 8px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#8a8f98;">accent<br />#2bd4d9</div></div>
+</div>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:0 0 12px; max-width:36em;">The accent choice was left open in the brief. Teal is proposed over the reference's acid lime: lime is strongly associated with the referenced product, teal reads cold and sits closer to the subject matter. It is used for the primary action, the active nav indicator, and focus rings — never for decoration.</p>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:0; max-width:36em;">Status colours are separate and used only for correctness: <span style="color:#27a644;">#27a644</span> correct, <span style="color:#eb5757;">#eb5757</span> incorrect, <span style="color:#c9bb4a;">#c9bb4a</span> partial or warning. They never appear as decoration or as chart fills.</p>
+
+<h3 style="font-size:20px; font-weight:500; letter-spacing:-0.012em; color:#ffffff; margin:26px 0 10px;">Type</h3>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:0 0 12px; max-width:36em;">Inter for everything; JetBrains Mono for scores, timers, question numbers, domain codes and shell commands. Tracking tightens as size grows: −0.022em at 48px and above, −0.012em at 20–32px, default below.</p>
+<table style="width:100%; border-collapse:collapse; font-size:13px; line-height:1.5;">
+  <thead><tr>
+    <th style="text-align:left; padding:7px 10px 7px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500;">Role</th>
+    <th style="text-align:left; padding:7px 10px 7px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500;">Size / weight</th>
+    <th style="text-align:left; padding:7px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500;">Used for</th>
+  </tr></thead>
+  <tbody>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">Display</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">56 / 500</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Readiness number, final score</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">Page title</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">32 / 500</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Screen headers</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">Section</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">20 / 500</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Card titles, note h2</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">Body</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">16 / 400, lh 1.6</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Note prose, question stems</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">UI</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">14 / 400</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Buttons, nav, options</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e;">Meta</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">12 / 400 mono</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Timers, Q numbers, tags</td></tr>
+  </tbody>
+</table>
+
+<h3 style="font-size:20px; font-weight:500; letter-spacing:-0.012em; color:#ffffff; margin:26px 0 10px;">Shape and rhythm</h3>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:0 0 14px; max-width:36em;">4px base unit; 8 / 12 / 16 / 24 / 48 ladder. Radii: 4px badges, 6px buttons and inputs, 12px cards, pill for tags. Content column caps at 1100px; the notes reader caps its measure at 68 characters. Elevation is a 1px #23252a border, never a shadow.</p>
+
+<h3 style="font-size:20px; font-weight:500; letter-spacing:-0.012em; color:#ffffff; margin:26px 0 10px;">Component inventory</h3>
+<table style="width:100%; border-collapse:collapse; font-size:13px; line-height:1.5;">
+  <thead><tr>
+    <th style="text-align:left; padding:7px 10px 7px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500; width:26%;">Component</th>
+    <th style="text-align:left; padding:7px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500;">Definition</th>
+  </tr></thead>
+  <tbody>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Sidebar</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">240px, #0f1011, right hairline. Item 14px #d0d6e0, 8×12 padding, 6px radius; active state is a #161718 fill with a 2px accent bar at the left edge.</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Card</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">#0f1011, 1px #23252a, 12px radius, 24px padding. No shadow.</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Primary button</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Accent fill, #08090a text, 6px radius, 10×16 padding, 14px/500. One per view.</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Ghost button</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Transparent, 1px #23252a, #d0d6e0 text. Hover lifts the border to #383b3f.</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Option row</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Full-width click target, min 44px, 1px #23252a, 6px radius, mono letter badge at left. Selected: #161718 fill, accent border. Reviewed states add a status border and a right-side glyph.</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Domain bar</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Label, weight tag, 6px track (#23252a) with a #d0d6e0 fill and a 1px accent tick at the 750 line.</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Tag</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">rgba(255,255,255,.05) fill, #8a8f98 text, 12px mono, 4px radius. Domain tags carry the domain number.</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Sticky progress bar</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">48px, pinned top of the session scroll area, canvas background with a bottom hairline: answered count, thin fill bar, timer if timed, submit.</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Command palette</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Centered 640px panel on a 60% scrim, #161718, 12px radius; input row then grouped results.</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Empty state</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Dashed 1px #23252a, centred 14px #62666d line, one ghost action. Never an illustration.</td></tr>
+  </tbody>
+</table>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:14px 0 0; max-width:36em;">Focus is a 2px accent ring at 2px offset on every interactive element. Hit targets never fall below 44px on touch. Icons are single-weight line icons at 16px, #8a8f98.</p>
+
+<h2 style="font-size:32px; font-weight:500; letter-spacing:-0.02em; color:#ffffff; margin:48px 0 4px; padding-top:18px; border-top:1px solid #23252a;">4 &nbsp;Data model</h2>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:14px 0 16px; max-width:36em;">Two stores. <em>Content</em> is generated, read-only and versioned. <em>Progress</em> is written by the app into browser storage and never regenerated.</p>
+
+<h3 style="font-size:20px; font-weight:500; letter-spacing:-0.012em; color:#ffffff; margin:24px 0 10px;">Content</h3>
+<pre class="keep" style="font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.6; color:#d0d6e0; background:#0f1011; border:1px solid #23252a; border-radius:6px; padding:16px; overflow:hidden; white-space:pre-wrap; margin:0 0 14px;">content.json
+{
+  "bankVersion": "2026-08-16T09:12:00Z",   // hash of all source files; stamps every attempt
+  "generatedFrom": ["10_Practice_Questions_Domain1_Architecture.md", ...],
+  "domains": [
+    { "id": "d1", "number": 1, "title": "Snowflake AI Data Cloud Features &amp; Architecture",
+      "weight": 0.31, "noteFile": "01_Domain1_...md",
+      "sections": [ { "id": "1.1", "title": "Architecture layers", "anchor": "architecture-layers" } ] }
+  ],
+  "questions": [
+    { "id": "d1-q7", "domainId": "d1", "section": "1.5",
+      "type": "single" | "multi",
+      "stem": "A workload runs memory-intensive Snowpark…",
+      "options": [ { "key": "A", "text": "A larger Standard Gen 1 warehouse" } ],
+      "correct": ["B"],
+      "explanation": "Snowpark-Optimized warehouses provide…",
+      "sourceFile": "10_Practice_Questions_Domain1_Architecture.md",
+      "sourceIndex": 7 }
+  ],
+  "sets": [
+    { "id": "set-d1", "kind": "domain", "domainId": "d1", "title": "Domain 1 — Architecture",
+      "questionIds": ["d1-q1", …], "timed": false },
+    { "id": "mock-1", "kind": "mock", "title": "Mock Exam 1",
+      "questionIds": [ …100 ], "timed": true, "durationMin": 115,
+      "domainSplit": { "d1": 31, "d2": 20, "d3": 18, "d4": 21, "d5": 10 } }
+  ],
+  "flashcards": [ { "id": "fc-12", "front": "Fail-safe retention", "back": "7 days, non-configurable",
+                    "domainId": "d5", "source": "08_Cheatsheet_Key_Numbers.md" } ],
+  "plan":      [ { "date": "2026-08-16", "label": "Sun — full day",
+                   "tasks": [ { "id": "p-16-1", "text": "Domain 3 end to end", "links": ["/notes/d3"] } ] } ],
+  "resources": [ { "domainId": "d1", "title": "Snowflake Docs — Key Concepts",
+                   "url": "https://…", "official": true } ],
+  "setup":     [ { "id": "s-3", "group": "Snowflake CLI",
+                   "title": "Install and authenticate the CLI",
+                   "body": "&lt;markdown&gt;", "commands": ["snow connection add"],
+                   "gotchas": ["Homebrew installs an older…"] } ]
+}</pre>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:0 0 8px; max-width:36em;">Notes prose is not inlined into <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#d0d6e0;">content.json</span>. The script emits one <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#d0d6e0;">notes/&lt;domainId&gt;.json</span> per domain holding the parsed heading tree and HTML, so the reader loads only what it displays and the search index can be built once at generation time into <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#d0d6e0;">search-index.json</span>.</p>
+
+<h3 style="font-size:20px; font-weight:500; letter-spacing:-0.012em; color:#ffffff; margin:24px 0 10px;">Progress</h3>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:0 0 12px; max-width:36em;">Progress is one serialisable object with a single writer. In the container it is a file on the mounted data volume (<span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#d0d6e0;">/data/progress.json</span>), read on boot and written back on every change through a two-route storage adapter (<span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#d0d6e0;">GET /api/progress</span>, <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#d0d6e0;">PUT /api/progress</span>). Opened without the container it falls back to <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#d0d6e0;">localStorage</span> under the same key and the same shape, so nothing above this line changes with the storage target. Writes are debounced to roughly one per second and always write the whole object — no partial merges, no migrations at write time.</p>
+<pre class="keep" style="font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.6; color:#d0d6e0; background:#0f1011; border:1px solid #23252a; border-radius:6px; padding:16px; overflow:hidden; white-space:pre-wrap; margin:0 0 14px;">/data/progress.json  (container)  ·  localStorage["snowprep.progress"]  (fallback)
+{
+  "schemaVersion": 1,
+  "examDate": "2026-08-19",
+  "lastLocation": { "route": "/notes/d3", "label": "Domain 3 — Data Loading", "at": "…" },
+  "attempts": [
+    { "id": "att-8", "setId": "set-d1", "kind": "domain",
+      "bankVersion": "2026-08-16T09:12:00Z",
+      "startedAt": "…", "submittedAt": "…", "status": "complete" | "partial" | "expired",
+      "durationSec": 940,
+      "answers": { "d1-q7": { "picked": ["B"], "correct": true, "credit": 1, "timeSec": 62 } },
+      "scaled": 820, "rawPct": 0.86,
+      "byDomain": { "d1": { "answered": 15, "credit": 13.5, "scaled": 830 } } }
+  ],
+  "flashcards": { "seen": ["fc-12"], "lastIndex": 12 },
+  "plan": { "checked": ["p-16-1"] },
+  "setup": { "checked": ["s-3"] },
+  "settings": { "theme": "dark" }
+}</pre>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:0; max-width:36em;">Every attempt stamps the <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#d0d6e0;">bankVersion</span> it ran against. Attempts are never deleted or migrated when content changes; those taken against an older bank are labelled in analytics and excluded from same-set trend comparisons unless the user opts in.</p>
+
+<h3 style="font-size:20px; font-weight:500; letter-spacing:-0.012em; color:#ffffff; margin:24px 0 10px;">Derived numbers</h3>
+<table style="width:100%; border-collapse:collapse; font-size:13px; line-height:1.5;">
+  <thead><tr>
+    <th style="text-align:left; padding:7px 10px 7px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500; width:26%;">Number</th>
+    <th style="text-align:left; padding:7px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500;">Rule</th>
+  </tr></thead>
+  <tbody>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Question credit</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Single-answer: 1 or 0. Multi-select partial credit: (correct picked − incorrect picked) ÷ correct total, floored at 0.</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Scaled score</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">round(credit ÷ answerable × 1000). Pass line drawn at 750. Unanswered questions count as zero in a submitted attempt.</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Domain readiness</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Scaled score across that domain's questions in the three most recent attempts touching it. Practice and mock count equally. Blank until at least one attempt exists.</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Overall readiness</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Domain readiness weighted 31/21/20/18/10. Domains with no data are excluded and the weights renormalised, with a note saying how much of the exam is unmeasured.</td></tr>
+    <tr><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Days left</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Whole days from today to examDate, local time. Zero reads "today"; past reads "exam passed" and offers to set a new date.</td></tr>
+  </tbody>
+</table>
+
+<h2 style="font-size:32px; font-weight:500; letter-spacing:-0.02em; color:#ffffff; margin:48px 0 4px; padding-top:18px; border-top:1px solid #23252a;">5 &nbsp;Content pipeline</h2>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:14px 0 16px; max-width:36em;">A single script reads the study folder and writes the JSON the app loads. It runs at container start against the mounted content volume, and can be run by hand after editing any markdown; the app never parses markdown at runtime.</p>
+<h3 style="font-size:17px; font-weight:500; color:#ffffff; margin:22px 0 8px;">Discovery by filename</h3>
+<pre class="keep" style="font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.7; color:#d0d6e0; background:#0f1011; border:1px solid #23252a; border-radius:6px; padding:16px; white-space:pre-wrap; margin:0 0 14px;">0[1-5]_Domain&lt;n&gt;_*.md          → domain notes
+1[0-4]_Practice_Questions_*.md → domain question sets
+1[6-9]|[2-9][0-9]_Mock_Exam_&lt;n&gt;.md → a mock exam (any number, discovered automatically)
+08_Cheatsheet_*.md             → flashcards
+00_Study_Plan.md               → plan
+07_Resources.md                → resources
+15_Hands_On_*.md               → setup walkthrough</pre>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:0 0 14px; max-width:36em;">Dropping <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#d0d6e0;">17_Mock_Exam_2.md</span> into the folder and rerunning the script is the whole workflow for adding a mock. Domain assignment for mock questions comes from the file's own domain headings; where a mock reuses a question already present in a domain file, the script matches on the normalised stem and reuses the question id rather than duplicating it.</p>
+<h3 style="font-size:17px; font-weight:500; color:#ffffff; margin:22px 0 8px;">Expected markdown shape</h3>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:0 0 14px; max-width:36em;">Questions are numbered <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#d0d6e0;">**n.**</span> followed by the stem, then options as lines beginning <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#d0d6e0;">A.</span> through <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#d0d6e0;">E.</span>; an answer-key section at the foot maps number to letters and explanation. Multi-select is detected from a key holding more than one letter, or a stem containing "select two" / "choose two".</p>
+<h3 style="font-size:17px; font-weight:500; color:#ffffff; margin:22px 0 8px;">Failure behaviour</h3>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:0 0 8px; max-width:36em;">The script fails loudly and writes nothing if it hits a question it cannot parse. The error names the file, the question number, the line, and what it expected — for example: <em style="color:#d0d6e0;">16_Mock_Exam_1.md Q63 (line 812): answer key lists "F" but only options A–D were found.</em> A partial import is never produced, so the app can trust that content.json is complete.</p>
+
+<h2 style="font-size:32px; font-weight:500; letter-spacing:-0.02em; color:#ffffff; margin:48px 0 4px; padding-top:18px; border-top:1px solid #23252a;">6 &nbsp;Screens</h2>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:14px 0 0; max-width:36em;">Wireframes are grey-box layout only — no styling, no real copy. Desktop is 1440px at a 240px sidebar; mobile is 390px with the sidebar collapsed to a bottom bar of five items (Home, Notes, Practice, Drill, More).</p>
+
+<h3 style="font-size:24px; font-weight:500; letter-spacing:-0.014em; color:#ffffff; margin:34px 0 6px;">6.1 &nbsp;Dashboard</h3>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:0 0 12px; max-width:36em;">The landing screen and the only place that answers "what now". Three things lead: days to exam, per-domain readiness, and one large resume action. Everything else sits below the fold.</p>
+<div class="wf" style="display:grid; grid-template-columns:1fr 200px; gap:16px; align-items:start; margin:0 0 14px;">
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">DESKTOP 1440</div>
+    <div style="display:grid; grid-template-columns:64px 1fr; gap:8px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; min-height:230px; display:flex; align-items:flex-start; justify-content:center; padding-top:8px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#62666d;">nav</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1; background:#161718; border:1px solid #26282c; border-radius:4px; height:74px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">days to exam · editable date</div>
+          <div style="flex:1.4; background:#161718; border:1px solid #2bd4d9; border-radius:4px; height:74px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">resume — last location</div>
+        </div>
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">
+          readiness — overall figure + 5 weighted domain bars
+          <div style="display:flex; flex-direction:column; gap:4px; margin-top:6px;">
+            <div style="height:6px; background:#23252a; border-radius:2px;"></div>
+            <div style="height:6px; background:#23252a; border-radius:2px;"></div>
+            <div style="height:6px; background:#23252a; border-radius:2px;"></div>
+            <div style="height:6px; background:#23252a; border-radius:2px;"></div>
+            <div style="height:6px; background:#23252a; border-radius:2px;"></div>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1; background:#161718; border:1px solid #26282c; border-radius:4px; height:56px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">today's plan tasks</div>
+          <div style="flex:1; background:#161718; border:1px solid #26282c; border-radius:4px; height:56px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">recent attempts</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">MOBILE 390</div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:26px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">top bar · search</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:44px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">days to exam</div>
+      <div style="background:#161718; border:1px solid #2bd4d9; border-radius:4px; height:40px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">resume</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:70px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">readiness bars</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:34px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">today's tasks</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:22px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">bottom nav ×5</div>
+    </div>
+  </div>
+</div>
+<ul style="font-size:14px; line-height:1.7; color:#8a8f98; margin:0; padding-left:20px; max-width:36em;">
+  <li><strong style="color:#d0d6e0; font-weight:500;">Exam date</strong> is edited inline on the countdown card — click the date, a native date input replaces it, blur commits. No setup wizard.</li>
+  <li><strong style="color:#d0d6e0; font-weight:500;">Resume</strong> returns to the last location visited, whatever it was; if an attempt was left incomplete it resumes that instead, since that is the more valuable thread.</li>
+  <li><strong style="color:#d0d6e0; font-weight:500;">Readiness</strong> shows one overall figure with the five domain bars beneath it. Domains with no attempts render as an empty track with a "not measured" label rather than zero.</li>
+  <li><strong style="color:#d0d6e0; font-weight:500;">Empty state</strong> (no attempts at all): readiness is replaced by the study plan's first day, with its tasks actionable in place, and the primary action becomes "Start Domain 1 practice".</li>
+</ul>
+
+<h3 style="font-size:24px; font-weight:500; letter-spacing:-0.014em; color:#ffffff; margin:34px 0 6px;">6.2 &nbsp;Notes reader</h3>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:0 0 12px; max-width:36em;">Long-form reading for domains 1–5. Three columns on desktop: nav, prose at a 68-character measure, and a sticky table of contents that tracks the scroll position.</p>
+<div class="wf" style="display:grid; grid-template-columns:1fr 200px; gap:16px; align-items:start; margin:0 0 14px;">
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">DESKTOP 1440</div>
+    <div style="display:grid; grid-template-columns:64px 1fr 100px; gap:8px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; min-height:230px; padding-top:8px; text-align:center; font-family:'JetBrains Mono',monospace; font-size:8px; color:#62666d;">nav</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:46px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">domain title · weight tag · quiz-me button</div>
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; flex:1; min-height:176px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">prose — headings, lists, tables, code
+          <div style="display:flex; flex-direction:column; gap:5px; margin-top:8px;">
+            <div style="height:5px; background:#23252a; width:90%;"></div><div style="height:5px; background:#23252a; width:96%;"></div><div style="height:5px; background:#23252a; width:70%;"></div>
+            <div style="height:5px; background:#23252a; width:88%; margin-top:8px;"></div><div style="height:5px; background:#23252a; width:93%;"></div><div style="height:5px; background:#23252a; width:60%;"></div>
+          </div>
+        </div>
+      </div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; min-height:230px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">sticky TOC</div>
+    </div>
+  </div>
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">MOBILE 390</div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:26px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">top bar</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:30px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">title · weight · TOC toggle</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:130px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">prose, single column</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:26px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">quiz me on this section</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:22px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">bottom nav</div>
+    </div>
+  </div>
+</div>
+<ul style="font-size:14px; line-height:1.7; color:#8a8f98; margin:0; padding-left:20px; max-width:36em;">
+  <li>The header carries the domain's exam weight as a tag — the reason this domain deserves the time.</li>
+  <li>Each section heading exposes a <strong style="color:#d0d6e0; font-weight:500;">quiz me on this section</strong> action on hover (always visible on touch), starting a practice session filtered to that section's questions. If a section has none, the action is absent rather than disabled.</li>
+  <li>The TOC highlights the section in view and is a scrollspy, not a static list. On mobile it becomes a sheet from the header.</li>
+  <li>Tables in the notes scroll horizontally rather than shrinking below 13px.</li>
+</ul>
+
+<h3 style="font-size:24px; font-weight:500; letter-spacing:-0.014em; color:#ffffff; margin:34px 0 6px;">6.3 &nbsp;Practice</h3>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:0 0 12px; max-width:36em;">The index of question sets — one card per domain — plus the wrong-answer filter. Cards show question count, exam weight, last score and when it was last attempted.</p>
+<div class="wf" style="display:grid; grid-template-columns:1fr 200px; gap:16px; align-items:start; margin:0 0 14px;">
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">DESKTOP 1440</div>
+    <div style="display:grid; grid-template-columns:64px 1fr; gap:8px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; min-height:210px; padding-top:8px; text-align:center; font-family:'JetBrains Mono',monospace; font-size:8px; color:#62666d;">nav</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:40px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">title · filter: all sets / questions I missed</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+          <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:72px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">D1 · 15Q · 31%<br />last 860</div>
+          <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:72px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">D2 · 10Q · 20%</div>
+          <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:72px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">D3 · 9Q · 18%</div>
+          <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:72px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">D4 · 11Q · 21%</div>
+          <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:72px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">D5 · 5Q · 10%</div>
+          <div style="background:#161718; border:1px dashed #383b3f; border-radius:4px; height:72px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d;">missed · 6Q</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">MOBILE 390</div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:26px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">top bar</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:26px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">filter row</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:40px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">D1 card</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:40px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">D2 card</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:40px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">D3 card</div>
+      <div style="background:#161718; border:1px dashed #383b3f; border-radius:4px; height:34px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#62666d;">missed</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:22px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">bottom nav</div>
+    </div>
+  </div>
+</div>
+<ul style="font-size:14px; line-height:1.7; color:#8a8f98; margin:0; padding-left:20px; max-width:36em;">
+  <li><strong style="color:#d0d6e0; font-weight:500;">Missed filter:</strong> switching the filter replaces the domain cards with the wrong-answer notebook — every question missed in any attempt, newest first, grouped by domain, each showing the stem, what was picked, the right answer, the explanation, and a link to its note section. A "retry these" action starts a session from the filtered list.</li>
+  <li>A question leaves the notebook once it is answered correctly in a later attempt; a toggle keeps history visible for anything ever missed.</li>
+  <li>Starting a set always runs the whole set, untimed. There is no configuration step — the card's button starts immediately.</li>
+</ul>
+
+<h3 style="font-size:24px; font-weight:500; letter-spacing:-0.014em; color:#ffffff; margin:34px 0 6px;">6.4 &nbsp;Question runner</h3>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:0 0 12px; max-width:36em;">Shared by practice and mock. All questions on one scrolling page, answers withheld until submit, a single sticky bar at the top carrying progress, timer and submit. The sidebar is hidden during a session so nothing competes with the questions.</p>
+<div class="wf" style="display:grid; grid-template-columns:1fr 200px; gap:16px; align-items:start; margin:0 0 14px;">
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">DESKTOP 1440</div>
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:32px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">sticky: 24/100 answered ─── · 01:42:11 · [submit]</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; padding:10px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">
+        Q7 · D1 · single
+        <div style="height:5px; background:#23252a; width:92%; margin:8px 0 4px;"></div>
+        <div style="height:5px; background:#23252a; width:64%;"></div>
+        <div style="display:flex; flex-direction:column; gap:5px; margin-top:9px;">
+          <div style="height:16px; background:#0f1011; border:1px solid #26282c; border-radius:3px;"></div>
+          <div style="height:16px; background:#0f1011; border:1px solid #2bd4d9; border-radius:3px;"></div>
+          <div style="height:16px; background:#0f1011; border:1px solid #26282c; border-radius:3px;"></div>
+          <div style="height:16px; background:#0f1011; border:1px solid #26282c; border-radius:3px;"></div>
+        </div>
+      </div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:74px; padding:10px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">Q8 · D1 · select two</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:30px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d;">…continues to Q100 · [submit] at foot</div>
+    </div>
+  </div>
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">MOBILE 390</div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:30px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">sticky: 24/100 · 01:42 · submit</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:96px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">Q7 stem + 4 options, 44px rows</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:96px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">Q8</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:20px; padding:4px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#62666d;">…</div>
+    </div>
+  </div>
+</div>
+<ul style="font-size:14px; line-height:1.7; color:#8a8f98; margin:0; padding-left:20px; max-width:36em;">
+  <li><strong style="color:#d0d6e0; font-weight:500;">Sticky bar</strong> is the only navigation aid: answered count, a thin fill, the timer when timed, and submit. No question navigator rail, no jump list.</li>
+  <li><strong style="color:#d0d6e0; font-weight:500;">Multi-select</strong> questions state how many to choose and use square targets; single-answer use round ones. Selection is togglable up to submit.</li>
+  <li><strong style="color:#d0d6e0; font-weight:500;">Submit</strong> asks for confirmation when anything is unanswered, naming the count. Unanswered questions score zero.</li>
+  <li><strong style="color:#d0d6e0; font-weight:500;">Leaving mid-session</strong> (practice): the attempt is scored on what was answered and logged with status <span style="font-family:'JetBrains Mono',monospace; font-size:12px;">partial</span>. Partial attempts are visibly marked everywhere they appear and are excluded from readiness unless they cover at least half the set.</li>
+  <li><strong style="color:#d0d6e0; font-weight:500;">Mock timing</strong> is strict: the timer runs from start, cannot be paused, warns at ten minutes with an inline banner (no modal), and auto-submits at zero with status <span style="font-family:'JetBrains Mono',monospace; font-size:12px;">expired</span>. Closing the tab does not stop the clock — elapsed time is computed from the start timestamp on return.</li>
+  <li>Answer state is written to storage on every change so a crash costs nothing.</li>
+  <li>Per-question time is recorded from when the question first enters the viewport to when it last receives an answer, feeding the timing view in analytics.</li>
+</ul>
+
+<h3 style="font-size:24px; font-weight:500; letter-spacing:-0.014em; color:#ffffff; margin:34px 0 6px;">6.5 &nbsp;Results</h3>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:0 0 12px; max-width:36em;">A scaled score against the 750 line, a per-domain breakdown, then the review: misses first, correct answers collapsed behind a single row each.</p>
+<div class="wf" style="display:grid; grid-template-columns:1fr 200px; gap:16px; align-items:start; margin:0 0 14px;">
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">DESKTOP 1440</div>
+    <div style="display:grid; grid-template-columns:64px 1fr; gap:8px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; min-height:220px; padding-top:8px; text-align:center; font-family:'JetBrains Mono',monospace; font-size:8px; color:#62666d;">nav</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="display:flex; gap:8px;">
+          <div style="width:140px; background:#161718; border:1px solid #26282c; border-radius:4px; height:80px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">820 / 1000<br />pass line 750</div>
+          <div style="flex:1; background:#161718; border:1px solid #26282c; border-radius:4px; height:80px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">domain breakdown bars · duration · date</div>
+        </div>
+        <div style="background:#161718; border:1px solid #eb5757; border-radius:4px; height:56px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">missed Q — your pick, correct answer, explanation, note link</div>
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:44px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">partial-credit Q</div>
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:22px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d;">▸ 41 correct — collapsed</div>
+      </div>
+    </div>
+  </div>
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">MOBILE 390</div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:56px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">score + pass line</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:52px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">domain bars</div>
+      <div style="background:#161718; border:1px solid #eb5757; border-radius:4px; height:60px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">missed Q</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:20px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#62666d;">▸ correct, collapsed</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:22px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">bottom nav</div>
+    </div>
+  </div>
+</div>
+<ul style="font-size:14px; line-height:1.7; color:#8a8f98; margin:0; padding-left:20px; max-width:36em;">
+  <li>The headline is the scaled figure with the pass line marked on a track beneath it. Raw counts appear as secondary metadata, not as the headline.</li>
+  <li>Review order: incorrect, then partial credit, then unanswered, then a single collapsed row for everything correct.</li>
+  <li>Each reviewed question shows all options with the picked and correct ones marked, the explanation verbatim from the source markdown, and a link to the exact note section.</li>
+  <li>Results are permanent and reachable later from analytics; the screen is not a modal.</li>
+</ul>
+
+<h3 style="font-size:24px; font-weight:500; letter-spacing:-0.014em; color:#ffffff; margin:34px 0 6px;">6.6 &nbsp;Mock exams</h3>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:0 0 12px; max-width:36em;">A list of every mock the pipeline found, newest first, each with its question count, domain split, and your attempts. Starting one is deliberate: a confirmation states the rules before the clock begins.</p>
+<div class="wf" style="display:grid; grid-template-columns:1fr 200px; gap:16px; align-items:start; margin:0 0 14px;">
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">DESKTOP 1440</div>
+    <div style="display:grid; grid-template-columns:64px 1fr; gap:8px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; min-height:190px; padding-top:8px; text-align:center; font-family:'JetBrains Mono',monospace; font-size:8px; color:#62666d;">nav</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:34px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">Mock exams · 115 min · no pause</div>
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:64px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">Mock Exam 1 · 100Q · 31/20/18/21/10 · attempts: 1 (780) · [start]</div>
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:64px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">Mock Exam 2 · discovered automatically when added</div>
+      </div>
+    </div>
+  </div>
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">MOBILE 390</div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:26px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">top bar</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:70px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">Mock 1 card · start</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:70px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">Mock 2 card</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:22px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">bottom nav</div>
+    </div>
+  </div>
+</div>
+<ul style="font-size:14px; line-height:1.7; color:#8a8f98; margin:0; padding-left:20px; max-width:36em;">
+  <li>The start confirmation states: 115 minutes, no pause, closing the tab does not stop the clock, auto-submit at zero. One primary action, one cancel.</li>
+  <li>An in-progress mock replaces the card's start action with "resume — 42 minutes left" and blocks starting a second one.</li>
+  <li>Retaking a mock is allowed and logged as a new attempt; the card lists prior scores so improvement is visible without leaving the page.</li>
+</ul>
+
+<h3 style="font-size:24px; font-weight:500; letter-spacing:-0.014em; color:#ffffff; margin:34px 0 6px;">6.7 &nbsp;Flashcards</h3>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:0 0 12px; max-width:36em;">The cheatsheet's hard numbers as flip cards. One card at a time, centred; click or space flips, arrows move. No grading, no scheduling — this is a memory rehearsal surface, not an assessment.</p>
+<div class="wf" style="display:grid; grid-template-columns:1fr 200px; gap:16px; align-items:start; margin:0 0 14px;">
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">DESKTOP 1440</div>
+    <div style="display:grid; grid-template-columns:64px 1fr; gap:8px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; min-height:180px; padding-top:8px; text-align:center; font-family:'JetBrains Mono',monospace; font-size:8px; color:#62666d;">nav</div>
+      <div style="display:flex; flex-direction:column; gap:8px; align-items:center;">
+        <div style="width:100%; background:#161718; border:1px solid #26282c; border-radius:4px; height:26px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">deck filter: all domains · 12 / 48</div>
+        <div style="width:70%; background:#161718; border:1px solid #26282c; border-radius:4px; height:110px; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">card face — click to flip</div>
+        <div style="display:flex; gap:8px; width:70%;">
+          <div style="flex:1; background:#161718; border:1px solid #26282c; border-radius:4px; height:22px;"></div>
+          <div style="flex:1; background:#161718; border:1px solid #26282c; border-radius:4px; height:22px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">MOBILE 390</div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:26px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">deck filter · 12/48</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:150px; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">card — tap to flip, swipe to advance</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:22px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">bottom nav</div>
+    </div>
+  </div>
+</div>
+<ul style="font-size:14px; line-height:1.7; color:#8a8f98; margin:0; padding-left:20px; max-width:36em;">
+  <li>Cards come only from the cheatsheet in v1; the schema already carries a domain id so note-derived cards can join later without a migration.</li>
+  <li>Deck can be filtered to one domain. Order is shuffled per session; position is remembered so the deck resumes where it stopped.</li>
+  <li>The flip is a 150ms cross-fade, not a 3D rotation.</li>
+</ul>
+
+<h3 style="font-size:24px; font-weight:500; letter-spacing:-0.014em; color:#ffffff; margin:34px 0 6px;">6.8 &nbsp;Study plan</h3>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:0 0 12px; max-width:36em;">The day-by-day schedule as a column of day cards, today marked and scrolled to on open. Tasks are checkboxes; checking one writes to progress, not to the markdown.</p>
+<div class="wf" style="display:grid; grid-template-columns:1fr 200px; gap:16px; align-items:start; margin:0 0 14px;">
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">DESKTOP 1440</div>
+    <div style="display:grid; grid-template-columns:64px 1fr; gap:8px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; min-height:190px; padding-top:8px; text-align:center; font-family:'JetBrains Mono',monospace; font-size:8px; color:#62666d;">nav</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:30px; padding:7px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">Study plan · 3 days left · 9/24 tasks</div>
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:44px; padding:7px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d;">Sat 8/15 — past, collapsed</div>
+        <div style="background:#161718; border:1px solid #2bd4d9; border-radius:4px; height:76px; padding:7px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">Sun 8/16 — today · task checkboxes with links</div>
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:44px; padding:7px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">Mon 8/17</div>
+      </div>
+    </div>
+  </div>
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">MOBILE 390</div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:26px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">plan · 3 days left</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:28px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#62666d;">past day, collapsed</div>
+      <div style="background:#161718; border:1px solid #2bd4d9; border-radius:4px; height:92px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">today — tasks</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:34px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">tomorrow</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:22px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">bottom nav</div>
+    </div>
+  </div>
+</div>
+<ul style="font-size:14px; line-height:1.7; color:#8a8f98; margin:0; padding-left:20px; max-width:36em;">
+  <li>Days in the past collapse to a single row showing completion; today and future days are open.</li>
+  <li>The plan in the markdown is dated for one specific run. When the user's exam date differs, the days are offset so the plan ends on the day before their exam, keeping the same sequence and relative weight.</li>
+  <li>Task text that references a domain file or question set renders as a link into the app, not to the markdown.</li>
+</ul>
+
+<h3 style="font-size:24px; font-weight:500; letter-spacing:-0.014em; color:#ffffff; margin:34px 0 6px;">6.9 &nbsp;Analytics</h3>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:0 0 12px; max-width:36em;">Three views, no more: score trend across attempts, per-domain bars against the pass line, and time per question. Charts are drawn in the neutral scale; only the 750 line and out-of-range timings take colour.</p>
+<div class="wf" style="display:grid; grid-template-columns:1fr 200px; gap:16px; align-items:start; margin:0 0 14px;">
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">DESKTOP 1440</div>
+    <div style="display:grid; grid-template-columns:64px 1fr; gap:8px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; min-height:200px; padding-top:8px; text-align:center; font-family:'JetBrains Mono',monospace; font-size:8px; color:#62666d;">nav</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:86px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">score trend — attempts on x, scaled on y, 750 line</div>
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1; background:#161718; border:1px solid #26282c; border-radius:4px; height:88px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">domain bars vs 750</div>
+          <div style="flex:1; background:#161718; border:1px solid #26282c; border-radius:4px; height:88px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">time per question · slowest listed</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">MOBILE 390</div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:70px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">trend</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:70px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">domain bars</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:60px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">timing</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:22px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">bottom nav</div>
+    </div>
+  </div>
+</div>
+<ul style="font-size:14px; line-height:1.7; color:#8a8f98; margin:0; padding-left:20px; max-width:36em;">
+  <li>Attempts run against an older bank version are plotted with a hollow marker and labelled on hover, so a score shift caused by edited questions is never mistaken for progress.</li>
+  <li>Timing lists the slowest questions with their domain and a link to review, and shows the pace needed for a 115-minute hundred-question exam (69 seconds each) as a reference line.</li>
+  <li>With fewer than two attempts the trend view is replaced by a single line of text stating what will appear once there are two.</li>
+</ul>
+
+<h3 style="font-size:24px; font-weight:500; letter-spacing:-0.014em; color:#ffffff; margin:34px 0 6px;">6.10 &nbsp;Resources</h3>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:0 0 12px; max-width:36em;">Links grouped by domain, official sources separated from third-party ones, with the source's caution about exam-dump sites kept prominent at the top rather than buried in a footnote.</p>
+<div class="wf" style="display:grid; grid-template-columns:1fr 200px; gap:16px; align-items:start; margin:0 0 14px;">
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">DESKTOP 1440</div>
+    <div style="display:grid; grid-template-columns:64px 1fr; gap:8px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; min-height:170px; padding-top:8px; text-align:center; font-family:'JetBrains Mono',monospace; font-size:8px; color:#62666d;">nav</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="background:#161718; border:1px solid #c9bb4a; border-radius:4px; height:34px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">caution: avoid exam-dump sites</div>
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:52px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">Official — docs, guide PDF, Snowflake University</div>
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:64px; padding:8px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">By domain — D1 … D5 link groups</div>
+      </div>
+    </div>
+  </div>
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">MOBILE 390</div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <div style="background:#161718; border:1px solid #c9bb4a; border-radius:4px; height:34px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">caution</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:56px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">official</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:70px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">by domain</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:22px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">bottom nav</div>
+    </div>
+  </div>
+</div>
+<ul style="font-size:14px; line-height:1.7; color:#8a8f98; margin:0; padding-left:20px; max-width:36em;">
+  <li>Official links carry a small mono "official" tag; everything else is explicitly marked third-party.</li>
+  <li>Links open in a new tab. No read/done checkboxes — this page is a reference, not a task list.</li>
+</ul>
+
+<h3 style="font-size:24px; font-weight:500; letter-spacing:-0.014em; color:#ffffff; margin:34px 0 6px;">6.11 &nbsp;Hands-on setup</h3>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:0 0 12px; max-width:36em;">A numbered walkthrough built from the setup log: Snowflake trial signup, CLI install and connection, Claude Code and MCP access, the sandbox database and warehouse, and the gotchas hit along the way. Steps are checkable and progress is saved; commands are copyable.</p>
+<div class="wf" style="display:grid; grid-template-columns:1fr 200px; gap:16px; align-items:start; margin:0 0 14px;">
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">DESKTOP 1440</div>
+    <div style="display:grid; grid-template-columns:64px 1fr 90px; gap:8px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; min-height:200px; padding-top:8px; text-align:center; font-family:'JetBrains Mono',monospace; font-size:8px; color:#62666d;">nav</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:30px; padding:7px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">Setup · 4 / 11 steps done</div>
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:60px; padding:7px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">☑ 3. Install the CLI — body text
+          <div style="height:14px; background:#0f1011; border:1px solid #26282c; border-radius:3px; margin-top:6px;"></div>
+        </div>
+        <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:52px; padding:7px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#8a8f98;">☐ 4. Authenticate — command block + copy</div>
+        <div style="background:#161718; border:1px dashed #383b3f; border-radius:4px; height:28px; padding:7px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d;">▸ gotchas for this step</div>
+      </div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; min-height:200px; padding:7px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">step rail</div>
+    </div>
+  </div>
+  <div style="border:1px solid #383b3f; border-radius:8px; background:#0f1011; padding:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#62666d; margin-bottom:8px; letter-spacing:.1em;">MOBILE 390</div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:26px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">4/11 steps</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:64px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">step card + command, horizontal scroll</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:52px; padding:6px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">next step</div>
+      <div style="background:#161718; border:1px dashed #383b3f; border-radius:4px; height:26px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#62666d;">gotchas</div>
+      <div style="background:#161718; border:1px solid #26282c; border-radius:4px; height:22px; padding:5px; font-family:'JetBrains Mono',monospace; font-size:8px; color:#8a8f98;">bottom nav</div>
+    </div>
+  </div>
+</div>
+<ul style="font-size:14px; line-height:1.7; color:#8a8f98; margin:0; padding-left:20px; max-width:36em;">
+  <li>Groups: trial signup → CLI install and connection → Claude Code / MCP → sandbox database and warehouse. Each group's steps are numbered continuously.</li>
+  <li>Command blocks are mono on #0f1011 with a copy action; they never wrap mid-token — long commands scroll horizontally.</li>
+  <li>Gotchas from the log sit collapsed under the step they belong to, so the happy path stays short but the dead ends stay recorded.</li>
+  <li>Nothing here talks to Snowflake. The page is instructional; no credentials are entered or stored.</li>
+</ul>
+
+<h3 style="font-size:24px; font-weight:500; letter-spacing:-0.014em; color:#ffffff; margin:34px 0 6px;">6.12 &nbsp;Search and settings</h3>
+<ul style="font-size:14px; line-height:1.7; color:#8a8f98; margin:0 0 0; padding-left:20px; max-width:36em;">
+  <li><strong style="color:#d0d6e0; font-weight:500;">⌘K palette:</strong> 640px panel, input at top, results grouped Pages / Domains / Notes / Questions, maximum five per group with a count. Substring match over the prebuilt index; no fuzzy scoring in v1.</li>
+  <li><strong style="color:#d0d6e0; font-weight:500;">Settings:</strong> a small panel from the sidebar foot holding exam date, a light-mode switch (present but marked as coming later), reset all progress behind a typed confirmation, and a read-only line showing the content version and when it was generated.</li>
+</ul>
+
+<h2 style="font-size:32px; font-weight:500; letter-spacing:-0.02em; color:#ffffff; margin:48px 0 4px; padding-top:18px; border-top:1px solid #23252a;">7 &nbsp;Build order</h2>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:14px 0 16px; max-width:36em;">Dashboard first, as requested — but it needs attempt data to be worth looking at, so the pipeline and the runner follow immediately and the dashboard is revisited once real numbers exist. Effort is rough working-days for one person.</p>
+<table style="width:100%; border-collapse:collapse; font-size:13px; line-height:1.5;">
+  <thead><tr>
+    <th style="text-align:left; padding:7px 10px 7px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500; width:8%;">#</th>
+    <th style="text-align:left; padding:7px 10px 7px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500; width:34%;">Piece</th>
+    <th style="text-align:left; padding:7px 10px 7px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500; width:12%;">Effort</th>
+    <th style="text-align:left; padding:7px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500;">Note</th>
+  </tr></thead>
+  <tbody>
+    <tr><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; color:#62666d;">1</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Shell, sidebar, tokens</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">0.5 d</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Routing and layout only</td></tr>
+    <tr><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; color:#62666d;">2</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Dashboard</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">1 d</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Against fixture data; wired for real in step 6</td></tr>
+    <tr><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; color:#62666d;">3</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Content pipeline</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">1.5 d</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">The riskiest piece — markdown shapes vary</td></tr>
+    <tr><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; color:#62666d;">4</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Question runner + scoring</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">1.5 d</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Includes partial credit, autosave, strict timer</td></tr>
+    <tr><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; color:#62666d;">5</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Results and review</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">1 d</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Misses first, collapsed correct</td></tr>
+    <tr><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; color:#62666d;">6</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Practice index + misses filter</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">0.5 d</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Dashboard goes live here</td></tr>
+    <tr><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; color:#62666d;">7</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Mock list + strict mode</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">0.5 d</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Reuses the runner</td></tr>
+    <tr><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; color:#62666d;">8</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Notes reader + TOC + quiz-me</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">1 d</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Section-to-question mapping needed</td></tr>
+    <tr><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; color:#62666d;">9</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Flashcards</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">0.5 d</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Simple flip, no scheduling</td></tr>
+    <tr><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; color:#62666d;">10</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Study plan</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">0.5 d</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Includes date offsetting</td></tr>
+    <tr><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; color:#62666d;">11</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Analytics</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">1 d</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Three views, hand-drawn charts</td></tr>
+    <tr><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; color:#62666d;">12</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Resources + setup walkthrough</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">0.5 d</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Mostly generated content</td></tr>
+    <tr><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; color:#62666d;">13</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">⌘K search + settings</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">0.5 d</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Index is built by the pipeline</td></tr>
+    <tr><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; color:#62666d;">14</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Responsive pass</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">0.5 d</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Bottom nav, touch targets, sticky bar</td></tr>
+    <tr><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; color:#62666d;">15</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Container, volumes, storage adapter</td><td style="padding:7px 10px 7px 0; border-bottom:1px solid #1a1c1e; font-family:'JetBrains Mono',monospace; font-size:12px;">1 d</td><td style="padding:7px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Compose file, boot-time pipeline, two progress routes</td></tr>
+  </tbody>
+</table>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:14px 0 0;">Roughly twelve working days end to end. The first useful slice — pipeline, runner, results — is four days. Build the storage adapter early even if the container comes last, so no screen ever talks to localStorage directly.</p>
+
+<h2 style="font-size:32px; font-weight:500; letter-spacing:-0.02em; color:#ffffff; margin:48px 0 4px; padding-top:18px; border-top:1px solid #23252a;">8 &nbsp;Risks and open questions</h2>
+<table style="width:100%; border-collapse:collapse; font-size:13px; line-height:1.55;">
+  <thead><tr>
+    <th style="text-align:left; padding:7px 10px 7px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500; width:34%;">Risk</th>
+    <th style="text-align:left; padding:7px 0; border-bottom:1px solid #383b3f; color:#8a8f98; font-weight:500;">Response</th>
+  </tr></thead>
+  <tbody>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Markdown drift</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Future files may not match today's question formatting. The parser fails loudly with file, question and line, so a mismatch is a five-minute fix rather than a silent gap in a mock.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Duplicate questions across files</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Mock 1 reuses the fifty domain questions. Stem-normalised matching reuses ids so the wrong-answer notebook and readiness don't double-count; near-identical but edited stems will occasionally slip through and create a duplicate.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Thin sample size</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">Domain 5 has five questions; one miss swings its readiness 200 points. Domains under ten questions show their score with a "low sample" note rather than pretending precision.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Memorisation, not learning</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">A fifty-question bank is quickly memorised, inflating readiness. Shuffled answer order is deliberately not in v1 to keep review stable; if scores plateau near 1000 the honest fix is more questions, and the analytics copy should say so.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Progress loss</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">The data volume removes the browser-storage risk, but only while the container is the way in: opening the files directly falls back to localStorage and those attempts never reach the volume. The header shows which store is active so the two can't be silently mixed.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Volume permissions</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">A container user that cannot write <span style="font-family:'JetBrains Mono',monospace; font-size:12px;">/data</span> turns every save into a silent no-op. The server writes a probe file at boot and refuses to start if it fails.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Content licensing</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">The questions are original and the guide PDF is Snowflake's. If the repo goes public, the PDF should not be committed and the app should link to Snowflake's download instead.</td></tr>
+    <tr><td style="padding:8px 10px 8px 0; border-bottom:1px solid #1a1c1e; color:#fff;">Exam version</td><td style="padding:8px 0; border-bottom:1px solid #1a1c1e; color:#8a8f98;">COF-C03 is current; Snowflake revises the guide periodically. Content carries the exam version so a future revision can coexist rather than overwrite.</td></tr>
+  </tbody>
+</table>
+<h3 style="font-size:17px; font-weight:500; color:#ffffff; margin:24px 0 8px;">Decided by default</h3>
+<p style="font-size:14px; line-height:1.7; color:#8a8f98; margin:0; max-width:36em;">Three questions went unanswered in planning and were resolved here: the accent colour (teal, §3), what Resume returns to (last location, unless an attempt is incomplete), and how readiness is displayed (one overall figure above five domain bars). Each is a one-line change if the call was wrong.</p>
+
+<h2 style="font-size:32px; font-weight:500; letter-spacing:-0.02em; color:#ffffff; margin:48px 0 4px; padding-top:18px; border-top:1px solid #23252a;">9 &nbsp;Shipping the open-source version</h2>
+<p style="font-size:15px; line-height:1.65; color:#d0d6e0; margin:14px 0 16px; max-width:36em;">The deployment target is Docker with mounted volumes, so both the study material and the accumulated progress outlive the container. That decision is what makes the storage adapter in §4 worth having: it is the only place the app knows where its data lives.</p>
+<pre class="keep" style="font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.7; color:#d0d6e0; background:#0f1011; border:1px solid #23252a; border-radius:6px; padding:16px; white-space:pre-wrap; margin:0 0 14px;">/content   ← the markdown study folder, mounted read-write from the host
+/app/dist  ← generated JSON + built frontend, produced from /content
+/data      ← progress.json, mounted read-write; the only file the app writes</pre>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:0 0 8px; max-width:36em;">On container start the pipeline runs against <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#d0d6e0;">/content</span> before the server binds. Adding <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#d0d6e0;">17_Mock_Exam_2.md</span> to the host folder and restarting the container is the whole workflow; no image rebuild. If the pipeline fails, the container exits with the parse error rather than serving stale or partial content — the loud-failure rule from §5 applies at boot.</p>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:0 0 14px; max-width:36em;">The server is minimal: static files plus the two progress routes. No database, no auth, no sessions. A single-user local tool does not need them, and adding them later is a decision about multi-device sync, not about persistence — persistence is already solved by the volume.</p>
+<div class="keep" style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;">
+  <div style="border:1px solid #23252a; border-radius:8px; padding:14px 16px; background:#0f1011;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:#62666d; margin-bottom:8px;">Now — volume-backed single user</div>
+    <p style="font-size:13.5px; line-height:1.6; color:#d0d6e0; margin:0 0 8px;">One compose file, two volumes, one command to run.</p>
+    <p style="font-size:13px; line-height:1.6; color:#8a8f98; margin:0;">Progress survives restarts, rebuilds and browser resets, and can be backed up by copying a single file. Still one machine: nothing syncs between devices.</p>
+  </div>
+  <div style="border:1px solid #23252a; border-radius:8px; padding:14px 16px; background:#0f1011;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:#62666d; margin-bottom:8px;">Later — accounts and sync</div>
+    <p style="font-size:13.5px; line-height:1.6; color:#d0d6e0; margin:0 0 8px;">The same two routes, keyed by user, backed by a database instead of a file.</p>
+    <p style="font-size:13px; line-height:1.6; color:#8a8f98; margin:0;">Buys multi-device and shared question banks at the cost of auth, migrations, privacy obligations and hosting — a different project, and only worth it if the tool finds real users.</p>
+  </div>
+</div>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:0 0 8px; max-width:36em;">Two details keep the second column cheap: the progress object is a single blob a sync endpoint can accept wholesale, and <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#d0d6e0;">schemaVersion</span> is already stamped so a server can migrate old payloads on read.</p>
+<p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:0; max-width:36em;">For a public repo: keep the markdown as the contribution surface (a new mock is a pull request adding one file), keep the guide PDF out of the repo, and make the pipeline's failure messages good — they will be the main thing contributors interact with.</p>
+
+<div style="margin-top:44px; padding-top:14px; border-top:1px solid #23252a; display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:10px; color:#62666d; letter-spacing:.08em;">
+  <span>SNOWPRO CORE PREP · SPEC v0.1</span>
+  <span>COF-C03</span>
+</div>
+
+</doc-page>
+</x-dc>
+</body>
+</html>

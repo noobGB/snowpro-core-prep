@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+<style>
+  html, body { margin: 0; background: #08090a; }
+  * { box-sizing: border-box; }
+  a { color: #2bd4d9; text-decoration: none; }
+  a:hover { color: #7ceaee; }
+  ::selection { background: rgba(43,212,217,.25); }
+</style>
+</helmet>
+<div style="min-height:100vh; display:flex; background:#08090a; font-family:Inter, system-ui, sans-serif; color:#d0d6e0; -webkit-font-smoothing:antialiased;">
+  <dc-import name="Nav" active="Notes" style="align-self:stretch; flex:0 0 240px;" hint-size="240px,100vh"></dc-import>
+
+  <main style="flex:1; min-width:0; display:flex; gap:32px; padding:32px 40px 96px; max-width:1240px;">
+
+    <div style="flex:1; min-width:0; max-width:760px;">
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:26px;">
+        <sc-for list="{{ domains }}" as="d" hint-placeholder-count="5">
+          <button type="button" onClick="{{ d.select }}" style="padding:7px 12px; min-height:38px; border:1px solid {{ d.border }}; background:{{ d.bg }}; color:{{ d.fg }}; border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:12px; cursor:pointer;">{{ d.code }} · {{ d.weight }}</button>
+        </sc-for>
+      </div>
+
+      <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:8px;">
+        <h1 style="margin:0; font-size:32px; font-weight:500; letter-spacing:-0.02em; color:#ffffff;">{{ title }}</h1>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#2bd4d9; border:1px solid #2bd4d9; border-radius:4px; padding:2px 8px;">{{ weight }} of the exam</span>
+      </div>
+      <p style="margin:0 0 28px; font-size:14px; line-height:1.6; color:#62666d;">{{ verified }}</p>
+
+      <div style="display:flex; flex-direction:column; gap:34px;">
+        <sc-for list="{{ sections }}" as="s" hint-placeholder-count="4">
+          <section id="{{ s.id }}">
+            <div style="display:flex; align-items:baseline; justify-content:space-between; gap:16px; flex-wrap:wrap; padding-bottom:10px; border-bottom:1px solid #23252a; margin-bottom:16px;">
+              <h2 style="margin:0; font-size:21px; font-weight:500; letter-spacing:-0.014em; color:#ffffff;">
+                <span style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#62666d; margin-right:10px;">{{ s.num }}</span>{{ s.title }}
+              </h2>
+              <a href="Practice Session.dc.html" style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8a8f98; border:1px solid #23252a; border-radius:4px; padding:4px 9px; white-space:nowrap;" style-hover="border-color:#2bd4d9; color:#2bd4d9;">quiz me · {{ s.qCount }}</a>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:12px;">
+              <sc-for list="{{ s.points }}" as="p" hint-placeholder-count="4">
+                <div style="display:flex; gap:12px; align-items:flex-start;">
+                  <span style="flex:0 0 4px; width:4px; height:4px; border-radius:50%; background:#383b3f; margin-top:10px;"></span>
+                  <p style="margin:0; font-size:16px; line-height:1.65; color:#d0d6e0; max-width:68ch;">{{ p }}</p>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+        </sc-for>
+      </div>
+    </div>
+
+    <aside style="width:200px; flex:0 0 200px; position:sticky; top:32px; align-self:flex-start;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#62666d; margin-bottom:14px;">On this page</div>
+      <div style="display:flex; flex-direction:column; gap:2px; border-left:1px solid #23252a;">
+        <sc-for list="{{ toc }}" as="t" hint-placeholder-count="4">
+          <a href="{{ t.href }}" style="padding:7px 12px; font-size:13px; line-height:1.4; color:#8a8f98; border-left:2px solid transparent; margin-left:-1px; text-decoration:none;" style-hover="color:#ffffff; border-left-color:#2bd4d9;">{{ t.label }}</a>
+        </sc-for>
+      </div>
+    </aside>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1000}}">
+const DOMAINS = {
+  D1: {
+    code: "D1", weight: "31%", title: "Domain 1 — Architecture & Features",
+    verified: "Verified against the official COF-C03 Exam Study Guide, last updated 2026-07-08. Subtopics follow the guide's own numbering.",
+    sections: [
+      { num: "1.1", id: "1.1", title: "Snowflake architecture & editions", qCount: "4 questions", points: [
+        "Three layers: Cloud Services (auth, metadata, query parsing and optimization, access control — Snowflake-managed compute you don't provision), Compute (virtual warehouses, independent MPP clusters that can hit the same data with zero contention), and Database Storage (compressed, columnar, encrypted, immutable micro-partitions of roughly 50-500MB uncompressed each).",
+        "Hybrid model: shared storage — one copy of the data in cloud object storage — with independent per-warehouse compute. Neither pure shared-disk nor pure shared-nothing.",
+        "Editions in strict superset order: Standard → Enterprise (up to 90-day Time Travel, multi-cluster warehouses, materialized views, search optimization) → Business Critical (HIPAA/PCI, Tri-Secret Secure customer-managed keys, replication and failover) → Virtual Private Snowflake (fully isolated dedicated infrastructure)."
+      ] },
+      { num: "1.2", id: "1.2", title: "Interfaces & tools", qCount: "1 question", points: [
+        "Snowsight is the primary web UI: worksheets, dashboards, Query Profile, account and cost monitoring, marketplace browsing.",
+        "Snowflake CLI (snow) is the command-line tool for connecting, running SQL, and managing Snowpark and Native App projects.",
+        "IDE integrations — the official VS Code extension writes and runs SQL and Snowpark code against an account from the editor. SnowSQL, the older CLI client, still exists; know both names."
+      ] },
+      { num: "1.3", id: "1.3", title: "Object hierarchy & types", qCount: "2 questions", points: [
+        "Organization → Account → Database → Schema → object.",
+        "Database objects to recognise by name: Stages, Schemas, Tables, Views, UDFs, File formats, Stored procedures, Pipes, Shares, Sequences, ML models, Applications. Resource monitors are account-level, not database objects.",
+        "Parameter hierarchy runs account → user → session → object, and the most specific level set wins: a session-level ALTER SESSION SET beats the account default for that session only."
+      ] },
+      { num: "1.4", id: "1.4", title: "Virtual warehouses", qCount: "3 questions", points: [
+        "Types: Standard (Gen 1 and Gen 2) and Snowpark-Optimized, which carries extra memory per node for memory-intensive Snowpark and ML workloads. The default warehouse for Notebooks is flagged as not tested until GA.",
+        "Standard scaling policy starts a new cluster the moment a query queues, or when Snowflake predicts the running clusters will fall short — proactive, before a real queue forms.",
+        "Economy starts a cluster only when Snowflake estimates at least six minutes of queued work to keep it busy, and marks a cluster for shutdown once estimated remaining work drops below six minutes.",
+        "Size up or down for a single query's complexity; scale in or out for concurrency. Auto-suspend aggressively to avoid idle billing."
+      ] },
+      { num: "1.5", id: "1.5", title: "Table & view types", qCount: "3 questions", points: [
+        "Iceberg tables let Snowflake read and write an open table format other engines can also access — distinct from External tables, which are a metadata-only pointer.",
+        "Dynamic Tables refresh declaratively against a target lag with no hand-written stream or task orchestration, and are not gated behind the Materialized View edition requirement.",
+        "Secure views hide the view definition from viewers without privilege and prevent row leakage through crafted queries — the standard choice for shared or sensitive derived data."
+      ] },
+      { num: "1.6", id: "1.6", title: "AI/ML & app development", qCount: "2 questions", points: [
+        "Cortex Analyst is natural-language-to-SQL over a defined semantic model; Cortex Search is retrieval; AI SQL functions are SQL-callable LLM functions such as summarize and translate.",
+        "Snowflake ML covers in-platform training, feature store and model registry without exporting data. Snowpark is the general compute-pushdown framework it often sits on.",
+        "Notebooks and Streamlit in Snowflake are confirmed as officially tested — don't skip them."
+      ] }
+    ]
+  },
+  D2: { code: "D2", weight: "20%", title: "Domain 2 — Account Mgmt & Governance", verified: "Verified against the official COF-C03 guide.", sections: [
+    { num: "2.1", id: "2.1", title: "Roles & RBAC", qCount: "4 questions", points: [
+      "ORGADMIN → ACCOUNTADMIN (encompasses SYSADMIN and SECURITYADMIN) → SECURITYADMIN (users, roles, grants) → USERADMIN (users and roles only) → SYSADMIN (warehouses, databases) → custom functional roles → PUBLIC.",
+      "USERADMIN creates users and roles. SECURITYADMIN inherits that and adds global grant management — the distinction most often tested.",
+      "Stored procedures run EXECUTE AS OWNER by default; EXECUTE AS CALLER runs with the caller's rights instead."
+    ] },
+    { num: "2.2", id: "2.2", title: "Governance policies", qCount: "3 questions", points: [
+      "Masking policies alter what a column returns per role; row access policies decide which rows a role sees at all.",
+      "Tag-based masking attaches a policy to a tag so every column carrying that tag inherits it.",
+      "Resource monitor actions escalate: Notify → Suspend, which lets running queries finish → Suspend Immediately, which kills them."
+    ] }
+  ] },
+  D3: { code: "D3", weight: "18%", title: "Domain 3 — Data Loading & Connectivity", verified: "Verified against the official COF-C03 guide.", sections: [
+    { num: "3.1", id: "3.1", title: "Stages & file formats", qCount: "3 questions", points: [
+      "Internal stages: user (@~), table (@%table) and named. External stages point at S3, Azure Blob or GCS through a storage integration.",
+      "Ideal bulk-load file size is roughly 100-250MB compressed; load history is kept 64 days for COPY INTO deduplication."
+    ] },
+    { num: "3.2", id: "3.2", title: "Snowpipe & automated ingestion", qCount: "3 questions", points: [
+      "Snowpipe loads continuously from a stage, billed per compute-second of Snowflake-managed resources rather than against your warehouse.",
+      "Streams track change data; cloning a stream re-initialises its offset. Dynamic Tables refresh incrementally when CHANGE_TRACKING is on."
+    ] }
+  ] },
+  D4: { code: "D4", weight: "21%", title: "Domain 4 — Performance & Transformation", verified: "Verified against the official COF-C03 guide.", sections: [
+    { num: "4.1", id: "4.1", title: "Caching", qCount: "3 questions", points: [
+      "Result cache lives in Cloud Services, lasts 24 hours, refreshes on reuse up to 31 days, and costs no compute on a hit.",
+      "The local (SSD) cache lives in the warehouse and is lost on suspend or resize. The metadata cache drives pruning."
+    ] },
+    { num: "4.2", id: "4.2", title: "Query acceleration & optimization", qCount: "4 questions", points: [
+      "Query Acceleration Service offloads eligible scan work to serverless compute; check eligibility with SYSTEM$ESTIMATE_QUERY_ACCELERATION.",
+      "Search Optimization Service speeds up highly selective point lookups; clustering keys help large tables with predictable filters.",
+      "Spilling to local then remote storage is the signal to size up rather than out."
+    ] }
+  ] },
+  D5: { code: "D5", weight: "10%", title: "Domain 5 — Data Collaboration", verified: "Verified against the official COF-C03 guide.", sections: [
+    { num: "5.1", id: "5.1", title: "Secure Data Sharing", qCount: "3 questions", points: [
+      "The consumer's own compute is billed for querying shared data, never the provider's.",
+      "Sharing requires the same cloud region and provider unless the data is replicated first. Reader accounts are created and paid for by the provider.",
+      "CREATE SHARE is an account-level privilege wall, the same pattern as CREATE ROLE and CREATE USER."
+    ] },
+    { num: "5.2", id: "5.2", title: "Cloning, Time Travel & Fail-safe", qCount: "2 questions", points: [
+      "Standard edition gives 1 day of Time Travel; Enterprise and above up to 90 via DATA_RETENTION_TIME_IN_DAYS.",
+      "Fail-safe is a fixed 7 days after Time Travel ends, recoverable only by Snowflake support, and applies to permanent tables only.",
+      "Zero-copy cloning shares micro-partitions until either side writes."
+    ] }
+  ] }
+};
+
+class Component extends DCLogic {
+  state = { active: "D1" };
+
+  renderVals() {
+    const d = DOMAINS[this.state.active] || DOMAINS.D1;
+    return {
+      domains: Object.keys(DOMAINS).map((k) => {
+        const on = k === this.state.active;
+        return {
+          code: k, weight: DOMAINS[k].weight,
+          border: on ? "#2bd4d9" : "#23252a",
+          bg: on ? "#161718" : "transparent",
+          fg: on ? "#ffffff" : "#8a8f98",
+          select: () => this.setState({ active: k })
+        };
+      }),
+      title: d.title, weight: d.weight, verified: d.verified,
+      sections: d.sections,
+      toc: d.sections.map((s) => ({ href: "#" + s.id, label: s.num + " " + s.title }))
+    };
+  }
+}
+</script>
+</body>
+</html>

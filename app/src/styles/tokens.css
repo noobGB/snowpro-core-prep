@@ -1,0 +1,180 @@
+/*
+ * Design tokens from "SnowPro Core Prep - Spec.dc.html" §3 (Design language). Near-black
+ * substrate, paper-white headings, hairline borders instead of shadows, one accent used only
+ * for the primary action, active nav state, and focus rings.
+ */
+
+:root {
+  /* Colour */
+  --canvas: #08090a;
+  --card: #0f1011;
+  --raised: #161718;
+  --hairline: #23252a;
+  --hairline-strong: #383b3f;
+  --hairline-faint: #1a1c1e;
+  --text-muted: #8a8f98;
+  --text-dim: #62666d;
+  --text-body: #d0d6e0;
+  --text-heading: #ffffff;
+  --accent: #2bd4d9;
+  --accent-hover: #7ceaee;
+  --status-correct: #27a644;
+  --status-incorrect: #eb5757;
+  --status-warning: #c9bb4a;
+
+  /* Type */
+  --font-sans: Inter, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Shape and rhythm — 4px base unit, 8/12/16/24/48 ladder */
+  --space-1: 8px;
+  --space-2: 12px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 48px;
+  --radius-badge: 4px;
+  --radius-control: 6px;
+  --radius-card: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--canvas);
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--text-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--accent-hover);
+}
+
+button {
+  font-family: var(--font-sans);
+}
+
+input {
+  font-family: inherit;
+}
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.6);
+  cursor: pointer;
+}
+
+::selection {
+  background: rgba(43, 212, 217, 0.25);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Notes reader — spec §6.2: "quiz me on this section" appears on hover, always visible on touch
+   (coarse pointers can't hover, so it just stays visible there); tables scroll horizontally
+   rather than shrinking below 13px. */
+.quizme-btn {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.quizme-trigger:hover .quizme-btn,
+.quizme-btn:focus-visible {
+  opacity: 1;
+}
+@media (hover: none) {
+  .quizme-btn {
+    opacity: 1;
+  }
+}
+
+.notes-prose ul,
+.notes-prose ol {
+  margin: 0 0 12px;
+  padding-left: 22px;
+}
+.notes-prose li {
+  margin-bottom: 6px;
+}
+.notes-prose li > ul,
+.notes-prose li > ol {
+  margin-top: 6px;
+}
+.notes-prose p {
+  margin: 0 0 12px;
+}
+.notes-prose strong {
+  color: var(--text-heading);
+  font-weight: 500;
+}
+.notes-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: var(--raised);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.notes-prose a {
+  border-bottom: 1px solid rgba(43, 212, 217, 0.35);
+}
+.notes-prose table {
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 0 0 12px;
+}
+.notes-prose th,
+.notes-prose td {
+  border-bottom: 1px solid var(--hairline);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+/* Flashcards — spec §6.7: "the flip is a 150ms cross-fade, not a 3D rotation." Re-keyed on every
+   flip (see Flashcards.tsx's `key={`${card.id}-${flipped}`}`) so the animation restarts each time. */
+@keyframes flashcardFace {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.flashcard-face {
+  animation: flashcardFace 150ms ease;
+}
+
+/* Responsive pass — spec §6: "mobile is 390px with the sidebar collapsed to a bottom bar of
+   five items," desktop breakpoint at 900px (matches the wireframes' own `wide = width >= 900`
+   threshold). Desktop/mobile chrome is swapped via CSS rather than a JS width listener, since
+   both are cheap to always render and this avoids a layout flash on resize. */
+.desktop-only {
+  display: flex;
+}
+.mobile-only {
+  display: none;
+}
+@media (max-width: 899px) {
+  .desktop-only {
+    display: none !important;
+  }
+  .mobile-only {
+    display: flex !important;
+  }
+  .app-main {
+    padding: 16px 16px 88px !important;
+  }
+}

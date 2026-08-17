@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+<style>
+  html, body { margin: 0; background: #08090a; }
+  * { box-sizing: border-box; }
+  a { color: #2bd4d9; text-decoration: none; }
+  a:hover { color: #7ceaee; }
+  ::selection { background: rgba(43,212,217,.25); }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.6); cursor: pointer; }
+</style>
+</helmet>
+<div style="min-height:100vh; display:flex; background:#08090a; font-family:Inter, system-ui, sans-serif; color:#d0d6e0; -webkit-font-smoothing:antialiased;">
+
+  <sc-if value="{{ wideNav }}" hint-placeholder-val="{{ true }}">
+    <dc-import name="Nav" active="Dashboard" style="align-self:stretch; flex:0 0 240px;" hint-size="240px,100vh"></dc-import>
+  </sc-if>
+
+  <main style="flex:1; min-width:0; padding:32px 40px 96px; max-width:1180px;">
+
+    <sc-if value="{{ narrowNav }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:20px; padding-bottom:14px; border-bottom:1px solid #23252a;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div style="width:14px; height:14px; border:1.5px solid #2bd4d9; border-radius:3px; transform:rotate(45deg);"></div>
+          <span style="font-size:14px; font-weight:500; color:#ffffff;">SnowPro Core Prep</span>
+        </div>
+        <button type="button" onClick="{{ openPalette }}" style="padding:8px 12px; min-height:44px; border:1px solid #23252a; border-radius:6px; background:transparent; color:#8a8f98; font-size:13px; font-family:Inter,sans-serif; cursor:pointer;">Search</button>
+      </div>
+    </sc-if>
+
+    <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:24px;">
+      <div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#62666d; margin-bottom:8px;">COF-C03</div>
+        <h1 style="margin:0; font-size:32px; font-weight:500; letter-spacing:-0.02em; color:#ffffff; line-height:1.1;">{{ greeting }}</h1>
+      </div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#62666d; white-space:nowrap;">{{ todayLabel }}</div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; margin-bottom:16px;">
+
+      <div style="background:#0f1011; border:1px solid #23252a; border-radius:12px; padding:24px;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#62666d; margin-bottom:14px;">Exam</div>
+        <div style="display:flex; align-items:baseline; gap:10px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-size:52px; font-weight:500; color:#ffffff; line-height:1;">{{ daysLeft }}</span>
+          <span style="font-size:15px; color:#8a8f98;">{{ daysWord }}</span>
+        </div>
+        <div style="margin-top:16px; display:flex; align-items:center; gap:8px;">
+          <input type="date" value="{{ examDate }}" onChange="{{ setExamDate }}" style="background:#161718; border:1px solid #23252a; border-radius:6px; color:#d0d6e0; font-family:'JetBrains Mono',monospace; font-size:12px; padding:7px 10px; min-height:36px;" />
+          <span style="font-size:12px; color:#62666d;">{{ examWeekday }}</span>
+        </div>
+      </div>
+
+      <div style="grid-column:span 2; background:#0f1011; border:1px solid #2bd4d9; border-radius:12px; padding:24px; display:flex; flex-direction:column; justify-content:space-between; gap:18px; min-height:172px;">
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#2bd4d9; margin-bottom:12px;">{{ resumeKicker }}</div>
+          <div style="font-size:22px; font-weight:500; color:#ffffff; letter-spacing:-0.012em; line-height:1.25;">{{ resumeTitle }}</div>
+          <div style="font-size:14px; color:#8a8f98; margin-top:6px;">{{ resumeMeta }}</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <a href="{{ resumeHref }}" style="display:inline-flex; align-items:center; background:#2bd4d9; color:#08090a; border-radius:6px; padding:11px 18px; min-height:44px; font-size:14px; font-weight:500; text-decoration:none;" style-hover="background:#7ceaee;">{{ resumeAction }}</a>
+          <a href="Mock Exams.dc.html" style="display:inline-flex; align-items:center; background:transparent; color:#d0d6e0; border:1px solid #23252a; border-radius:6px; padding:11px 16px; min-height:44px; font-size:14px; text-decoration:none;" style-hover="border-color:#383b3f;">Start a mock exam</a>
+        </div>
+      </div>
+    </div>
+
+    <sc-if value="{{ hasData }}" hint-placeholder-val="{{ true }}">
+      <div style="background:#0f1011; border:1px solid #23252a; border-radius:12px; padding:24px; margin-bottom:16px;">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:20px; flex-wrap:wrap; margin-bottom:22px;">
+          <div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#62666d; margin-bottom:12px;">Readiness</div>
+            <div style="display:flex; align-items:baseline; gap:10px;">
+              <span style="font-family:'JetBrains Mono',monospace; font-size:52px; font-weight:500; color:#ffffff; line-height:1;">{{ overall }}</span>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:14px; color:#62666d;">/ 1000</span>
+            </div>
+            <div style="font-size:13px; color:#8a8f98; margin-top:8px;">{{ overallNote }}</div>
+          </div>
+          <div style="font-size:12px; color:#62666d; max-width:22em; line-height:1.6; text-align:right;">{{ overallCaveat }}</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <sc-for list="{{ domains }}" as="d" hint-placeholder-count="5">
+            <div>
+              <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:7px;">
+                <div style="display:flex; align-items:baseline; gap:9px; min-width:0;">
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#62666d;">{{ d.code }}</span>
+                  <span style="font-size:14px; color:#d0d6e0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ d.name }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#62666d; background:rgba(255,255,255,.05); border-radius:4px; padding:1px 6px;">{{ d.weight }}</span>
+                </div>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#ffffff; white-space:nowrap;">{{ d.scoreLabel }}</span>
+              </div>
+              <div style="position:relative; height:6px; background:#23252a; border-radius:3px; overflow:hidden;">
+                <div style="position:absolute; left:0; top:0; bottom:0; background:#d0d6e0; border-radius:3px; width:{{ d.pct }};"></div>
+              </div>
+              <div style="position:relative; height:0;">
+                <div style="position:absolute; top:-9px; left:75%; width:1px; height:12px; background:#2bd4d9; opacity:.75;"></div>
+              </div>
+              <div style="font-size:12px; color:#62666d; margin-top:8px;">{{ d.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+      <div style="border:1px dashed #23252a; border-radius:12px; padding:28px 24px; margin-bottom:16px;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#62666d; margin-bottom:12px;">Nothing measured yet</div>
+        <div style="font-size:20px; font-weight:500; color:#ffffff; letter-spacing:-0.012em; margin-bottom:8px;">Start with day one of the plan</div>
+        <p style="font-size:14px; line-height:1.65; color:#8a8f98; margin:0 0 18px; max-width:38em;">Readiness appears here once you have taken something. Until then the plan is the better guide — Domain 1 is 31% of the exam and the natural place to start.</p>
+        <div style="display:flex; flex-direction:column; gap:8px; max-width:38em;">
+          <sc-for list="{{ planDayOne }}" as="t" hint-placeholder-count="3">
+            <div style="display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border:1px solid #23252a; border-radius:6px; font-size:14px; color:#d0d6e0;">
+              <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#62666d; padding-top:2px;">{{ t.n }}</span>
+              <span>{{ t.text }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:16px;">
+
+      <div style="background:#0f1011; border:1px solid #23252a; border-radius:12px; padding:24px;">
+        <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:16px;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#62666d;">Today</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#62666d;">{{ tasksDone }}</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <sc-for list="{{ tasks }}" as="t" hint-placeholder-count="3">
+            <button type="button" onClick="{{ t.toggle }}" style="display:flex; gap:11px; align-items:flex-start; text-align:left; width:100%; min-height:44px; padding:11px 12px; border:1px solid #23252a; border-radius:6px; background:transparent; cursor:pointer; font-family:Inter,sans-serif;" style-hover="border-color:#383b3f;">
+              <span style="flex:0 0 15px; width:15px; height:15px; margin-top:2px; border-radius:3px; border:1px solid {{ t.boxBorder }}; background:{{ t.boxFill }}; display:flex; align-items:center; justify-content:center; font-size:10px; color:#08090a; line-height:1;">{{ t.mark }}</span>
+              <span style="font-size:14px; line-height:1.45; color:{{ t.color }}; text-decoration:{{ t.strike }};">{{ t.text }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background:#0f1011; border:1px solid #23252a; border-radius:12px; padding:24px;">
+        <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:16px;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#62666d;">Recent attempts</div>
+          <a href="Analytics.dc.html" style="font-size:12px; color:#8a8f98;">All</a>
+        </div>
+        <div style="display:flex; flex-direction:column;">
+          <sc-for list="{{ attempts }}" as="a" hint-placeholder-count="4">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 0; border-bottom:1px solid #1a1c1e;">
+              <div style="min-width:0;">
+                <div style="font-size:14px; color:#d0d6e0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ a.title }}</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#62666d; margin-top:3px;">{{ a.meta }}</div>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:15px; color:{{ a.color }}; white-space:nowrap;">{{ a.score }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <sc-if value="{{ narrowNav }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; left:0; right:0; bottom:0; height:60px; background:#0f1011; border-top:1px solid #23252a; display:flex; align-items:stretch; z-index:40;">
+      <sc-for list="{{ mobileNav }}" as="m" hint-placeholder-count="5">
+        <a href="{{ m.href }}" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-size:11px; color:{{ m.color }}; text-decoration:none; min-height:44px;">
+          <span style="width:5px; height:5px; border-radius:50%; background:{{ m.dot }};"></span>
+          <span>{{ m.label }}</span>
+        </a>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ paletteOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closePalette }}" style="position:fixed; inset:0; background:rgba(5,5,6,.6); display:flex; align-items:flex-start; justify-content:center; padding:12vh 16px 16px; z-index:60;">
+      <div style="width:100%; max-width:640px; background:#161718; border:1px solid #23252a; border-radius:12px; overflow:hidden;">
+        <input type="text" placeholder="Search notes, questions, pages…" value="{{ query }}" onInput="{{ setQuery }}" autoFocus="{{ true }}" style="width:100%; background:transparent; border:none; border-bottom:1px solid #23252a; color:#ffffff; font-family:Inter,sans-serif; font-size:16px; padding:16px 18px; outline:none;" />
+        <div style="max-height:46vh; overflow:auto; padding:8px;">
+          <sc-for list="{{ results }}" as="r" hint-placeholder-count="5">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border-radius:6px; cursor:pointer;" style-hover="background:#1e2022;">
+              <span style="font-size:14px; color:#d0d6e0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ r.label }}</span>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#62666d; white-space:nowrap;">{{ r.kind }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex; gap:16px; padding:10px 18px; border-top:1px solid #23252a; font-family:'JetBrains Mono',monospace; font-size:11px; color:#62666d;">
+          <span>↵ open</span><span>↑↓ move</span><span>esc close</span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1000},&quot;examDate&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;2026-08-19&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Data&quot;},&quot;emptyState&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Data&quot;}}">
+class Component extends DCLogic {
+  state = {
+    examDate: null,
+    checked: { t1: true, t2: false, t3: false },
+    paletteOpen: false,
+    query: "",
+    width: typeof window !== "undefined" ? window.innerWidth : 1440
+  };
+
+  componentDidMount() {
+    this._onResize = () => this.setState({ width: window.innerWidth });
+    this._onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        this.setState((s) => ({ paletteOpen: !s.paletteOpen }));
+      } else if (e.key === "Escape") {
+        this.setState({ paletteOpen: false });
+      }
+    };
+    window.addEventListener("resize", this._onResize);
+    window.addEventListener("keydown", this._onKey);
+  }
+  componentWillUnmount() {
+    window.removeEventListener("resize", this._onResize);
+    window.removeEventListener("keydown", this._onKey);
+  }
+
+  today() { return new Date(2026, 7, 16); }
+
+  renderVals() {
+    const empty = this.props.emptyState === true;
+    const examDate = this.state.examDate || this.props.examDate || "2026-08-19";
+    const [y, m, d] = examDate.split("-").map(Number);
+    const exam = new Date(y, m - 1, d);
+    const today = this.today();
+    const days = Math.round((exam - today) / 86400000);
+    const wide = this.state.width >= 900;
+
+    const raw = [
+      { code: "D1", name: "Architecture & Features", w: 31, score: 1000, note: "15 of 15 · practice, 2026-08-14" },
+      { code: "D4", name: "Performance & Transformation", w: 21, score: 1000, note: "11 of 11 · practice, 2026-08-15" },
+      { code: "D2", name: "Account Mgmt & Governance", w: 20, score: 900, note: "9 of 10 · USERADMIN vs SECURITYADMIN missed" },
+      { code: "D3", name: "Data Loading & Connectivity", w: 18, score: 1000, note: "9 of 9 · practice, 2026-08-16" },
+      { code: "D5", name: "Data Collaboration", w: 10, score: 1000, note: "5 of 5 · low sample, one miss swings 200" }
+    ];
+    const domains = raw.map((r) => ({
+      code: r.code, name: r.name, weight: r.w + "%",
+      scoreLabel: r.score, pct: r.score / 10 + "%", note: r.note
+    }));
+    const overall = Math.round(raw.reduce((a, r) => a + r.score * r.w, 0) / 100);
+
+    const taskText = {
+      t1: "Domain 3 end to end, then the 9 practice questions",
+      t2: "Domain 5 — sharing, Marketplace, listings, then 5 questions",
+      t3: "Mock Exam 1 — 100 questions, closed book, 115 minutes"
+    };
+    const tasks = Object.keys(taskText).map((k) => {
+      const on = !!this.state.checked[k];
+      return {
+        text: taskText[k], mark: on ? "✓" : "",
+        boxBorder: on ? "#2bd4d9" : "#383b3f",
+        boxFill: on ? "#2bd4d9" : "transparent",
+        color: on ? "#62666d" : "#d0d6e0",
+        strike: on ? "line-through" : "none",
+        toggle: () => this.setState((s) => ({ checked: Object.assign({}, s.checked, { [k]: !s.checked[k] }) }))
+      };
+    });
+    const done = Object.values(this.state.checked).filter(Boolean).length;
+
+    const attempts = empty ? [] : [
+      { title: "Domain 3 — Data Loading", meta: "practice · 9 Q · 12 min · today", score: "1000", color: "#ffffff" },
+      { title: "Domain 4 — Performance", meta: "practice · 11 Q · 14 min · 8/15", score: "1000", color: "#ffffff" },
+      { title: "Domain 2 — Governance", meta: "practice · 10 Q · 13 min · 8/15", score: "900", color: "#ffffff" },
+      { title: "Domain 1 — Architecture", meta: "practice · 15 Q · 17 min · 8/14", score: "1000", color: "#ffffff" }
+    ];
+
+    const navItems = [
+      { label: "Dashboard", href: "#", meta: "", active: true },
+      { label: "Notes", href: "#notes", meta: "5" },
+      { label: "Practice", href: "#practice", meta: "50" },
+      { label: "Mock exams", href: "#mocks", meta: "1" },
+      { label: "Flashcards", href: "#drill", meta: "" },
+      { label: "Study plan", href: "#plan", meta: "" },
+      { label: "Analytics", href: "#analytics", meta: "" },
+      { label: "Resources", href: "#resources", meta: "" },
+      { label: "Setup", href: "#setup", meta: "" }
+    ];
+    const nav = navItems.map((n) => ({
+      label: n.label, href: n.href, meta: n.meta,
+      bg: n.active ? "#161718" : "transparent",
+      bar: n.active ? "#2bd4d9" : "transparent",
+      fg: n.active ? "#ffffff" : "#d0d6e0"
+    }));
+    const mobileNav = [
+      ["Home", "Dashboard.dc.html"], ["Notes", "Notes.dc.html"], ["Practice", "Practice.dc.html"],
+      ["Drill", "Flashcards.dc.html"], ["Plan", "Study Plan.dc.html"]
+    ].map(([l, href], i) => ({
+      label: l, href, color: i === 0 ? "#ffffff" : "#62666d", dot: i === 0 ? "#2bd4d9" : "transparent"
+    }));
+
+    const index = [
+      { label: "Micro-partitions", kind: "note · D1" },
+      { label: "Query Acceleration Service", kind: "note · D4" },
+      { label: "EXECUTE AS CALLER vs OWNER", kind: "note · D2" },
+      { label: "Snowpark-Optimized warehouse", kind: "question · D1 Q7" },
+      { label: "Fail-safe retention", kind: "card · D5" },
+      { label: "Mock Exam 1", kind: "page" },
+      { label: "Resource monitors", kind: "note · D2" }
+    ];
+    const q = this.state.query.trim().toLowerCase();
+    const results = q ? index.filter((r) => r.label.toLowerCase().includes(q)) : index.slice(0, 5);
+
+    return {
+      wideNav: wide, narrowNav: !wide,
+      nav, mobileNav,
+      greeting: empty ? "Start here" : "Three days out",
+      todayLabel: "Sun 16 Aug 2026",
+      daysLeft: days < 0 ? 0 : days,
+      daysWord: days === 1 ? "day left" : days <= 0 ? "today" : "days left",
+      examDate,
+      examWeekday: exam.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" }),
+      setExamDate: (e) => this.setState({ examDate: e.target.value }),
+      resumeKicker: empty ? "Start" : "Resume",
+      resumeTitle: empty ? "Domain 1 — Architecture & Features" : "Domain 3 — Data Loading & Connectivity",
+      resumeMeta: empty ? "31% of the exam · 15 practice questions" : "Notes, section 3.4 · left off 20 minutes ago",
+      resumeAction: empty ? "Start Domain 1 practice" : "Continue reading",
+      resumeHref: empty ? "Practice Session.dc.html" : "Notes.dc.html",
+      hasData: !empty, isEmpty: empty,
+      domains, overall,
+      overallNote: "Weighted 31/21/20/18/10 · pass line 750",
+      overallCaveat: "All five domains measured against the 50-question bank. A bank this small is memorable — treat anything near 1000 as a reason to add questions, not as proof.",
+      planDayOne: [
+        { n: "01", text: "Read the plan and skim all five domain files once" },
+        { n: "02", text: "Set up a Snowflake trial account for hands-on work" },
+        { n: "03", text: "Domain 1: architecture layers, interfaces, micro-partitions" }
+      ],
+      tasks, tasksDone: done + " / 3",
+      attempts,
+      paletteOpen: this.state.paletteOpen,
+      openPalette: () => this.setState({ paletteOpen: true }),
+      closePalette: () => this.setState({ paletteOpen: false, query: "" }),
+      query: this.state.query,
+      setQuery: (e) => this.setState({ query: e.target.value }),
+      results
+    };
+  }
+}
+</script>
+</body>
+</html>

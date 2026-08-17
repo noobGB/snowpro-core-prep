@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+<style>
+  html, body { margin: 0; background: #08090a; }
+  * { box-sizing: border-box; }
+  a { color: #2bd4d9; text-decoration: none; }
+  a:hover { color: #7ceaee; }
+  ::selection { background: rgba(43,212,217,.25); }
+</style>
+</helmet>
+<div style="min-height:100vh; display:flex; background:#08090a; font-family:Inter, system-ui, sans-serif; color:#d0d6e0; -webkit-font-smoothing:antialiased;">
+  <dc-import name="Nav" active="Mock exams" style="align-self:stretch; flex:0 0 240px;" hint-size="240px,100vh"></dc-import>
+
+  <main style="flex:1; min-width:0; padding:32px 40px 96px; max-width:1180px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#62666d; margin-bottom:10px;">115 minutes · no pause · auto-submit at zero</div>
+    <h1 style="margin:0 0 10px; font-size:32px; font-weight:500; letter-spacing:-0.02em; color:#ffffff;">Mock exams</h1>
+    <p style="margin:0 0 26px; font-size:15px; line-height:1.6; color:#8a8f98; max-width:40em;">Full-length exams under real conditions. The clock keeps running if you close the tab, so start one only when you have the time clear.</p>
+
+    <div style="display:flex; flex-direction:column; gap:16px;">
+      <sc-for list="{{ mocks }}" as="m" hint-placeholder-count="2">
+        <div style="background:#0f1011; border:1px solid #23252a; border-radius:12px; padding:24px;">
+          <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:20px; flex-wrap:wrap;">
+            <div style="min-width:240px;">
+              <div style="font-size:21px; font-weight:500; color:#ffffff; letter-spacing:-0.012em;">{{ m.title }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#62666d; margin-top:8px;">{{ m.meta }}</div>
+            </div>
+            <button type="button" onClick="{{ m.start }}" style="background:{{ m.btnBg }}; color:{{ m.btnFg }}; border:1px solid {{ m.btnBorder }}; border-radius:6px; padding:12px 20px; min-height:44px; font-family:Inter,sans-serif; font-size:14px; font-weight:500; cursor:pointer;">{{ m.action }}</button>
+          </div>
+
+          <div style="display:flex; gap:3px; margin-top:22px;">
+            <sc-for list="{{ m.split }}" as="d" hint-placeholder-count="5">
+              <div style="flex:{{ d.flex }}; min-width:0;">
+                <div style="height:6px; background:{{ d.color }}; border-radius:2px;"></div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#62666d; margin-top:7px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ d.label }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="margin-top:22px; padding-top:16px; border-top:1px solid #1a1c1e;">
+            <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:#62666d; margin-bottom:10px;">{{ m.attemptsLabel }}</div>
+            <sc-for list="{{ m.attempts }}" as="a" hint-placeholder-count="1">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px 0; border-top:1px solid #1a1c1e;">
+                <span style="font-size:14px; color:#d0d6e0;">{{ a.when }}</span>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#62666d;">{{ a.detail }}</span>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:15px; color:{{ a.color }};">{{ a.score }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <p style="margin:22px 0 0; font-size:13px; line-height:1.65; color:#62666d; max-width:40em;">Adding <span style="font-family:'JetBrains Mono',monospace; color:#8a8f98;">17_Mock_Exam_2.md</span> to the mounted content folder and restarting the container makes it appear here — no rebuild, no code change.</p>
+  </main>
+
+  <sc-if value="{{ confirming }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; background:rgba(5,5,6,.65); display:flex; align-items:center; justify-content:center; padding:24px; z-index:60;">
+      <div style="width:100%; max-width:520px; background:#161718; border:1px solid #23252a; border-radius:12px; padding:28px;">
+        <h2 style="margin:0 0 14px; font-size:22px; font-weight:500; color:#ffffff; letter-spacing:-0.014em;">Start Mock Exam 1?</h2>
+        <ul style="margin:0 0 22px; padding-left:20px; font-size:14px; line-height:1.8; color:#8a8f98;">
+          <li>115 minutes, 100 questions, one attempt per sitting.</li>
+          <li>The timer cannot be paused, and closing the tab does not stop it.</li>
+          <li>You are warned at ten minutes and submitted automatically at zero.</li>
+          <li>Answers stay hidden until you submit.</li>
+        </ul>
+        <div style="display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap;">
+          <button type="button" onClick="{{ cancel }}" style="background:transparent; color:#d0d6e0; border:1px solid #23252a; border-radius:6px; padding:11px 18px; min-height:44px; font-family:Inter,sans-serif; font-size:14px; cursor:pointer;" style-hover="border-color:#383b3f;">Cancel</button>
+          <a href="Practice Session.dc.html" style="display:inline-flex; align-items:center; background:#2bd4d9; color:#08090a; border-radius:6px; padding:11px 18px; min-height:44px; font-size:14px; font-weight:500;">Start the clock</a>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900}}">
+class Component extends DCLogic {
+  state = { confirming: false };
+
+  renderVals() {
+    const split = [
+      { n: 31, label: "D1 · 31" }, { n: 21, label: "D4 · 21" }, { n: 20, label: "D2 · 20" },
+      { n: 18, label: "D3 · 18" }, { n: 10, label: "D5 · 10" }
+    ].map((d, i) => ({
+      flex: d.n, label: d.label,
+      color: ["#d0d6e0", "#8a8f98", "#62666d", "#4a4e55", "#383b3f"][i]
+    }));
+
+    return {
+      confirming: this.state.confirming,
+      cancel: () => this.setState({ confirming: false }),
+      mocks: [
+        {
+          title: "Mock Exam 1",
+          meta: "100 questions · 115 min · interleaves the 50 domain questions with 50 new ones",
+          action: "Start", btnBg: "#2bd4d9", btnFg: "#08090a", btnBorder: "#2bd4d9",
+          start: () => this.setState({ confirming: true }),
+          split,
+          attemptsLabel: "No attempts yet",
+          attempts: []
+        },
+        {
+          title: "Mock Exam 2",
+          meta: "Not found in the content folder — add 17_Mock_Exam_2.md and restart",
+          action: "Unavailable", btnBg: "transparent", btnFg: "#62666d", btnBorder: "#23252a",
+          start: () => {},
+          split: [{ flex: 1, label: "awaiting content", color: "#1a1c1e" }],
+          attemptsLabel: "—",
+          attempts: []
+        }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+<style>
+  html, body { margin: 0; background: #08090a; }
+  * { box-sizing: border-box; }
+  a { color: #2bd4d9; text-decoration: none; }
+  a:hover { color: #7ceaee; }
+  ::selection { background: rgba(43,212,217,.25); }
+</style>
+</helmet>
+<div style="min-height:100vh; display:flex; background:#08090a; font-family:Inter, system-ui, sans-serif; color:#d0d6e0; -webkit-font-smoothing:antialiased;">
+  <dc-import name="Nav" active="Study plan" style="align-self:stretch; flex:0 0 240px;" hint-size="240px,100vh"></dc-import>
+
+  <main style="flex:1; min-width:0; padding:32px 40px 96px; max-width:1000px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#62666d; margin-bottom:10px;">{{ kicker }}</div>
+    <h1 style="margin:0 0 10px; font-size:32px; font-weight:500; letter-spacing:-0.02em; color:#ffffff;">Study plan</h1>
+    <p style="margin:0 0 26px; font-size:15px; line-height:1.6; color:#8a8f98; max-width:40em;">Heaviest domains first: Architecture and Performance are 52% of the exam between them. Days shift automatically to land the day before your exam date.</p>
+
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <sc-for list="{{ days }}" as="d" hint-placeholder-count="6">
+        <div style="background:{{ d.bg }}; border:1px solid {{ d.border }}; border-radius:12px; padding:20px 24px;">
+          <div style="display:flex; align-items:baseline; justify-content:space-between; gap:16px; flex-wrap:wrap;">
+            <div style="display:flex; align-items:baseline; gap:12px;">
+              <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:{{ d.dateColor }};">{{ d.date }}</span>
+              <span style="font-size:17px; font-weight:500; color:{{ d.titleColor }}; letter-spacing:-0.012em;">{{ d.label }}</span>
+            </div>
+            <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#62666d;">{{ d.status }}</span>
+          </div>
+          <sc-if value="{{ d.open }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:16px;">
+              <sc-for list="{{ d.tasks }}" as="t" hint-placeholder-count="3">
+                <button type="button" onClick="{{ t.toggle }}" style="display:flex; gap:12px; align-items:flex-start; text-align:left; width:100%; min-height:44px; padding:11px 12px; border:1px solid #23252a; border-radius:6px; background:transparent; cursor:pointer; font-family:Inter,sans-serif;" style-hover="border-color:#383b3f;">
+                  <span style="flex:0 0 15px; width:15px; height:15px; margin-top:2px; border-radius:3px; border:1px solid {{ t.boxBorder }}; background:{{ t.boxFill }}; display:flex; align-items:center; justify-content:center; font-size:10px; color:#08090a; line-height:1;">{{ t.mark }}</span>
+                  <span style="flex:1; font-size:14px; line-height:1.5; color:{{ t.color }}; text-decoration:{{ t.strike }};">{{ t.text }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#62666d; white-space:nowrap; padding-top:2px;">{{ t.ref }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1000}}">
+const PLAN = [
+  { date: "Thu 13 Aug", label: "Setup and first pass", past: true, tasks: [
+    { id: "a1", text: "Download the official guide and verify the domain files against it", ref: "" },
+    { id: "a2", text: "Skim all five domain files once to see the shape of the exam", ref: "Notes" },
+    { id: "a3", text: "Snowflake University login and a 30-day trial account", ref: "Setup" },
+    { id: "a4", text: "Register the exam slot", ref: "" }
+  ] },
+  { date: "Fri 14 Aug", label: "Domain 1", past: true, tasks: [
+    { id: "b1", text: "Object hierarchy, table and view types, AI/ML features", ref: "D1" },
+    { id: "b2", text: "15 practice questions, timed, then review every explanation", ref: "15 Q" }
+  ] },
+  { date: "Sat 15 Aug", label: "Domains 4 and 2 — the big day", past: true, tasks: [
+    { id: "c1", text: "Morning: Performance end to end — sizing, caching, clustering, query profile", ref: "D4" },
+    { id: "c2", text: "Afternoon: Governance end to end — RBAC, monitors, masking, cost", ref: "D2" },
+    { id: "c3", text: "Evening: 10 + 11 questions, timed, logged in the tracker", ref: "21 Q" }
+  ] },
+  { date: "Sun 16 Aug", label: "Domains 3 and 5, then the first mock", today: true, tasks: [
+    { id: "d1", text: "Morning: Data Loading end to end, then the 9 questions", ref: "D3" },
+    { id: "d2", text: "Afternoon: Data Collaboration, then the 5 questions", ref: "D5" },
+    { id: "d3", text: "Evening: Mock Exam 1 — 100 questions, closed book, 115 minutes", ref: "Mock" }
+  ] },
+  { date: "Mon 17 Aug", label: "Review the mock", tasks: [
+    { id: "e1", text: "Work every wrong answer: misread, knowledge gap, or never covered", ref: "" },
+    { id: "e2", text: "Re-study whichever domains scored weakest", ref: "" },
+    { id: "e3", text: "Drill the cheatsheet numbers", ref: "Drill" }
+  ] },
+  { date: "Tue 18 Aug", label: "Second mock", tasks: [
+    { id: "f1", text: "Second full-length timed mock; compare the domain breakdown to Sunday's", ref: "Mock" },
+    { id: "f2", text: "Light targeted review only — no new topics this late", ref: "" }
+  ] },
+  { date: "Wed 19 Aug", label: "Exam day", tasks: [
+    { id: "g1", text: "Cheatsheet and your own wrong-answer notes only", ref: "Drill" },
+    { id: "g2", text: "Confirm proctoring logistics: ID, webcam, quiet room", ref: "" },
+    { id: "g3", text: "Take the exam", ref: "" }
+  ] }
+];
+
+class Component extends DCLogic {
+  state = {
+    checked: { a1: true, a2: true, a3: true, a4: true, b1: true, b2: true, c1: true, c2: true, c3: true, d1: true, d2: true, d3: false }
+  };
+
+  renderVals() {
+    const done = (id) => !!this.state.checked[id];
+    const days = PLAN.map((d) => {
+      const complete = d.tasks.every((t) => done(t.id));
+      const open = !d.past || !complete;
+      return {
+        date: d.date, label: d.label,
+        open,
+        bg: d.today ? "#0f1011" : "transparent",
+        border: d.today ? "#2bd4d9" : "#23252a",
+        dateColor: d.today ? "#2bd4d9" : "#62666d",
+        titleColor: d.past && complete ? "#62666d" : "#ffffff",
+        status: d.tasks.filter((t) => done(t.id)).length + " / " + d.tasks.length,
+        tasks: d.tasks.map((t) => {
+          const on = done(t.id);
+          return {
+            text: t.text, ref: t.ref, mark: on ? "✓" : "",
+            boxBorder: on ? "#2bd4d9" : "#383b3f",
+            boxFill: on ? "#2bd4d9" : "transparent",
+            color: on ? "#62666d" : "#d0d6e0",
+            strike: on ? "line-through" : "none",
+            toggle: () => this.setState((s) => ({ checked: Object.assign({}, s.checked, { [t.id]: !s.checked[t.id] }) }))
+          };
+        })
+      };
+    });
+    const all = PLAN.reduce((a, d) => a + d.tasks.length, 0);
+    const doneCount = PLAN.reduce((a, d) => a + d.tasks.filter((t) => done(t.id)).length, 0);
+    return { days, kicker: "3 days left · " + doneCount + " of " + all + " tasks done" };
+  }
+}
+</script>
+</body>
+</html>

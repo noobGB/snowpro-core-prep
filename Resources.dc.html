@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+<style>
+  html, body { margin: 0; background: #08090a; }
+  * { box-sizing: border-box; }
+  a { color: #2bd4d9; text-decoration: none; }
+  a:hover { color: #7ceaee; }
+  ::selection { background: rgba(43,212,217,.25); }
+</style>
+</helmet>
+<div style="min-height:100vh; display:flex; background:#08090a; font-family:Inter, system-ui, sans-serif; color:#d0d6e0; -webkit-font-smoothing:antialiased;">
+  <dc-import name="Nav" active="Resources" style="align-self:stretch; flex:0 0 240px;" hint-size="240px,100vh"></dc-import>
+
+  <main style="flex:1; min-width:0; padding:32px 40px 96px; max-width:1000px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#62666d; margin-bottom:10px;">COF-C03 · verified 13 Aug 2026</div>
+    <h1 style="margin:0 0 22px; font-size:32px; font-weight:500; letter-spacing:-0.02em; color:#ffffff;">Resources</h1>
+
+    <div style="border:1px solid #3a3520; background:rgba(201,187,74,.05); border-radius:12px; padding:18px 22px; margin-bottom:28px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#c9bb4a; margin-bottom:8px;">Caution</div>
+      <p style="margin:0; font-size:14px; line-height:1.7; color:#d0d6e0; max-width:52em;">Avoid anything branded as an exam "dump". Beyond the certification agreement you sign, dumped questions teach the wrong thing — the exam rewards knowing the mechanism, and every question in this app was written from the verified notes rather than harvested.</p>
+    </div>
+
+    <div style="margin-bottom:32px;">
+      <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding-bottom:10px; border-bottom:1px solid #23252a; margin-bottom:4px;">
+        <h2 style="margin:0; font-size:20px; font-weight:500; color:#ffffff; letter-spacing:-0.012em;">Official — use these first</h2>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#62666d;">ground truth</span>
+      </div>
+      <sc-for list="{{ official }}" as="r" hint-placeholder-count="5">
+        <a href="{{ r.url }}" target="_blank" rel="noreferrer" style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:15px 4px; border-bottom:1px solid #1a1c1e; text-decoration:none;" style-hover="background:#0f1011;">
+          <div style="min-width:0;">
+            <div style="font-size:15px; color:#ffffff;">{{ r.title }}</div>
+            <div style="font-size:13px; line-height:1.55; color:#8a8f98; margin-top:4px; max-width:56em;">{{ r.note }}</div>
+          </div>
+          <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#27a644; border:1px solid #27a644; border-radius:4px; padding:2px 7px; white-space:nowrap;">official</span>
+        </a>
+      </sc-for>
+    </div>
+
+    <div>
+      <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding-bottom:10px; border-bottom:1px solid #23252a; margin-bottom:18px;">
+        <h2 style="margin:0; font-size:20px; font-weight:500; color:#ffffff; letter-spacing:-0.012em;">By domain</h2>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#62666d;">Snowflake University, from the guide's own lists</span>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <sc-for list="{{ byDomain }}" as="d" hint-placeholder-count="5">
+          <div style="background:#0f1011; border:1px solid #23252a; border-radius:12px; padding:20px 22px;">
+            <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:12px;">
+              <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#62666d;">{{ d.code }}</span>
+              <span style="font-size:16px; font-weight:500; color:#ffffff;">{{ d.name }}</span>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8a8f98; background:rgba(255,255,255,.05); border-radius:4px; padding:2px 7px;">{{ d.weight }}</span>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:6px;">
+              <sc-for list="{{ d.courses }}" as="c" hint-placeholder-count="4">
+                <span style="font-size:13px; color:#d0d6e0; border:1px solid #23252a; border-radius:999px; padding:5px 12px;">{{ c }}</span>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="margin-top:28px; border:1px dashed #23252a; border-radius:12px; padding:20px 24px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#62666d; margin-bottom:10px;">Not tested</div>
+      <p style="margin:0; font-size:14px; line-height:1.7; color:#8a8f98; max-width:52em;">The guide explicitly flags two items as not yet tested: Openflow, and the default warehouse for Notebooks. Skip deep study on both.</p>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1000}}">
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      official: [
+        { title: "Exam guide & registration", url: "https://learn.snowflake.com/en/certifications/snowpro-core-c03/", note: "The COF-C03 guide itself: domain weights, subtopic list, five sample questions." },
+        { title: "Snowflake Documentation", url: "https://docs.snowflake.com", note: "Ground truth for every fact in these notes. When a claim feels vague, check it here." },
+        { title: "Snowflake University", url: "https://learn.snowflake.com", note: "On-demand courses, reached with a Community login. The per-domain lists below all live here." },
+        { title: "Quickstarts", url: "https://quickstarts.snowflake.com", note: "Hands-on labs. Running a clone, a stream and task, or a masking policy sticks better than reading about them." },
+        { title: "Official practice exam", url: "https://learn.snowflake.com/en/certifications/snowpro-core-c03/", note: "Linked from page 3 of the guide PDF — Snowflake's own questions, the best practice source there is." }
+      ],
+      byDomain: [
+        { code: "D1", weight: "31%", name: "Architecture & Features", courses: ["Snowflake Foundations", "Badge 1 — Data Warehousing Workshop", "Level Up: Key Concepts", "Level Up: Container Hierarchy", "Snowflake x GenAI: LLM Functions", "Getting Started, Modules 1-2"] },
+        { code: "D4", weight: "21%", name: "Performance & Transformation", courses: ["Badge 3 — Data Application Builders", "Level Up: Query History & Caching", "Level Up: Context", "Getting Started, Module 7", "Accelerating BI Queries with Caching"] },
+        { code: "D2", weight: "20%", name: "Account Mgmt & Governance", courses: ["Level Up: Resource Monitoring", "FinOps for Snowflake", "Getting Started, Module 9", "Visualizing Roles, Grants and Privileges"] },
+        { code: "D3", weight: "18%", name: "Data Loading & Connectivity", courses: ["Level Up: Data Loading", "Getting Started, Modules 4-5"] },
+        { code: "D5", weight: "10%", name: "Data Collaboration", courses: ["Badge 2 — Collaboration & Marketplace", "Level Up: Native App Development", "Getting Started, Modules 6, 8, 10"] }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

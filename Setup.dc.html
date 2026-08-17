@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+<style>
+  html, body { margin: 0; background: #08090a; }
+  * { box-sizing: border-box; }
+  a { color: #2bd4d9; text-decoration: none; }
+  a:hover { color: #7ceaee; }
+  ::selection { background: rgba(43,212,217,.25); }
+</style>
+</helmet>
+<div style="min-height:100vh; display:flex; background:#08090a; font-family:Inter, system-ui, sans-serif; color:#d0d6e0; -webkit-font-smoothing:antialiased;">
+  <dc-import name="Nav" active="Setup" style="align-self:stretch; flex:0 0 240px;" hint-size="240px,100vh"></dc-import>
+
+  <main style="flex:1; min-width:0; display:flex; gap:32px; padding:32px 40px 96px; max-width:1240px;">
+    <div style="flex:1; min-width:0; max-width:760px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#62666d; margin-bottom:10px;">{{ progress }}</div>
+      <h1 style="margin:0 0 10px; font-size:32px; font-weight:500; letter-spacing:-0.02em; color:#ffffff;">Hands-on setup</h1>
+      <p style="margin:0 0 28px; font-size:15px; line-height:1.6; color:#8a8f98; max-width:40em;">Getting a real Snowflake trial, the CLI, and Claude Code wired up so the studying is hands-on rather than read-only. Nothing on this page talks to Snowflake — no credentials are entered or stored here.</p>
+
+      <div style="display:flex; flex-direction:column; gap:26px;">
+        <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+          <div>
+            <div style="display:flex; align-items:baseline; gap:12px; padding-bottom:10px; border-bottom:1px solid #23252a; margin-bottom:14px;">
+              <h2 style="margin:0; font-size:19px; font-weight:500; color:#ffffff; letter-spacing:-0.012em;">{{ g.title }}</h2>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#62666d;">{{ g.count }}</span>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+              <sc-for list="{{ g.steps }}" as="s" hint-placeholder-count="3">
+                <div id="{{ s.id }}" style="background:#0f1011; border:1px solid {{ s.border }}; border-radius:12px; padding:18px 20px;">
+                  <button type="button" onClick="{{ s.toggle }}" style="display:flex; gap:12px; align-items:flex-start; width:100%; text-align:left; background:transparent; border:none; padding:0; cursor:pointer; font-family:Inter,sans-serif; min-height:28px;">
+                    <span style="flex:0 0 16px; width:16px; height:16px; margin-top:2px; border-radius:3px; border:1px solid {{ s.boxBorder }}; background:{{ s.boxFill }}; display:flex; align-items:center; justify-content:center; font-size:10px; color:#08090a; line-height:1;">{{ s.mark }}</span>
+                    <span style="flex:1;">
+                      <span style="display:block; font-size:16px; color:{{ s.titleColor }}; line-height:1.4;"><span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#62666d; margin-right:9px;">{{ s.num }}</span>{{ s.title }}</span>
+                    </span>
+                  </button>
+                  <p style="margin:12px 0 0 28px; font-size:14px; line-height:1.7; color:#8a8f98; max-width:56em;">{{ s.body }}</p>
+                  <sc-if value="{{ s.hasCommand }}" hint-placeholder-val="{{ true }}">
+                    <div style="margin:14px 0 0 28px; background:#08090a; border:1px solid #23252a; border-radius:6px; padding:12px 14px; overflow-x:auto;">
+                      <code style="font-family:'JetBrains Mono',monospace; font-size:12.5px; color:#d0d6e0; white-space:pre;">{{ s.command }}</code>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ s.hasGotcha }}" hint-placeholder-val="{{ true }}">
+                    <div style="margin:12px 0 0 28px; border-left:2px solid #3a3520; padding:2px 0 2px 12px;">
+                      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:#c9bb4a; margin-bottom:5px;">Gotcha</div>
+                      <p style="margin:0; font-size:13px; line-height:1.7; color:#8a8f98; max-width:56em;">{{ s.gotcha }}</p>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <aside style="width:200px; flex:0 0 200px; position:sticky; top:32px; align-self:flex-start;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#62666d; margin-bottom:14px;">Steps</div>
+      <div style="display:flex; flex-direction:column; gap:2px; border-left:1px solid #23252a;">
+        <sc-for list="{{ rail }}" as="r" hint-placeholder-count="11">
+          <a href="{{ r.href }}" style="display:flex; gap:8px; padding:6px 12px; font-size:12.5px; line-height:1.4; color:{{ r.color }}; border-left:2px solid transparent; margin-left:-1px; text-decoration:none;" style-hover="color:#ffffff; border-left-color:#2bd4d9;">
+            <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#62666d;">{{ r.num }}</span>
+            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ r.label }}</span>
+          </a>
+        </sc-for>
+      </div>
+    </aside>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1000}}">
+const GROUPS = [
+  { title: "Snowflake trial", steps: [
+    { id: "s1", title: "Sign up for a 30-day trial account", body: "Keep it separate from any work account: you want a scratch account you can drop objects in without asking anyone. Note the account identifier from the URL — the CLI needs it, and it is not the same as your login name.", command: "", gotcha: "" },
+    { id: "s2", title: "Create the Snowflake University login", body: "Snowflake University runs off the Community login, and the guide asks you to have it before studying. Both per-domain course lists on the Resources page assume you are logged in there.", command: "", gotcha: "" }
+  ] },
+  { title: "Snowflake CLI", steps: [
+    { id: "s3", title: "Check for an existing install before assuming", body: "A stale install is easy to miss, and a machine that has seen more than one trial may already carry a connection pointing at the wrong account.", command: "snow --version\nsnow connection list", gotcha: "" },
+    { id: "s4", title: "Verify the installed version against the current release", body: "Snowflake ships fast — an install that looks fine can be a dozen minor versions behind. Check the current release before trusting it.", command: "snow --info", gotcha: "How you installed decides how you upgrade. A standalone Windows install bundles its own Python runtime, so pip upgrades do nothing — re-run the latest installer instead, interactively." },
+    { id: "s5", title: "Find where the config actually lives", body: "The cross-platform default in the docs is not always the real path. Read it from the CLI rather than trusting documentation.", command: "snow --info   # default_config_file_path", gotcha: "On Windows this landed under AppData\\Local\\snowflake\\config.toml, not ~/.snowflake/connections.toml." },
+    { id: "s6", title: "Create a bootstrap connection and test it", body: "Password auth with ACCOUNTADMIN is fine to get started, but treat it as temporary — it exists only to create the scoped role below.", command: "snow connection add\nsnow connection test -c snowpro_trial", gotcha: "" }
+  ] },
+  { title: "Scoped sandbox", steps: [
+    { id: "s7", title: "Create a scoped role, warehouse and database", body: "Do the hands-on work as a purpose-made role against a small warehouse and its own database, not as ACCOUNTADMIN. It also makes the RBAC material from Domain 2 concrete.", command: "CREATE ROLE claude_sandbox_role;\nCREATE WAREHOUSE claude_sandbox_wh WITH WAREHOUSE_SIZE = 'XSMALL' AUTO_SUSPEND = 60;\nCREATE DATABASE claude_sandbox_db;", gotcha: "" },
+    { id: "s8", title: "Switch to key-pair authentication", body: "Generate a key pair, register the public key on the user, and create a second connection that uses it. This becomes the connection to use for everything from here on.", command: "snow connection add --private-key-file ~/.ssh/snowflake_key.p8\nsnow connection test -c claude_sandbox", gotcha: "Once the key-pair connection works, remove the bootstrap connection's plaintext password. Leaving it behind is the whole reason to have done this." }
+  ] },
+  { title: "Claude Code", steps: [
+    { id: "s9", title: "Create the MCP server object", body: "Snowflake exposes MCP servers as account objects. Scope the tool list narrowly — SQL execution alone is enough for study work.", command: "CREATE MCP SERVER claude_sandbox_mcp ...  -- SYSTEM_EXECUTE_SQL only", gotcha: "" },
+    { id: "s10", title: "Generate a PAT and register the connection", body: "The programmatic access token is what Claude Code authenticates with. Generate it yourself in the UI rather than scripting it, then add the entry to your Claude Code config and verify the connection, auth and network policy end to end.", command: "", gotcha: "" },
+    { id: "s11", title: "Know the trial-tier ceiling", body: "MCP setup can be complete and correct and still not execute tools on a trial account.", command: "", gotcha: "Cortex Agent — which MCP tool execution routes through — is unavailable on trial-tier accounts. Confirmed by Snowflake's own error code, not a misconfiguration. Use the CLI connection for hands-on work until that changes." }
+  ] }
+];
+
+class Component extends DCLogic {
+  state = { checked: { s1: true, s2: true, s3: true, s4: true, s5: true, s6: true, s7: true, s8: true } };
+
+  renderVals() {
+    let n = 0;
+    const all = [];
+    const groups = GROUPS.map((g) => ({
+      title: g.title,
+      count: g.steps.length + " steps",
+      steps: g.steps.map((s) => {
+        n += 1;
+        const num = String(n).padStart(2, "0");
+        const on = !!this.state.checked[s.id];
+        all.push({ num, label: s.title, href: "#" + s.id, color: on ? "#62666d" : "#8a8f98" });
+        return {
+          id: s.id, num, title: s.title, body: s.body,
+          command: s.command, hasCommand: !!s.command,
+          gotcha: s.gotcha, hasGotcha: !!s.gotcha,
+          mark: on ? "✓" : "",
+          border: on ? "#1a1c1e" : "#23252a",
+          boxBorder: on ? "#2bd4d9" : "#383b3f",
+          boxFill: on ? "#2bd4d9" : "transparent",
+          titleColor: on ? "#8a8f98" : "#ffffff",
+          toggle: () => this.setState((st) => ({ checked: Object.assign({}, st.checked, { [s.id]: !st.checked[s.id] }) }))
+        };
+      })
+    }));
+    const done = Object.values(this.state.checked).filter(Boolean).length;
+    return { groups, rail: all, progress: done + " of " + n + " steps done" };
+  }
+}
+</script>
+</body>
+</html>
