@@ -22,9 +22,16 @@ looks small.
   temporary tables skip Fail-safe entirely. Sequence: live data → Time Travel (0/1 up to 90 days)
   → Fail-safe (7 days, permanent tables only) → purged.
 - **Data replication and failover**: replicate databases/accounts across regions for disaster
-  recovery (Business Critical+); **failover** promotes a secondary to primary. See also
+  recovery; **failover** promotes a secondary to primary. See also
   [Domain 2](02_Domain2_Account_Mgmt_and_Governance.md) for the account-management framing of the
   same feature.
+  - **Replication groups vs. failover groups are two distinct object types** (verified against
+    current docs) — easy to conflate: a **replication group** keeps objects in sync (read-only
+    copy) but does **not** support promotion/failover, and database/share replication on its own
+    is available to *any* edition. A **failover group** additionally supports **promoting the
+    secondary to primary** — but a failover group can only be created on (and only replicated to)
+    **Business Critical edition or higher**. An object can belong to one or the other, never both
+    at once. Each group (of either kind) has its own independent replication schedule.
 - **Secure data sharing features**: see 5.2 below — the umbrella term for everything that follows.
 
 ## 5.2 Snowflake's data sharing capabilities

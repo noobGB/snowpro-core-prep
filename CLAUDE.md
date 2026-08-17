@@ -81,7 +81,8 @@ that can't be read at all) throws directly.
 
 - **`src/discovery.ts`** classifies source files by filename pattern (spec §5's table) — domain
   notes (`01`-`05`), practice questions (`10`-`14`), any mock exam (`1[6-9]|[2-9]\d_Mock_Exam_N.md`,
-  matched automatically so a future `17_Mock_Exam_2.md` needs no code change), the cheatsheet,
+  matched automatically — five ship today, `16`-`20`; a future `21_Mock_Exam_6.md` needs no code
+  change), the cheatsheet,
   study plan, resources, and the setup log. Anything else is a logged skip notice, not an error.
 - **`src/parsers/questionCore.ts`** is the shared line-based state machine both
   `practiceQuestions.ts` and `mockExam.ts` build on. It exists because a "question" (a bold `**N.**`
@@ -104,6 +105,13 @@ that can't be read at all) throws directly.
   independently recomputed from its questions and cross-checked against both the stored value and
   the split stated in the mock's own intro prose). These feed the same `ErrorCollector`, so a
   validation failure and a parse failure can show up in the same report.
+  - **`parseMockMeta`'s `STATED_SPLIT_RE` is scoped to the intro section only** (text before the
+    first standalone `---` line) — a real bug, fixed once discovered: the regex's `[^:]*` can span
+    newlines, so searching the *whole file* let a stray `"...in Domain 3) fits this need?"` inside
+    a question stem (no colon nearby) keep consuming text until it hit an unrelated colon+number
+    combination much further down the file, silently overwriting the value correctly parsed from
+    the intro. Mock 1 happened to never trip this; adding more mocks with the same reused stem did.
+    If you ever touch this regex again, keep the intro-only scoping — don't widen it back to `raw`.
 - **`src/write/output.ts`** writes to a temp directory (a sibling of the output dir, same volume)
   and renames it into place, so a crash mid-write can't leave a half-updated `content/`. In the
   container, this means the runtime user needs write access to `/app`'s parent directory itself,

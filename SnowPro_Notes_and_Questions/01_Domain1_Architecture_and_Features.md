@@ -72,6 +72,11 @@ best study time for this one.
   (isolate high-concurrency dashboards from complex ad-hoc analyst queries, for example).
 - Billing: per-second, 60-second minimum per resume. Credits/hr roughly double per size step
   (XS=1, S=2, M=4, L=8, XL=16, 2XL=32...).
+- **Cloud Services layer billing**: usage is only billed if it exceeds **10% of that day's total
+  warehouse (compute) credit consumption** — under that threshold, Cloud Services compute is free.
+  This is why light query-compilation/auth/metadata overhead essentially never shows up as a line
+  item for normal workloads, but an account doing almost nothing except heavy `SHOW`/metadata-only
+  querying (little warehouse compute to offset against) could actually see a Cloud Services charge.
 - **Max cluster count scales *inversely* with warehouse size** (changed via a Feb 2025 release —
   older sources assume a flat cap of 10 for every size): XS/S/M → 300, L → 160, XL → 80,
   2XL → 40, 3XL → 20, 4XL/5XL/6XL → 10. Bigger warehouse = fewer clusters allowed, since Snowflake
@@ -113,9 +118,15 @@ Officially in scope (guide section 1.6) — not a maybe:
 - **Streamlit in Snowflake**: build/host Python data apps directly inside a Snowflake account.
 - **Snowpark**: write transformations in Python/Java/Scala that push down and execute inside
   Snowflake compute (not pulled client-side).
-- **Snowflake Cortex**: built-in AI functions callable from SQL — **AI SQL functions** (e.g.
-  `SNOWFLAKE.CORTEX.COMPLETE`, sentiment/translate/summarize), **Cortex Search** (retrieval/search
-  over enterprise data), **Cortex Analyst** (natural-language-to-SQL over a semantic model).
+- **Snowflake Cortex**: built-in AI functions callable from SQL — **AI SQL functions** (direct
+  SQL-callable LLM calls: completion, classification, translation, sentiment, summarization),
+  **Cortex Search** (retrieval/search over enterprise data), **Cortex Analyst**
+  (natural-language-to-SQL over a semantic model). **Naming update, worth knowing if you studied
+  from older material**: Snowflake GA'd a renamed, `AI_`-prefixed set of these functions in
+  November 2025 (`AI_COMPLETE`, `AI_CLASSIFY`, `AI_TRANSLATE`, `AI_SENTIMENT`,
+  `AI_SUMMARIZE_AGG`, etc.), superseding the older `SNOWFLAKE.CORTEX.*`/bare
+  `SUMMARIZE`/`TRANSLATE`/`SENTIMENT` naming. The exam guide may still reference the older names in
+  places — know both, but treat the `AI_`-prefixed names as current.
 - **Snowflake ML**: built-in ML model training/registry/feature-store capabilities inside
   Snowflake, without exporting data to a separate ML platform.
 

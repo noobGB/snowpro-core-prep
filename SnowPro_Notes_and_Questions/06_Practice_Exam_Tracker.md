@@ -24,9 +24,16 @@ attempt below, including re-attempts after review.
 | Mock | File | Questions | Domain split |
 |---|---|---|---|
 | 1 | [16_Mock_Exam_1.md](16_Mock_Exam_1.md) | 100 | 31/20/18/21/10 (D1/D2/D3/D4/D5, matching official weights) |
+| 2 | [17_Mock_Exam_2.md](17_Mock_Exam_2.md) | 100 | 31/20/18/21/10 |
+| 3 | [18_Mock_Exam_3.md](18_Mock_Exam_3.md) | 100 | 31/20/18/21/10 |
+| 4 | [19_Mock_Exam_4.md](19_Mock_Exam_4.md) | 100 | 31/20/18/21/10 |
+| 5 | [20_Mock_Exam_5.md](20_Mock_Exam_5.md) | 100 — deliberately the hardest of the five, leaning into comparative/easy-to-confuse pairs | 31/20/18/21/10 |
 
 50 of Mock 1's questions are the same ones from the domain files above (woven throughout, not
-blocked); the other 50 are new. More mocks may be added later — not scheduled yet.
+blocked); its other 50 are new. **Mocks 2-5 are 100% new questions each, with zero repetition
+across the five mocks** — every one of the 500 mock-exam question slots across all five exams is a
+distinct question (Mock 1's internal 50-question overlap with the domain-practice files is the only
+intentional repetition anywhere in the series). Take them in order; save Mock 5 for last.
 
 ## Attempt log
 

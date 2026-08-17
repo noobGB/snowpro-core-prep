@@ -49,9 +49,31 @@ options/syntax below are exactly what gets tested (see the official sample quest
   schema/table that has a stream with unconsumed records creates a stream that is *re-initialized
   at the point of cloning* — pending change records from the original are **not** carried over
   to the clone (a documented gotcha the official guide tests directly via sample question).
+  - **Three stream types**, verified against Snowflake's own docs — know the restrictions, not
+    just the names: **Standard (delta)** tracks all DML (insert/update/delete/truncate), supported
+    on standard tables, Dynamic Tables, Snowflake-managed Iceberg tables, directory tables, or
+    views. **Append-only** tracks inserts only (no update/delete/truncate) — more performant than
+    standard for pure-ELT/append scenarios, supported on standard tables, Dynamic Tables,
+    Snowflake-managed Iceberg tables, or views. **Insert-only** also tracks inserts only, but is
+    the *required* stream type for external tables and externally-managed Iceberg tables — the
+    other two types aren't valid there.
 - **Tasks**: scheduled (cron-like) or chained (`AFTER <task>`) execution of a SQL
   statement/procedure — paired with a Stream to build incremental ELT: stream captures changes,
   task processes them on a schedule.
+  - **Serverless vs. user-managed compute**: a *serverless* task lets Snowflake auto-allocate and
+    auto-size compute based on that task's recent run history (no warehouse to manage, effective
+    ceiling around an XXLarge-equivalent, billed for actual compute-seconds used) — good for
+    unpredictable/light or bursty schedules. A *user-managed* task runs on a warehouse you
+    explicitly specify and size yourself (any size, standard per-second/60s-minimum warehouse
+    billing) — better for stable, predictable, or highly concurrent task workloads where you want
+    direct control over the compute.
+  - **Stream-triggered tasks**: `CREATE TASK ... WHEN SYSTEM$STREAM_HAS_DATA('<stream>') AS ...`
+    runs the task only when the named stream actually has unconsumed change data, instead of
+    polling on a fixed schedule regardless of whether there's anything to do — lower latency, less
+    wasted compute, for event-driven ELT.
+  - **Task graphs (DAGs)**: a task can declare one or more predecessor tasks (`AFTER <task>`),
+    letting a chain of dependent tasks run in the right order, including parallel branches that
+    later converge.
 - **Dynamic Tables**: a *declarative* alternative to hand-rolled Stream+Task pipelines — you
   define a target table as a query over source table(s) plus a **target lag** (how stale the
   result is allowed to be), and Snowflake automatically figures out and runs the incremental

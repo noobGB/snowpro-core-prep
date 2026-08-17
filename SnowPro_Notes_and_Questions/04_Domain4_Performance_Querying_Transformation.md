@@ -43,14 +43,25 @@ filing (they're under "automated data ingestion" there, not performance).
   - `QUERY_ACCELERATION_MAX_SCALE_FACTOR`: a hard **cost multiplier** on the warehouse's own
     rate, not a performance dial — e.g. a Medium warehouse (4 credits/hr) with scale factor 5 can
     lease up to 20 additional credits/hr of QAS compute. `0` = no upper bound. Billed separately
-    from warehouse credits, serverless, per-second, only while in use.
+    from warehouse credits, serverless, per-second, only while in use. **Default scale factor**
+    (verified against current docs): **8** when QAS is explicitly enabled by hand, but only **2**
+    when it's auto-enabled (Gen2/multi-cluster warehouses can auto-enable QAS) — worth knowing the
+    auto-enabled default is deliberately more conservative than the manual one.
   - Check eligibility *before* running a query for real: `SYSTEM$ESTIMATE_QUERY_ACCELERATION
     (query_id)`. Check what actually happened *after*: `QUERY_ACCELERATION_BYTES_SCANNED` /
-    `_PARTITIONS_SCANNED` / `_UPPER_LIMIT_SCALE_FACTOR` columns in `QUERY_HISTORY`.
+    `_PARTITIONS_SCANNED` / `_UPPER_LIMIT_SCALE_FACTOR` columns in `QUERY_HISTORY`. Two more
+    monitoring surfaces worth knowing by name: the **`QUERY_ACCELERATION_ELIGIBLE`** view
+    (identifies which queries/warehouses would benefit most from turning QAS on) and the
+    **`QUERY_ACCELERATION_HISTORY`** view/table function (historical QAS billing/usage, separate
+    from ordinary warehouse credit consumption).
 - **Search Optimization Service** (Enterprise+, confirmed hands-on to actually work on this trial
-  account, unlike Cortex): accelerates highly selective point-lookup queries (equality, `IN`,
-  substring/`LIKE` searches) on columns that don't naturally benefit from clustering — a
-  different tool from clustering keys, which help range scans/large filters.
+  account, unlike Cortex): accelerates highly selective point-lookup queries on columns that don't
+  naturally benefit from clustering — a different tool from clustering keys, which help range
+  scans/large filters. **Predicate coverage is broader than just equality/`IN`/`LIKE`** (verified
+  against current docs) — it also covers: substring and regex matches (`LIKE`/`ILIKE`/`RLIKE`),
+  `NULL` checks, geospatial predicates on `GEOGRAPHY` values, full-text search via the
+  `SEARCH`/`SEARCH_IP` functions, and lookups into semi-structured `VARIANT`/`OBJECT`/`ARRAY`
+  columns — not just simple scalar-column equality.
   - Enable: `ALTER TABLE <table> ADD SEARCH OPTIMIZATION;` — builds a specialized access path
     **asynchronously in the background**, not instantly; check `search_optimization_progress` in
     `SHOW TABLES` output (0-100) to see build status, and `search_optimization_bytes` for the

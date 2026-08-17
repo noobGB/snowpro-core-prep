@@ -107,9 +107,17 @@ export function parseMockMeta(raw: string, mockFileNumber: number): MockMeta {
   const durationMatch = raw.match(DURATION_RE);
   const durationMin = durationMatch ? Number(durationMatch[1]) : 115;
 
+  // Scoped to the intro section (before the first standalone `---`) only. STATED_SPLIT_RE's
+  // `[^:]*` can span newlines, so searching the full file risks a false match: a question stem
+  // that happens to mention "Domain N)" with no colon nearby lets the regex keep consuming text
+  // until it reaches an unrelated colon+number further down the file (e.g. inside the answer
+  // key), silently overwriting the real value parsed from the intro.
+  const introEnd = raw.search(/^---\s*$/m);
+  const introSection = introEnd === -1 ? raw : raw.slice(0, introEnd);
+
   const statedDomainSplit: Record<string, number> = {};
   let found = false;
-  for (const m of raw.matchAll(STATED_SPLIT_RE)) {
+  for (const m of introSection.matchAll(STATED_SPLIT_RE)) {
     found = true;
     statedDomainSplit[`d${m[1]}`] = Number(m[2]);
   }

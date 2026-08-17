@@ -12,7 +12,12 @@
 - **Discretionary Access Control (DAC)**: the underlying model — each securable object has an
   **owner** (a role), and that owner decides who else gets access via grants. Contrast with
   mandatory access control (a central authority decides) — Snowflake is DAC, ownership-driven.
-- **Network Policies**: IP allow/block lists (CIDR ranges), account-wide or per-user.
+- **Network Policies**: IP allow/block lists (CIDR ranges), applied at either the **account level**
+  or the **user level**. **User-level network policies override the account-level one** for that
+  user — Snowflake's own guidance is to set user-level policies for service/programmatic accounts
+  specifically, and an account-level policy as the catch-all default for everyone else. Activating
+  or changing the account-level policy (`ALTER ACCOUNT ... SET NETWORK_POLICY = ...`) requires
+  `SECURITYADMIN` or higher.
 - **Authentication**: password, **MFA** (Duo-based), **Federated Authentication** / **SSO**
   (SAML2 with an external IdP), **OAuth** (Snowflake OAuth or external OAuth), **key-pair
   authentication** (common for service/programmatic accounts, no password).
@@ -75,8 +80,12 @@
 - **Notifications**: **Notification Integrations** — configured channels (email, cloud
   messaging/webhooks) that alerts, tasks, or other Snowflake events can push to.
 - **Data replication and failover**: replicate databases (or entire accounts) across
-  regions/accounts for disaster recovery (Business Critical+); **failover** promotes a secondary
-  to primary. Full mechanics/consumer-facing implications are also covered under
+  regions/accounts for disaster recovery; **failover** promotes a secondary to primary. **Edition
+  gating is more specific than "Business Critical+ for all of it"** (verified against current
+  docs) — plain database/share replication (read-only copy, no promotion) is available on **any**
+  edition via a replication group; it's specifically a **failover group** (which adds
+  promote-to-primary capability) that requires Business Critical+ on both sides. Full mechanics/
+  consumer-facing implications are also covered under
   [Domain 5](05_Domain5_Data_Collaboration.md).
 - **Data lineage**: Snowsight automatically tracks and visualizes object-to-object dependencies
   (which tables/views feed which downstream objects) — no manual instrumentation required.

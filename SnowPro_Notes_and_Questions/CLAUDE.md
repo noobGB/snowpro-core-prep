@@ -35,9 +35,14 @@ project; read [00_Study_Plan.md](00_Study_Plan.md) first for the intended day-by
 - `15_Hands_On_Snowflake_Setup_Log.md` — a tutorial-quality walkthrough of setting up Snowflake CLI
   + key-pair auth + a scoped sandbox role against a trial account, written so it doubles as an
   onboarding guide. Placeholders like `<YOUR_ACCOUNT_IDENTIFIER>` mark where your own values go.
-- `16_Mock_Exam_1.md` — full-length, 100-question mock exam (31/20/18/21/10 domain split matching
-  official weights), interleaving the 50 questions from `10`-`14` with 50 new ones. Numbering
-  leaves `17`+ open for a future second mock.
+- `16`-`20` — five full-length, 100-question mock exams (`16_Mock_Exam_1.md` through
+  `20_Mock_Exam_5.md`), each with the official 31/20/18/21/10 domain split. Mock 1 interleaves the
+  50 questions from `10`-`14` with 50 new ones. **Mocks 2-5 are each 100% new, original
+  questions** with zero repetition across the five mocks — every one of the 500 mock-exam question
+  slots in the series is distinct (Mock 1's own 50-question overlap with `10`-`14` is the only
+  intentional repetition anywhere). Mock 5 is deliberately the hardest, leaning into comparative,
+  easy-to-confuse pairs rather than single-fact recall — take the five in order. Numbering leaves
+  `21`+ open for any future mock beyond these five.
 
 ## Adding or editing content
 

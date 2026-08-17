@@ -20,7 +20,9 @@ as plain markdown, and a content pipeline turns them into a real app — scored 
 spaced-ish flashcard deck, readiness analytics weighted by actual exam domain weights, and a study
 plan that shifts to fit whatever exam date you set.
 
-It ships with a real, original set of SnowPro Core notes and 100 practice/mock questions
+It ships with a real, original set of SnowPro Core notes and a bank of 500 distinct practice/mock
+questions — 50 domain-authored practice questions plus five full-length, 100-question mock exams
+with zero repeated questions across the five
 ([`SnowPro_Notes_and_Questions/`](SnowPro_Notes_and_Questions/)) — clone it and it works out of
 the box. It's built around that exam's structure (5 weighted domains, 100 questions, 115 minutes,
 pass line 750/1000), but the content pipeline itself doesn't know anything Snowflake-specific —
@@ -224,9 +226,9 @@ position):
 
 ### Adding a new mock exam
 
-Create `17_Mock_Exam_2.md` (or any `16`-`99` prefix) — the discovery pattern matches it
-automatically, no code change needed. Same question format as above. Each question resolves to a
-domain one of two ways:
+Create `21_Mock_Exam_6.md` (or any unused `16`-`99` prefix — this repo currently ships five,
+`16` through `20`) — the discovery pattern matches it automatically, no code change needed. Same
+question format as above. Each question resolves to a domain one of two ways:
 
 1. **Automatic dedup** — if the question's wording matches an existing domain-question's stem
    closely enough (normalized comparison), it's linked to that question's existing domain and id.
