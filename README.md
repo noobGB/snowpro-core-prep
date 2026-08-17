@@ -37,6 +37,10 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
 - **⌘K/Ctrl+K search** — one command palette across pages, notes, and questions.
 - **Fully offline** — progress persists to a local file (via Docker) or `localStorage` (without
   it); nothing ever leaves your machine.
+- **Backup/restore** — Settings → Backup → Export downloads your entire progress (attempts, exam
+  date, flashcard grades, checklists) as one JSON file; Import loads it back — useful for moving
+  between browsers/devices, or just as a safety net before clearing site data. Import replaces
+  your current progress wholesale, it doesn't merge.
 
 ![Study plan](.github/screenshot-plan.png)
 
