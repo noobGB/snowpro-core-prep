@@ -7,7 +7,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ../SnowPro_Core_Certification:/content
+      - ./SnowPro_Notes_and_Questions:/content
       - ./data:/data
     environment:
       PORT: "8080"

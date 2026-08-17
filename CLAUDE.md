@@ -29,11 +29,12 @@ docker compose logs      # boot order: "/data is writable" -> pipeline summary -
 docker compose down
 ```
 
-Open `http://localhost:8080`. `docker-compose.yml` mounts `../SnowPro_Core_Certification` (the
-markdown source, a sibling directory outside this repo) to `/content`, and a local `./data/`
-folder to `/data` for progress persistence — both gitignored. Editing markdown + `docker compose
-restart` picks up content changes; editing `app/`/`pipeline/` source needs `docker compose build`
-again, since the frontend bundle and pipeline are baked into the image, not mounted.
+Open `http://localhost:8080`. `docker-compose.yml` mounts `./SnowPro_Notes_and_Questions` (the
+markdown source, tracked in this repo) to `/content`, and a local `./data/` folder to `/data` for
+progress persistence (gitignored — that one's genuinely personal, your quiz history). Editing
+markdown + `docker compose restart` picks up content changes; editing `app/`/`pipeline/` source
+needs `docker compose build` again, since the frontend bundle and pipeline are baked into the
+image, not mounted.
 
 For local dev without Docker, run the pipeline and the Vite dev server directly (see each
 subsection's commands below) — `app/`'s dev server falls back to `localStorage` for progress when
@@ -41,8 +42,8 @@ no `/api/progress` route exists (i.e., outside the container), so both paths wor
 
 ## Content pipeline (`pipeline/`)
 
-Reads the markdown study folder at `../SnowPro_Core_Certification/` (a sibling directory, outside
-this repo) and generates `content.json` + `notes/<domainId>.json` + `search-index.json` into
+Reads the markdown study folder at `../SnowPro_Notes_and_Questions/` (tracked in this repo,
+relative to `pipeline/`) and generates `content.json` + `notes/<domainId>.json` + `search-index.json` into
 `content/`, per the data model in spec §4 and the discovery/parsing rules in spec §5. `content/` is
 entirely generated output — never hand-edit it, and don't treat it as a source of truth for
 anything; re-run the pipeline instead.
@@ -90,7 +91,7 @@ that can't be read at all) throws directly.
   dedup against the already-parsed domain-question pool (reusing that question's existing id —
   dedup always wins over an inline tag if a question somehow has both), or an inline `**N. [Dx]**`
   tag added directly to the mock's markdown. A question with neither is collected as an
-  `unresolved-domain` error, not thrown — see `SnowPro_Core_Certification/16_Mock_Exam_1.md` for the
+  `unresolved-domain` error, not thrown — see `SnowPro_Notes_and_Questions/16_Mock_Exam_1.md` for the
   tagging convention already in use there.
 - **`src/parsers/studyPlan.ts`** emits each plan day's *original* source date verbatim, not a
   pre-offset one — the frontend (`app/src/lib/planDates.ts`) remaps every day by the delta between

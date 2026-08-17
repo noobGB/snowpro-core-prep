@@ -28,6 +28,12 @@ doc-page.js
 support.js
 _ds/
 
+# The official Snowflake study guide PDF, kept locally in SnowPro_Notes_and_Questions/ for your
+# own reference — copyrighted, not Snowflake's to redistribute, explicitly excluded from the repo
+# (see that folder's own CLAUDE.md). Everything else in that folder is original content and stays
+# tracked.
+SnowPro_Notes_and_Questions/*.pdf
+
 # OS / editor
 .DS_Store
 Thumbs.db

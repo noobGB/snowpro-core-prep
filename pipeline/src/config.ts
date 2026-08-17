@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const PIPELINE_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const WEBAPP_ROOT = path.dirname(PIPELINE_ROOT);
-const DEFAULT_SOURCE_DIR = path.resolve(WEBAPP_ROOT, "..", "SnowPro_Core_Certification");
+const DEFAULT_SOURCE_DIR = path.resolve(WEBAPP_ROOT, "SnowPro_Notes_and_Questions");
 const DEFAULT_OUTPUT_DIR = path.resolve(WEBAPP_ROOT, "content");
 
 export interface PipelineConfig {
