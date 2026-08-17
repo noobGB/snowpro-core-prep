@@ -10,6 +10,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useContent } from "../lib/useContent";
 import { useProgress } from "../lib/progress";
 import { buildMissedIndex, type MissedEntry } from "../lib/missed";
+import { renderInline } from "../lib/inlineMarkdown";
 
 const cardStyle: React.CSSProperties = {
   background: "var(--card)",
@@ -193,12 +194,12 @@ function MissedCard({ entry }: { entry: MissedEntry }) {
       {!currentlyMissed && (
         <div style={{ fontSize: 11, color: "var(--status-correct)", marginBottom: 8 }}>Since answered correctly</div>
       )}
-      <div style={{ fontSize: 15, lineHeight: 1.6, color: "var(--text-body)", marginBottom: 12 }}>{question.stem}</div>
+      <div className="inline-md" style={{ fontSize: 15, lineHeight: 1.6, color: "var(--text-body)", marginBottom: 12 }}>{renderInline(question.stem)}</div>
       <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 6 }}>
         You picked: {mostRecentAnswer.picked.length > 0 ? mostRecentAnswer.picked.join(", ") : "(nothing)"} · Correct:{" "}
         <span style={{ color: "var(--status-correct)" }}>{question.correct.join(", ")}</span>
       </div>
-      <p style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text-muted)", margin: "0 0 10px" }}>{question.explanation}</p>
+      <p className="inline-md" style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text-muted)", margin: "0 0 10px" }}>{renderInline(question.explanation)}</p>
       <Link to={`/notes/${question.domainId}`} style={{ fontSize: 12 }}>
         Read the note →
       </Link>

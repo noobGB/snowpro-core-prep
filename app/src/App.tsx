@@ -1,11 +1,13 @@
 import { Outlet, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { CommandPalette } from "./components/CommandPalette";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { Analytics } from "./pages/Analytics";
 import { Dashboard } from "./pages/Dashboard";
 import { Flashcards } from "./pages/Flashcards";
 import { MockExams } from "./pages/MockExams";
 import { Notes } from "./pages/Notes";
+import { NotFound } from "./pages/NotFound";
 import { Practice } from "./pages/Practice";
 import { Resources } from "./pages/Resources";
 import { Runner } from "./pages/Runner";
@@ -40,10 +42,12 @@ export default function App() {
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/resources" element={<Resources />} />
           <Route path="/setup" element={<Setup />} />
+          <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>
       {/* Mounted once outside the route tree so ⌘K works everywhere, including the runner. */}
       <CommandPalette />
+      <SettingsPanel />
     </>
   );
 }

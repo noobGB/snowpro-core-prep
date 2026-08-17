@@ -128,6 +128,20 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .notes-prose a {
   border-bottom: 1px solid rgba(43, 212, 217, 0.35);
 }
+/* Question stems/options/explanations render through renderInline() (lib/inlineMarkdown.tsx)
+   as real React elements, not dangerouslySetInnerHTML — same visual language as .notes-prose's
+   strong/code, scoped separately since this wraps single inline spans, not full prose blocks. */
+.inline-md strong {
+  color: var(--text-heading);
+  font-weight: 500;
+}
+.inline-md code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: var(--raised);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
 .notes-prose table {
   display: block;
   overflow-x: auto;

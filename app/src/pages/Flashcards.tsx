@@ -1,11 +1,15 @@
 /**
- * Flashcards — spec §6.7. One card at a time, click or space to flip, arrow keys to move. No
- * grading, no scheduling. Order is shuffled once per session (mount) — a fixed shuffle of the
- * whole deck that the domain filter then narrows, so switching filters doesn't reshuffle.
+ * Flashcards — spec §6.7. One card at a time, click or space to flip, arrow keys to move.
+ * A minimal binary "knew it / missed it" self-rating (not full spaced-repetition scheduling)
+ * biases which cards resurface: each session's fixed shuffle buckets missed-last-time first,
+ * then never-graded, then known-last-time last — grading isn't otherwise scored anywhere.
+ * The bucket order itself is snapshotted once per mount (via gradesAtMountRef) even though
+ * grades keep updating live during the session, so grading a card never reshuffles/reorders the
+ * deck out from under the card you're currently looking at.
  * Position (`progress.flashcards.lastIndex`) is remembered per the deck currently in view.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useContent } from "../lib/useContent";
 import { updateProgress, useProgress } from "../lib/progress";
 import type { Flashcard } from "../lib/content";
@@ -29,8 +33,19 @@ export function Flashcards() {
   const [i, setI] = useState(0);
   const [flipped, setFlipped] = useState(false);
 
-  // One fixed shuffle per mount ("per session"); domain filtering narrows this same order.
-  const sessionOrder = useMemo(() => (content ? shuffled(content.flashcards) : []), [content]);
+  // Bucket order (missed-last-time first, then never-graded, then known-last-time) is frozen at
+  // mount from whatever grades existed when the session started — see the file header for why.
+  const gradesAtMountRef = useRef(progress.flashcards.grades ?? {});
+
+  const sessionOrder = useMemo(() => {
+    if (!content) return [];
+    const grades = gradesAtMountRef.current;
+    const missed = shuffled(content.flashcards.filter((c) => grades[c.id] === "missed"));
+    const unseen = shuffled(content.flashcards.filter((c) => !grades[c.id]));
+    const known = shuffled(content.flashcards.filter((c) => grades[c.id] === "known"));
+    return [...missed, ...unseen, ...known];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content]);
 
   const pool = useMemo(
     () => (deck === "All" ? sessionOrder : sessionOrder.filter((c) => c.domainId?.toUpperCase() === deck)),
@@ -51,6 +66,18 @@ export function Flashcards() {
     setFlipped(false);
   };
 
+  // Grading doubles as the "advance" action — flip, see the answer, grade, move on — the same
+  // rhythm Anki uses. updateProgress and step() are called as plain sibling statements (not one
+  // nested in the other) for the same "Cannot update a component while rendering a different
+  // component" reason documented on the lastIndex-persisting effect below.
+  const gradeCard = (cardId: string, grade: "known" | "missed") => {
+    updateProgress((p) => ({
+      ...p,
+      flashcards: { ...p.flashcards, grades: { ...(p.flashcards.grades ?? {}), [cardId]: grade } },
+    }));
+    step(1);
+  };
+
   // Persisting to the progress store here (rather than inside setI's updater above) keeps the
   // write out of React's render phase — calling updateProgress synchronously from within a
   // setState updater trips "Cannot update a component while rendering a different component,"
@@ -60,7 +87,11 @@ export function Flashcards() {
     if (!card) return;
     updateProgress((p) => ({
       ...p,
-      flashcards: { lastIndex: i, seen: p.flashcards.seen.includes(card.id) ? p.flashcards.seen : [...p.flashcards.seen, card.id] },
+      flashcards: {
+        ...p.flashcards,
+        lastIndex: i,
+        seen: p.flashcards.seen.includes(card.id) ? p.flashcards.seen : [...p.flashcards.seen, card.id],
+      },
     }));
   }, [i, pool]);
 
@@ -160,23 +191,54 @@ export function Flashcards() {
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)" }}>{flipped ? "click to hide" : "click to reveal"}</span>
           </button>
 
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 16 }}>
-            <button type="button" onClick={() => step(-1)} style={{ flex: 1, minHeight: 48, background: "transparent", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-body)", fontSize: 14, cursor: "pointer" }}>
-              ← Previous
-            </button>
-            <button type="button" onClick={() => step(1)} style={{ flex: 1, minHeight: 48, background: "transparent", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-body)", fontSize: 14, cursor: "pointer" }}>
-              Next →
-            </button>
-          </div>
+          {flipped ? (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 16 }}>
+              <button
+                type="button"
+                onClick={() => gradeCard(card.id, "missed")}
+                style={{ flex: 1, minHeight: 48, background: "transparent", border: "1px solid var(--status-incorrect)", borderRadius: 6, color: "var(--status-incorrect)", fontSize: 14, cursor: "pointer" }}
+              >
+                Missed it
+              </button>
+              <button
+                type="button"
+                onClick={() => gradeCard(card.id, "known")}
+                style={{ flex: 1, minHeight: 48, background: "transparent", border: "1px solid var(--status-correct)", borderRadius: 6, color: "var(--status-correct)", fontSize: 14, cursor: "pointer" }}
+              >
+                Knew it
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 16 }}>
+              <button type="button" onClick={() => step(-1)} style={{ flex: 1, minHeight: 48, background: "transparent", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-body)", fontSize: 14, cursor: "pointer" }}>
+                ← Previous
+              </button>
+              <button type="button" onClick={() => step(1)} style={{ flex: 1, minHeight: 48, background: "transparent", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-body)", fontSize: 14, cursor: "pointer" }}>
+                Next →
+              </button>
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: 3, marginTop: 20 }}>
-            {pool.map((c, n) => (
-              <div key={c.id} style={{ flex: 1, height: 3, borderRadius: 2, background: n === i ? "var(--accent)" : n < i ? "var(--hairline-strong)" : "var(--hairline-faint)" }} />
-            ))}
+            {pool.map((c, n) => {
+              const grade = (progress.flashcards.grades ?? {})[c.id];
+              const color =
+                n === i
+                  ? "var(--accent)"
+                  : grade === "missed"
+                    ? "var(--status-incorrect)"
+                    : grade === "known"
+                      ? "var(--status-correct)"
+                      : n < i
+                        ? "var(--hairline-strong)"
+                        : "var(--hairline-faint)";
+              return <div key={c.id} style={{ flex: 1, height: 3, borderRadius: 2, background: color }} />;
+            })}
           </div>
 
           <p style={{ margin: "22px 0 0", fontSize: 13, lineHeight: 1.65, color: "var(--text-dim)", maxWidth: "40em" }}>
-            Click the card or press space to flip; arrow keys move. Position is remembered, so the deck resumes where you stopped. No grading — these are for rehearsal, not assessment.
+            Click the card or press space to flip; arrow keys move. Position is remembered, so the deck resumes where you stopped. Grading a flipped card ("Missed it"/"Knew it") also advances —
+            missed cards resurface first next session; this isn't scored anywhere else.
           </p>
         </>
       ) : (

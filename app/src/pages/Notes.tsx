@@ -1,5 +1,5 @@
 /**
- * Notes reader — spec §6.2. Prose at a 68-character measure plus a sticky, scrollspy table of
+ * Notes reader — spec §6.2. Prose at a ~65-70-character measure plus a sticky, scrollspy table of
  * contents. The header carries a domain-wide "quiz me" button (always available — it's just the
  * domain's own practice set). Per-SECTION "quiz me on this section" hover actions are also wired
  * up structurally, but will never actually render today: the content pipeline deliberately leaves
@@ -86,7 +86,7 @@ export function Notes() {
       <div style={{ display: "flex", gap: 32, alignItems: "flex-start" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 24, paddingBottom: 16, borderBottom: "1px solid var(--hairline)" }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
               <h1 style={{ margin: 0, fontSize: 24, fontWeight: 500, letterSpacing: "-0.014em", color: "var(--text-heading)" }}>{domain.title}</h1>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", background: "rgba(255,255,255,.05)", borderRadius: 4, padding: "2px 7px" }}>
                 {Math.round(domain.weight * 100)}%
@@ -102,7 +102,10 @@ export function Notes() {
             )}
           </div>
 
-          <div style={{ maxWidth: "68ch" }}>
+          {/* "ch" is the digit-glyph width, not the average prose character width — Inter's lowercase
+              average runs narrower, so a nominal 68ch box was actually rendering ~85 characters per
+              line. 54ch targets the same ~65-70 real character measure Notion/Linear use. */}
+          <div style={{ maxWidth: "54ch" }}>
             {notes?.sections.map((section) => {
               const sectionQuestionCount = questionsBySection.get(section.id) ?? 0;
               return (
@@ -132,7 +135,7 @@ export function Notes() {
           </div>
         </div>
 
-        <aside style={{ width: 200, flexShrink: 0, position: "sticky", top: 20 }}>
+        <aside className="desktop-only" style={{ width: 200, flexShrink: 0, position: "sticky", top: 20 }}>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--text-dim)", marginBottom: 12 }}>
             On this page
           </div>

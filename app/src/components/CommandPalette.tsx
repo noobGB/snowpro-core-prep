@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { closePalette, togglePalette, usePaletteOpen } from "../lib/paletteStore";
+import { closeSettings } from "../lib/settingsStore";
 import { loadSearchIndex, type SearchIndexEntry } from "../lib/search";
 import { useProgress } from "../lib/progress";
 
@@ -62,6 +63,7 @@ export function CommandPalette() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
+        closeSettings();
         togglePalette();
       } else if (e.key === "Escape" && open) {
         closePalette();

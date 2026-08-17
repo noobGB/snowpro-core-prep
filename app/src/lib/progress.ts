@@ -55,7 +55,11 @@ export interface ProgressState {
   lastLocation: { route: string; label: string; at: string } | null;
   attempts: Attempt[];
   inProgress: InProgressAttempt | null;
-  flashcards: { seen: string[]; lastIndex: number };
+  /** `grades` is read defensively (`?? {}`) at every call site — `loadFromStorage()`'s merge is
+   *  shallow, so progress saved before this field existed has a `flashcards` object present but
+   *  missing `grades`, not a `flashcards` object absent entirely. Same caveat applies to any future
+   *  field added under `plan`/`setup`/`settings`. */
+  flashcards: { seen: string[]; lastIndex: number; grades: Record<string, "known" | "missed"> };
   plan: { checked: string[] };
   setup: { checked: string[] };
   settings: { theme: "dark" };
@@ -71,7 +75,7 @@ function defaultState(): ProgressState {
     lastLocation: null,
     attempts: [],
     inProgress: null,
-    flashcards: { seen: [], lastIndex: 0 },
+    flashcards: { seen: [], lastIndex: 0, grades: {} },
     plan: { checked: [] },
     setup: { checked: [] },
     settings: { theme: "dark" },

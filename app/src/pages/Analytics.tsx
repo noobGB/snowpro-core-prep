@@ -15,6 +15,7 @@ import { useProgress, type Attempt } from "../lib/progress";
 import { overallReadiness } from "../lib/readiness";
 import { slowestQuestions } from "../lib/timing";
 import type { ContentBundle } from "../lib/content";
+import { renderInline } from "../lib/inlineMarkdown";
 
 const PASS_LINE = 750;
 const PACE_SEC = 69; // 115 min / 100 questions
@@ -190,7 +191,7 @@ function TimingView({ content, slow }: { content: ContentBundle; slow: ReturnTyp
           return (
             <Link key={`${s.questionId}-${s.attemptId}`} to={`/results/${s.attemptId}`} style={{ display: "block" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12, marginBottom: 5 }}>
-                <span style={{ color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.stem}</span>
+                <span className="inline-md" style={{ color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{renderInline(s.stem)}</span>
                 <span style={{ fontFamily: "var(--font-mono)", color: overPace ? "var(--status-warning)" : "var(--text-dim)", flexShrink: 0 }}>
                   {s.timeSec}s · D{domain?.number}
                 </span>

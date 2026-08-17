@@ -4,11 +4,11 @@
  * edge. Meta badges (domain/question/mock counts) come from content.json.
  */
 
-import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useContent } from "../lib/useContent";
-import { openPalette } from "../lib/paletteStore";
-import { SettingsPanel } from "./SettingsPanel";
+import { closePalette, openPalette } from "../lib/paletteStore";
+import { closeSettings, openSettings } from "../lib/settingsStore";
+import { modKeyLabel } from "../lib/platform";
 
 interface NavItem {
   label: string;
@@ -18,7 +18,6 @@ interface NavItem {
 
 export function Sidebar() {
   const { content } = useContent();
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const domainAuthoredCount =
     content?.questions.filter((q) => /Practice_Questions/i.test(q.sourceFile)).length ?? null;
@@ -105,7 +104,10 @@ export function Sidebar() {
       >
         <button
           type="button"
-          onClick={openPalette}
+          onClick={() => {
+            closeSettings();
+            openPalette();
+          }}
           style={{
             flex: 1,
             display: "flex",
@@ -123,11 +125,14 @@ export function Sidebar() {
           }}
         >
           <span>Search</span>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)" }}>⌘K</span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)" }}>{modKeyLabel}</span>
         </button>
         <button
           type="button"
-          onClick={() => setSettingsOpen(true)}
+          onClick={() => {
+            closePalette();
+            openSettings();
+          }}
           style={{
             width: 34,
             height: 34,
@@ -145,7 +150,6 @@ export function Sidebar() {
           ⚙
         </button>
       </div>
-      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </aside>
   );
 }

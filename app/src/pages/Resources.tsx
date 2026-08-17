@@ -4,7 +4,7 @@
  * (the pipeline's resources.ts intentionally emits no structured entries for that prose section,
  * since there's nothing to link) — it's fixed UI copy here, same as the mock pre-start gate's.
  * By-domain entries mostly have `url: null` (the source lists course names, not links) — those
- * render as plain tagged text instead of a link.
+ * render as plain text, never a pill/chip that would visually promise a click they can't deliver.
  */
 
 import { useContent } from "../lib/useContent";
@@ -65,15 +65,18 @@ export function Resources() {
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)" }}>D{domain.number}</span>
                 <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-heading)" }}>{domain.title}</span>
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {resources.map((r) => (
-                  <span
-                    key={r.title}
-                    style={{ fontSize: 12, color: "var(--text-muted)", background: "rgba(255,255,255,.05)", borderRadius: 4, padding: "4px 8px" }}
-                  >
-                    {r.title}
-                  </span>
-                ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {resources.map((r) =>
+                  r.url ? (
+                    <a key={r.title} href={r.url} target="_blank" rel="noreferrer" style={{ fontSize: 13 }}>
+                      {r.title}
+                    </a>
+                  ) : (
+                    <span key={r.title} style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                      {r.title}
+                    </span>
+                  ),
+                )}
               </div>
             </div>
           ),

@@ -11,7 +11,7 @@ import { Link } from "react-router-dom";
 import { useContent } from "../lib/useContent";
 import { useProgress, updateProgress } from "../lib/progress";
 import { overallReadiness } from "../lib/readiness";
-import { defaultExamDate, isoDate, remapPlan } from "../lib/planDates";
+import { daysBetweenIso, defaultExamDate, isoDate, remapPlan } from "../lib/planDates";
 
 function daysBetween(today: Date, exam: Date): number {
   const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -79,9 +79,13 @@ export function Dashboard() {
   const domain1 = content.domains.find((d) => d.number === 1);
   const set1 = content.sets.find((s) => s.id === "set-d1");
   const mockSet = content.sets.find((s) => s.kind === "mock");
-  const planDayOne = content.plan[0];
-  const todayPlan = remapPlan(content.plan, examDate).find((p) => p.displayDate === isoDate(today));
+  const remappedPlan = remapPlan(content.plan, examDate);
+  const todayIso = isoDate(today);
+  const todayPlan = remappedPlan.find((p) => p.displayDate === todayIso);
   const doneCount = todayPlan?.tasks.filter((t) => progress.plan.checked.includes(t.id)).length ?? 0;
+  const planStartsIn = remappedPlan.length > 0 && todayIso < remappedPlan[0]!.displayDate
+    ? daysBetweenIso(todayIso, remappedPlan[0]!.displayDate)
+    : null;
 
   const hasData = progress.attempts.length > 0;
   const resumeSet = progress.inProgress
@@ -96,7 +100,15 @@ export function Dashboard() {
         <div>
           <div style={kicker}>COF-C03</div>
           <h1 style={{ margin: 0, fontSize: 32, fontWeight: 500, letterSpacing: "-0.02em", color: "var(--text-heading)", lineHeight: 1.1 }}>
-            {!hasData && days <= 0 ? "Start here" : hasData ? "Three days out" : "Getting ready"}
+            {!hasData && days <= 0
+              ? "Start here"
+              : hasData
+                ? days > 0
+                  ? `${days} ${days === 1 ? "day" : "days"} out`
+                  : days === 0
+                    ? "Exam day"
+                    : "Exam passed"
+                : "Getting ready"}
           </h1>
         </div>
         <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text-dim)", whiteSpace: "nowrap" }}>
@@ -243,18 +255,15 @@ export function Dashboard() {
           <div style={{ fontSize: 20, fontWeight: 500, color: "var(--text-heading)", letterSpacing: "-0.012em", marginBottom: 8 }}>
             Start with day one of the plan
           </div>
-          <p style={{ fontSize: 14, lineHeight: 1.65, color: "var(--text-muted)", margin: "0 0 18px", maxWidth: "38em" }}>
+          <p style={{ fontSize: 14, lineHeight: 1.65, color: "var(--text-muted)", margin: "0 0 14px", maxWidth: "38em" }}>
             Readiness appears here once you have taken something. Until then the plan is the better
             guide{domain1 ? ` — Domain 1 is ${Math.round(domain1.weight * 100)}% of the exam and the natural place to start.` : "."}
+            {" "}Today's tasks are in the card below
+            {planStartsIn !== null && ` (the plan itself starts in ${planStartsIn} ${planStartsIn === 1 ? "day" : "days"})`}.
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: "38em" }}>
-            {planDayOne?.tasks.map((t, i) => (
-              <div key={t.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", border: "1px solid var(--hairline)", borderRadius: 6, fontSize: 14, color: "var(--text-body)" }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", paddingTop: 2 }}>{String(i + 1).padStart(2, "0")}</span>
-                <span>{t.text}</span>
-              </div>
-            ))}
-          </div>
+          <Link to="/plan" style={{ fontSize: 13, color: "var(--accent)" }}>
+            View the full plan →
+          </Link>
         </div>
       )}
 
@@ -267,13 +276,24 @@ export function Dashboard() {
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {!todayPlan && <div style={{ fontSize: 13, color: "var(--text-dim)" }}>No plan day matches today's date.</div>}
+            {!todayPlan && (
+              <div style={{ fontSize: 13, color: "var(--text-dim)" }}>
+                {planStartsIn !== null
+                  ? `Your plan starts in ${planStartsIn} ${planStartsIn === 1 ? "day" : "days"}. `
+                  : "The plan doesn't cover today. "}
+                <Link to="/plan" style={{ color: "var(--accent)" }}>
+                  {planStartsIn !== null ? "Preview it" : "View the full plan"} →
+                </Link>
+              </div>
+            )}
             {todayPlan?.tasks.map((t) => {
               const on = progress.plan.checked.includes(t.id);
               return (
                 <button
                   key={t.id}
                   type="button"
+                  role="checkbox"
+                  aria-checked={on}
                   onClick={() => toggleTask(t.id)}
                   style={{ display: "flex", gap: 11, alignItems: "flex-start", textAlign: "left", width: "100%", minHeight: 44, padding: "11px 12px", border: "1px solid var(--hairline)", borderRadius: 6, background: "transparent", cursor: "pointer" }}
                 >

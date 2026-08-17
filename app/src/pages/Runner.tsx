@@ -1,6 +1,10 @@
 /**
- * Question runner — shared by practice and mock (spec §6.4). All questions on one scrolling
- * page, answers withheld until submit, a single sticky bar carrying progress/timer/submit.
+ * Question runner — shared by practice and mock (spec §6.4). One question per screen with
+ * Prev/Next and a jump palette (Pearson-VUE-style: answered/flagged/current/unanswered), not a
+ * long scroll — pacing is itself part of what SnowPro Core tests, so the runner shouldn't train
+ * scanning/scrolling behavior instead of one-decision-at-a-time. Answers withheld until submit,
+ * a single sticky bar carrying progress/timer/submit. "Flag for review" is session-only UI state
+ * (not persisted to progress) — a scratch aid, not part of the scored record.
  *
  * A mock set gets a pre-start confirmation gate (states the rules before the clock begins) —
  * not the full Mock Exams list screen (that's build-order step 7), just the runner's own entry
@@ -16,6 +20,7 @@ import { useContent } from "../lib/useContent";
 import type { Question, QuestionSet } from "../lib/content";
 import { byDomainBreakdown, questionCredit, scaledScore } from "../lib/scoring";
 import { getProgress, updateProgress, type Attempt, type AttemptStatus } from "../lib/progress";
+import { renderInline } from "../lib/inlineMarkdown";
 
 /** Practice.tsx's "Retry these" action navigates here with the missed questions' ids in router
  *  state, rather than one of content.json's static sets — reuses every bit of the runner's
@@ -65,6 +70,8 @@ export function Runner() {
   const [, forceTick] = useState(0);
   const [mockStarted, setMockStarted] = useState(false);
   const [confirmingSubmit, setConfirmingSubmit] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [flagged, setFlagged] = useState<Set<string>>(new Set());
 
   const setAnswers = useCallback((updater: (prev: AnswersMap) => AnswersMap) => {
     setAnswersState((prev) => {
@@ -131,10 +138,16 @@ export function Runner() {
       for (const [qid, a] of Object.entries(existing.answers)) seeded[qid] = a.picked;
       answersRef.current = seeded;
       setAnswersState(seeded);
+      // Resume where you left off — jump to the first still-unanswered question rather than
+      // dropping back at question 1, since the point of resuming is to keep going, not restart.
+      const firstUnanswered = questions.findIndex((q) => (seeded[q.id]?.length ?? 0) === 0);
+      setCurrentIndex(firstUnanswered === -1 ? 0 : firstUnanswered);
       if (set.kind === "mock") setMockStarted(true);
       return;
     }
 
+    setCurrentIndex(0);
+    setFlagged(new Set());
     if (set.kind !== "mock") {
       const id = newId();
       const startedAt = new Date().toISOString();
@@ -212,6 +225,23 @@ export function Runner() {
     );
   };
 
+  // Arrow-key navigation, matching one-decision-at-a-time exam software conventions. Skipped
+  // while the mock's pre-start gate is showing (currentIndex isn't meaningful yet), and skipped
+  // when focus is in a text/date input (the ⌘K palette or Settings' exam-date field are reachable
+  // from every route, this one included — their own arrow-key handling must win, not this).
+  useEffect(() => {
+    if (set?.kind === "mock" && !mockStarted) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      if (e.key === "ArrowRight") setCurrentIndex((i) => Math.min(i + 1, questions.length - 1));
+      else if (e.key === "ArrowLeft") setCurrentIndex((i) => Math.max(i - 1, 0));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [set?.kind, mockStarted, questions.length]);
+
   if (error) return <div style={{ color: "var(--status-incorrect)" }}>Couldn't load content: {error.message}</div>;
   if (!content) return <div style={{ color: "var(--text-dim)" }}>Loading…</div>;
   if (!set) {
@@ -262,6 +292,9 @@ export function Runner() {
   const unansweredCount = questions.length - answeredCount;
   const pct = questions.length > 0 ? (answeredCount / questions.length) * 100 : 0;
   const showWarning = set.kind === "mock" && remainingSec <= 600 && remainingSec > 0;
+  const currentQuestion = questions[currentIndex];
+  const isFirst = currentIndex === 0;
+  const isLast = currentIndex === questions.length - 1;
 
   const doSubmit = () => {
     if (unansweredCount > 0 && !confirmingSubmit) {
@@ -269,6 +302,15 @@ export function Runner() {
       return;
     }
     finalize("complete");
+  };
+
+  const toggleFlag = (questionId: string) => {
+    setFlagged((prev) => {
+      const next = new Set(prev);
+      if (next.has(questionId)) next.delete(questionId);
+      else next.add(questionId);
+      return next;
+    });
   };
 
   return (
@@ -288,7 +330,7 @@ export function Runner() {
         }}
       >
         <div style={{ fontSize: 13, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
-          {answeredCount}/{questions.length} answered
+          Q{currentIndex + 1}/{questions.length} · {answeredCount} answered
         </div>
         <div style={{ flex: 1, height: 4, background: "var(--hairline)", borderRadius: 2, overflow: "hidden" }}>
           <div style={{ height: "100%", background: "var(--text-body)", width: `${pct}%`, borderRadius: 2 }} />
@@ -344,11 +386,120 @@ export function Runner() {
         </div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 760 }}>
-        {questions.map((q, i) => (
-          <QuestionCard key={q.id} index={i} question={q} picked={answers[q.id] ?? []} onToggle={(key) => toggleOption(q, key)} />
-        ))}
+      {currentQuestion && (
+        <QuestionCard
+          index={currentIndex}
+          question={currentQuestion}
+          picked={answers[currentQuestion.id] ?? []}
+          onToggle={(key) => toggleOption(currentQuestion, key)}
+        />
+      )}
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 16, maxWidth: 760 }}>
+        <button
+          type="button"
+          onClick={() => setCurrentIndex((i) => Math.max(i - 1, 0))}
+          disabled={isFirst}
+          style={{
+            background: "transparent",
+            color: isFirst ? "var(--text-dim)" : "var(--text-body)",
+            border: "1px solid var(--hairline)",
+            borderRadius: 6,
+            padding: "9px 16px",
+            minHeight: 40,
+            fontSize: 13,
+            cursor: isFirst ? "not-allowed" : "pointer",
+          }}
+        >
+          ← Previous
+        </button>
+        {currentQuestion && (
+          <button
+            type="button"
+            onClick={() => toggleFlag(currentQuestion.id)}
+            style={{
+              background: flagged.has(currentQuestion.id) ? "rgba(201,187,74,.1)" : "transparent",
+              color: flagged.has(currentQuestion.id) ? "var(--status-warning)" : "var(--text-muted)",
+              border: `1px solid ${flagged.has(currentQuestion.id) ? "var(--status-warning)" : "var(--hairline)"}`,
+              borderRadius: 6,
+              padding: "9px 16px",
+              minHeight: 40,
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            {flagged.has(currentQuestion.id) ? "Flagged for review" : "Flag for review"}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setCurrentIndex((i) => Math.min(i + 1, questions.length - 1))}
+          disabled={isLast}
+          style={{
+            background: "transparent",
+            color: isLast ? "var(--text-dim)" : "var(--text-body)",
+            border: "1px solid var(--hairline)",
+            borderRadius: 6,
+            padding: "9px 16px",
+            minHeight: 40,
+            fontSize: 13,
+            cursor: isLast ? "not-allowed" : "pointer",
+          }}
+        >
+          Next →
+        </button>
       </div>
+
+      <div style={{ marginTop: 28, maxWidth: 760 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 10 }}>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-dim)" }}>
+            Jump to
+          </div>
+          <Legend swatch="var(--raised)" border="var(--hairline-strong)" label="answered" />
+          <Legend swatch="transparent" border="var(--status-warning)" label="flagged" />
+          <Legend swatch="transparent" border="var(--accent)" label="current" />
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {questions.map((q, i) => {
+            const isAnswered = (answers[q.id]?.length ?? 0) > 0;
+            const isFlagged = flagged.has(q.id);
+            const isCurrent = i === currentIndex;
+            return (
+              <button
+                key={q.id}
+                type="button"
+                onClick={() => setCurrentIndex(i)}
+                aria-current={isCurrent ? "true" : undefined}
+                aria-label={`Question ${i + 1}${isAnswered ? ", answered" : ", unanswered"}${isFlagged ? ", flagged" : ""}`}
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 4,
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 11,
+                  cursor: "pointer",
+                  border: `1px solid ${isFlagged ? "var(--status-warning)" : "var(--hairline-strong)"}`,
+                  outline: isCurrent ? "2px solid var(--accent)" : "none",
+                  outlineOffset: 1,
+                  background: isAnswered ? "var(--raised)" : "transparent",
+                  color: isAnswered ? "var(--text-heading)" : "var(--text-dim)",
+                }}
+              >
+                {i + 1}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Legend({ swatch, border, label }: { swatch: string; border: string; label: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--text-dim)" }}>
+      <span style={{ width: 10, height: 10, borderRadius: 3, background: swatch, border: `1px solid ${border}` }} />
+      {label}
     </div>
   );
 }
@@ -375,14 +526,18 @@ function QuestionCard({
           </span>
         )}
       </div>
-      <div style={{ fontSize: 16, lineHeight: 1.6, color: "var(--text-body)", marginBottom: 16 }}>{question.stem}</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div id={`stem-${question.id}`} className="inline-md" style={{ fontSize: 16, lineHeight: 1.6, color: "var(--text-body)", marginBottom: 16 }}>
+        {renderInline(question.stem)}
+      </div>
+      <div role={isMulti ? "group" : "radiogroup"} aria-labelledby={`stem-${question.id}`} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {question.options.map((opt) => {
           const selected = picked.includes(opt.key);
           return (
             <button
               key={opt.key}
               type="button"
+              role={isMulti ? "checkbox" : "radio"}
+              aria-checked={selected}
               onClick={() => onToggle(opt.key)}
               style={{
                 display: "flex",
@@ -409,9 +564,9 @@ function QuestionCard({
                   background: selected ? "var(--accent)" : "transparent",
                 }}
               />
-              <span style={{ fontSize: 14, lineHeight: 1.5, color: "var(--text-body)" }}>
+              <span className="inline-md" style={{ fontSize: 14, lineHeight: 1.5, color: "var(--text-body)" }}>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", marginRight: 8 }}>{opt.key}</span>
-                {opt.text}
+                {renderInline(opt.text)}
               </span>
             </button>
           );

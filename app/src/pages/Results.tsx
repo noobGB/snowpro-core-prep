@@ -14,6 +14,7 @@ import { Link, useParams } from "react-router-dom";
 import { useContent } from "../lib/useContent";
 import { useProgress, type Attempt } from "../lib/progress";
 import type { Question } from "../lib/content";
+import { renderInline } from "../lib/inlineMarkdown";
 
 const PASS_LINE = 750;
 
@@ -159,7 +160,7 @@ function ReviewCard({ question, attempt, bucket }: { question: Question; attempt
 
   return (
     <div style={{ background: "var(--card)", border: `1px solid ${bucket === "incorrect" ? "var(--status-incorrect)" : "var(--hairline)"}`, borderRadius: "var(--radius-card)", padding: 20 }}>
-      <div style={{ fontSize: 15, lineHeight: 1.6, color: "var(--text-body)", marginBottom: 14 }}>{question.stem}</div>
+      <div className="inline-md" style={{ fontSize: 15, lineHeight: 1.6, color: "var(--text-body)", marginBottom: 14 }}>{renderInline(question.stem)}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
         {question.options.map((opt) => {
           const isCorrect = question.correct.includes(opt.key);
@@ -191,9 +192,9 @@ function ReviewCard({ question, attempt, bucket }: { question: Question; attempt
                 color: "var(--text-body)",
               }}
             >
-              <span>
+              <span className="inline-md">
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", marginRight: 8 }}>{opt.key}</span>
-                {opt.text}
+                {renderInline(opt.text)}
               </span>
               {marker && (
                 <span
@@ -211,7 +212,7 @@ function ReviewCard({ question, attempt, bucket }: { question: Question; attempt
           );
         })}
       </div>
-      <p style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text-muted)", margin: "0 0 10px" }}>{question.explanation}</p>
+      <p className="inline-md" style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text-muted)", margin: "0 0 10px" }}>{renderInline(question.explanation)}</p>
       <Link to={`/notes/${question.domainId}`} style={{ fontSize: 12 }}>
         Read the note →
       </Link>

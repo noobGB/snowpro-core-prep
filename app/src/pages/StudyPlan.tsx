@@ -88,10 +88,21 @@ export function StudyPlan() {
                 {day.tasks.map((t) => {
                   const on = progress.plan.checked.includes(t.id);
                   return (
-                    <div key={t.id} style={{ display: "flex", gap: 11, alignItems: "flex-start", padding: "9px 4px" }}>
-                      <button
-                        type="button"
-                        onClick={() => toggleTask(t.id)}
+                    <div
+                      key={t.id}
+                      role="checkbox"
+                      aria-checked={on}
+                      tabIndex={0}
+                      onClick={() => toggleTask(t.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggleTask(t.id);
+                        }
+                      }}
+                      style={{ display: "flex", gap: 11, alignItems: "flex-start", padding: "9px 4px", cursor: "pointer" }}
+                    >
+                      <span
                         style={{
                           flex: "0 0 15px",
                           width: 15,
@@ -105,16 +116,15 @@ export function StudyPlan() {
                           justifyContent: "center",
                           fontSize: 10,
                           color: "var(--canvas)",
-                          cursor: "pointer",
                           padding: 0,
                         }}
                       >
                         {on ? "✓" : ""}
-                      </button>
+                      </span>
                       <span style={{ fontSize: 14, lineHeight: 1.5, color: on ? "var(--text-dim)" : "var(--text-body)", textDecoration: on ? "line-through" : "none" }}>
                         {t.text}
                         {t.links.map((link) => (
-                          <Link key={link} to={link} style={{ marginLeft: 8, fontSize: 12 }}>
+                          <Link key={link} to={link} onClick={(e) => e.stopPropagation()} style={{ marginLeft: 8, fontSize: 12 }}>
                             →
                           </Link>
                         ))}
