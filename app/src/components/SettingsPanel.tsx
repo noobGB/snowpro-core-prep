@@ -1,15 +1,19 @@
 /**
- * Settings — spec §6.12: exam date, a light-mode switch (present but stubbed for later), reset
- * all progress behind a typed confirmation, and a read-only content-version line. Mounted once at
- * the App root (see CommandPalette's own doc comment for the same pattern) and driven by
- * settingsStore rather than parent-owned state, so it can coordinate with the ⌘K palette — the
- * two are mutually exclusive full-screen overlays and each closes the other on open.
+ * Settings — a light-mode switch (present but stubbed for later), progress backup/restore, reset
+ * all progress behind a typed confirmation, and a read-only content-version line. Deliberately
+ * does NOT have an exam-date field — that used to live here too, duplicating the Dashboard Exam
+ * card's own date picker for no reason (a bare date input is nearly meaningless without the
+ * days-left countdown right next to it, which only Dashboard has). Removed after a UX pass;
+ * Dashboard is the one place to set it now. Mounted once at the App root (see CommandPalette's
+ * own doc comment for the same pattern) and driven by settingsStore rather than parent-owned
+ * state, so it can coordinate with the ⌘K palette — the two are mutually exclusive full-screen
+ * overlays and each closes the other on open.
  */
 
 import { useEffect, useState } from "react";
 import { useContent } from "../lib/useContent";
-import { getProgress, getStorageBackend, resetProgress, updateProgress, useProgress, type ProgressState } from "../lib/progress";
-import { defaultExamDate, isoDate } from "../lib/planDates";
+import { getProgress, getStorageBackend, resetProgress, updateProgress, type ProgressState } from "../lib/progress";
+import { isoDate } from "../lib/planDates";
 import { closeSettings, useSettingsOpen } from "../lib/settingsStore";
 
 const RESET_PHRASE = "RESET";
@@ -28,7 +32,6 @@ function looksLikeProgressState(value: unknown): value is ProgressState {
 export function SettingsPanel() {
   const open = useSettingsOpen();
   const { content } = useContent();
-  const progress = useProgress();
   const [resetInput, setResetInput] = useState("");
   const [resetDone, setResetDone] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
@@ -65,8 +68,6 @@ export function SettingsPanel() {
 
   if (!open) return null;
 
-  const examDate = progress.examDate ?? (content ? defaultExamDate(content.plan) : isoDate(new Date()));
-
   return (
     <div onClick={closeSettings} style={{ position: "fixed", inset: 0, background: "rgba(5,5,6,.6)", display: "flex", alignItems: "flex-start", justifyContent: "flex-end", padding: 16, zIndex: 60 }}>
       <div
@@ -79,14 +80,6 @@ export function SettingsPanel() {
             ✕
           </button>
         </div>
-
-        <label style={{ display: "block", fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>Exam date</label>
-        <input
-          type="date"
-          value={examDate}
-          onChange={(e) => updateProgress((p) => ({ ...p, examDate: e.target.value }))}
-          style={{ width: "100%", boxSizing: "border-box", background: "var(--card)", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-body)", fontFamily: "var(--font-mono)", fontSize: 12, padding: "7px 10px", minHeight: 36, marginBottom: 18 }}
-        />
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
           <span style={{ fontSize: 13, color: "var(--text-body)" }}>Light mode</span>

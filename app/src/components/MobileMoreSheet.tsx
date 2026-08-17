@@ -3,7 +3,9 @@
  * 4 direct tabs (Home/Notes/Practice/Drill — the highest-frequency, "several times a day"
  * destinations; see MobileBottomNav's own doc comment). Triggered by that bar's "More" tab.
  * Settings has no route of its own — it's a shared modal (settingsStore) — so it's listed here
- * as an action alongside the real page links, giving mobile its only path to it.
+ * as the sheet's first row, above the 5 page links and set off by its own divider: it's an
+ * *action* (opens a panel) not a *destination* (navigates), and putting it first means it's found
+ * in one glance after one tap instead of buried last below 5 other rows.
  */
 
 import { Link, useLocation } from "react-router-dom";
@@ -53,6 +55,16 @@ export function MobileMoreSheet({ onClose }: { onClose: () => void }) {
         <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 4px" }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--hairline-strong)" }} />
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            openSettings();
+          }}
+          style={{ ...rowStyle, width: "100%", background: "transparent", border: "none", borderBottom: "6px solid var(--canvas)", textAlign: "left", cursor: "pointer" }}
+        >
+          Settings
+        </button>
         {ITEMS.map((item) => (
           <Link
             key={item.to}
@@ -67,16 +79,6 @@ export function MobileMoreSheet({ onClose }: { onClose: () => void }) {
             {item.label}
           </Link>
         ))}
-        <button
-          type="button"
-          onClick={() => {
-            onClose();
-            openSettings();
-          }}
-          style={{ ...rowStyle, width: "100%", background: "transparent", border: "none", textAlign: "left", cursor: "pointer" }}
-        >
-          Settings
-        </button>
       </div>
     </div>
   );
