@@ -42,6 +42,79 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
 
 ![Practice runner](.github/screenshot-runner.png)
 
+## Start preparing in minutes
+
+Two ways to use this repo — they're not exclusive, most people end up doing both. The app gives
+you scored, structured practice; Claude Code gives you an open-ended tutor that can explain,
+quiz you conversationally, and write new practice material on demand. Pick based on what you need
+right now.
+
+### Option A — just the app (manual)
+
+The fastest path to a working study tool, no AI assistant involved.
+
+```bash
+git clone <this-repo-url> snowpro-core-prep
+cd snowpro-core-prep
+docker compose build
+docker compose up -d
+```
+
+Open **http://localhost:8080** and:
+
+1. **Settings** (gear icon) → set your real exam date. The countdown and the study plan both
+   remap against it immediately.
+2. **Dashboard** → the "Start" card always points at Domain 1 (the heaviest-weighted domain) —
+   click straight into practice, or open **Study plan** in the sidebar to follow the day-by-day
+   checklist instead.
+3. Come back daily: **Study plan** for today's tasks, **Practice**/**Mock exams** to drill and get
+   scored, **Flashcards** for quick review, **Analytics** to see readiness by domain once you've
+   taken a few.
+
+Full command reference (rebuild-vs-restart, logs, stopping) is in
+[Quick start (Docker)](#quick-start-docker) below.
+
+### Option B — Claude Code (interactive)
+
+Same content, driven conversationally instead of clicked through. Useful for anything the app
+itself can't do: open-ended explanations, being quizzed out loud, generating new practice
+questions targeted at your actual weak spots, or working through the hands-on Snowflake setup log
+with something that can actually run commands alongside you.
+
+```bash
+git clone <this-repo-url> snowpro-core-prep
+cd snowpro-core-prep
+claude   # or open the folder in an editor with the Claude Code extension
+```
+
+This repo ships two `CLAUDE.md` files (root and
+[`SnowPro_Notes_and_Questions/`](SnowPro_Notes_and_Questions/CLAUDE.md)) that brief Claude Code on
+the exam structure, the file formats, and the exact question syntax the second you open the
+folder — no setup prompt needed, just start asking. A few starting points:
+
+```
+Quiz me on Domain 2 (RBAC/governance), one question at a time — don't show me the
+answer until I respond, then explain why I got it right or wrong.
+
+I keep mixing up Time Travel and Fail-safe. Explain the distinction clearly, then
+write 3 new practice questions testing exactly that, in the same format the
+Domain 5 practice file uses, and add them to the file.
+
+Read 06_Practice_Exam_Tracker.md and tell me which domain needs the most attention
+before I sit the exam.
+
+Walk me through 15_Hands_On_Snowflake_Setup_Log.md step by step and help me set up
+my own trial account as we go — pause after each step for me to confirm it worked.
+
+Read 04_Domain4_Performance_Querying_Transformation.md and quiz me on it Socratically
+— ask me to explain a concept before you confirm or correct me, don't just lecture.
+```
+
+Anything Claude Code adds or edits in `SnowPro_Notes_and_Questions/` shows up in the app on the
+next `docker compose restart` (or immediately in `npm run build:content:watch`, see
+[Local development](#local-development-without-docker)) — the two approaches share one source of
+truth, so switching between them costs nothing.
+
 ## Quick start (Docker)
 
 ```bash
