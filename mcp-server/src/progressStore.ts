@@ -68,7 +68,16 @@ function currentMtimeMs(): number | null {
  *  server.ts handling that PUT) with no lock between them. Without this check the incident this
  *  file is built around repeats itself in a different shape: not "the write silently vanished" but
  *  "the write succeeded, then a stale writer's next autosave silently overwrote it a moment later"
- *  — still data loss, still invisible unless something refuses the stale write outright. */
+ *  — still data loss, still invisible unless something refuses the stale write outright.
+ *
+ *  This is optimistic concurrency (a check, then an act), not a hard lock (no flock/O_EXCL) — the
+ *  mtime comparison in writeProgress() and this file's own write both happen as separate, unlocked
+ *  fs calls, so a second writer's own write can in principle land in the microsecond gap between
+ *  them, narrowing the original multi-second-window incident down to a sub-millisecond race rather
+ *  than eliminating it outright. Acceptable for this app's actual write cadence (human/LLM-paced,
+ *  not concurrent high-frequency writers) — but genuinely narrowed, not closed; don't read this
+ *  mechanism as a guarantee if that write pattern ever changes (e.g. multiple concurrent MCP
+ *  clients). */
 export class ProgressConflictError extends Error {
   constructor() {
     super(
@@ -82,6 +91,9 @@ export class ProgressConflictError extends Error {
 /** Always writes the whole object — no partial merges — matching the exact contract
  *  app/src/lib/progress.ts's updateProgress() and pipeline/src/server.ts's PUT route both honor.
  *  Same atomic tmp-file + rename pattern as server.ts:120-124.
+ *
+ *  The mtime check just below is optimistic concurrency, not a hard lock — see
+ *  ProgressConflictError's own doc-comment above for exactly what that does and doesn't guarantee.
  *
  *  `expectedMtimeMs` must be whatever currentProgressMtimeMs() (or a prior readProgress() call
  *  paired with it) returned *before* `next` was computed — pass it through updateProgress() below

@@ -105,8 +105,14 @@ const app = express();
 //     path, no HTTP involved). Without a concurrency check, a browser tab's debounced PUT of its
 //     own (possibly stale) in-memory state can silently overwrite an attempt the MCP server just
 //     wrote a moment earlier, with no error anywhere — a real incident, not a hypothetical one.
-//     ETag/If-Match (mtimeMs as the revision) closes that: GET reports the revision it read at,
-//     PUT must echo it back, and a mismatch means someone else wrote in between. ---
+//     ETag/If-Match (mtimeMs as the revision) narrows that down to a sub-millisecond race instead
+//     of eliminating it: GET reports the revision it read at, PUT must echo it back, and a
+//     mismatch means someone else wrote in between. This is optimistic concurrency (a check, then
+//     an act), not a hard lock — no flock/O_EXCL — so a second writer's own write can in principle
+//     still land in the gap between this route's own mtime check and its write. Acceptable given
+//     this app's actual write cadence (human/LLM-paced, not concurrent high-frequency writers); see
+//     mcp-server/src/progressStore.ts's ProgressConflictError doc-comment for the fuller version of
+//     this same caveat, since both sides of this same protocol should describe it identically. ---
 function currentMtimeMs(): number | null {
   try {
     return statSync(PROGRESS_FILE).mtimeMs;
