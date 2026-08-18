@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
@@ -8,4 +9,9 @@ import path from "node:path";
 export default defineConfig({
   plugins: [react()],
   publicDir: path.resolve(import.meta.dirname, "../content"),
+  test: {
+    // Today's suite only covers pure src/lib/*.ts (no DOM). Switch to "jsdom" (per-file via a
+    // docblock, or globally here) if a future test needs to render a component.
+    environment: "node",
+  },
 });
