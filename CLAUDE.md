@@ -109,6 +109,17 @@ that can't be read at all) throws directly.
   pre-offset one — the frontend (`app/src/lib/planDates.ts`) remaps every day by the delta between
   the plan's own last day and the live exam date, and computes a plan-length-derived default (never
   a hardcoded calendar date) when no exam date is set yet.
+- **`src/parsers/setupLog.ts`** splits `15_Hands_On_Snowflake_Setup_Log.md` into two kinds — `##
+  Setup Steps` (things to actually do, in order) and `## Known Issues & Fixes` (things that went
+  wrong along the way) — so a step's instructions stay a clean checklist instead of mixed with
+  troubleshooting narrative (reworked 2026-08-18 from a single flat list, per direct feedback that
+  the old page read like a log dump). Each entry's only app-visible content is its own
+  `> **Summary:**` blockquote and its commands; the full narrative stays in the file, reachable
+  via a GitHub-slugified `sourceAnchor` deep link — don't add the full body back into `SetupItem`
+  without a real reason, that's the exact thing this rework removed. Ids stay positional
+  (`s-1`, `s-2`, ...), never parsed from the visible "Step N"/"Issue N" text, for the same reason
+  as before: the log is append-only and a future addition could reintroduce numbering drift, but
+  positional ids can't corrupt or collide either way.
 - **`src/assemble/validate.ts`** runs structural cross-reference checks after everything else has
   parsed (every `questionIds` reference resolves, no duplicate ids, a mock set's `domainSplit` is
   independently recomputed from its questions and cross-checked against both the stored value and
@@ -296,34 +307,32 @@ Three GitHub Actions workflows, all repo-wide (not scoped to one package):
   the image's own build-time `chown`), an implicitly-auto-created host directory would come up
   root-owned and fail `server.ts`'s `verifyDataDirWritable()` boot check — a CI-only false negative,
   not a real bug, if that step is ever removed.
-- **`workflows/claude-review.yml`** / **`workflows/claude.yml`** — the Claude Code GitHub Action
-  (`anthropics/claude-code-action@v1`). The first reviews every PR automatically on open/sync,
-  scoped by prompt to this repo's actual risk areas (the progress.json ETag/If-Match contract,
-  drift between the three hand-duplicated packages, missing test coverage) rather than a generic
-  checklist. The second responds to an `@claude` mention in a PR/issue comment or review, closing
-  the review → fix loop — its `claude_args`' `--system-prompt` tells it to follow this file's
-  conventions and keep doc-sync commits separate from code commits, the practice already
-  established in this repo's own history. **`claude-review.yml` does NOT review Dependabot PRs** —
-  the action refuses any bot-authored PR by default, and a brief attempt to allowlist
-  `dependabot[bot]` was deliberately reverted: a real timed run against an actual Dependabot PR
-  (a one-line `actions/setup-node` bump) took 3+ minutes of Claude Code Action execution for a diff
-  the review prompt's own criteria (ETag contract, package drift, test coverage) can't meaningfully
-  apply to — a Dependabot diff never touches application code. `ci.yml`'s typecheck/test/lint is the
-  actually-relevant signal for a dependency bump and already runs on every Dependabot PR for free;
-  use an `@claude` mention on a specific PR (e.g. a risky major-version jump) if a real second
-  opinion is ever wanted, rather than paying for one on every routine bump automatically. Don't
-  re-add `allowed_bots` here without weighing this tradeoff again. Enforced via a job-level
-  `if: github.event.pull_request.user.type != 'Bot'` guard, not just relying on the action's own
-  default bot-refusal — that default *errors* (exit code 1) rather than skipping cleanly, which
-  would otherwise show a red "review: fail" on every single Dependabot PR forever, as pure noise.
-  Both workflows need the
-  `ANTHROPIC_API_KEY` repo secret (Settings → Secrets and variables → Actions) and the Claude
-  GitHub App installed
-  (`https://github.com/apps/claude`) — neither is provisionable by a file change alone. If you ever
-  touch these workflows, re-verify `anthropics/claude-code-action`'s current example files
-  (`examples/claude.yml`, `examples/pr-review-comprehensive.yml` in that repo) before trusting this
-  file's existing YAML — its inputs (`prompt` vs. `direct_prompt`, `claude_args` vs. separate
-  top-level flags) have changed across versions before.
+- **`workflows/claude.yml`** — the Claude Code GitHub Action (`anthropics/claude-code-action@v1`),
+  responding to an `@claude` mention in a PR/issue comment or review — on demand only, never
+  automatically. Its `claude_args`' `--system-prompt` tells it to follow this file's conventions
+  and keep doc-sync commits separate from code commits, the practice already established in this
+  repo's own history. Needs the `ANTHROPIC_API_KEY` repo secret (Settings → Secrets and variables
+  → Actions) and the Claude GitHub App installed (`https://github.com/apps/claude`) — neither is
+  provisionable by a file change alone. If you ever touch this workflow, re-verify
+  `anthropics/claude-code-action`'s current `examples/claude.yml` before trusting this file's
+  existing YAML — its inputs have changed across versions before.
+  **There used to also be a `workflows/claude-review.yml`** that ran this same action
+  automatically on every PR open/sync — removed 2026-08-18 on cost grounds: real spend (~$4 across
+  a handful of PRs, some genuinely substantive diffs, not even the Dependabot case already ruled
+  out below) made "on every PR, whether wanted or not" not worth it for a low-traffic personal
+  repo, even though the automatic reviews it ran were real and substantive — one caught a genuine
+  bug (positional setup-log ids breaking under reordering) this session. If you want that
+  capability back, an `@claude review this PR` comment gets the identical review on demand,
+  without paying for one on every routine PR automatically — same reasoning as the Dependabot
+  decision below, just extended to human-authored PRs too once real cost data came in. **Before
+  re-adding automatic per-PR review, re-derive whether the cost is worth it from current pricing
+  and actual PR volume — don't just restore the old workflow file from git history unexamined.**
+  The Dependabot-specific question this raised at the time (should the automatic version review
+  bot-authored PRs at all) is now moot along with the rest of `claude-review.yml`, but the
+  underlying lesson generalizes and is still live for `claude.yml`: `git show
+  eafc895..HEAD -- .github/workflows/claude-review.yml`'s history has the full "allowlist added,
+  then reverted, then the whole workflow removed" arc if useful context for a similar decision on
+  any future automatic-trigger workflow in this repo.
 - **`dependabot.yml`** — weekly (Monday) dependency PRs for each of the three npm packages plus
   the workflow files themselves, with minor/patch bumps grouped per package to keep PR volume down
   on a low-traffic repo.

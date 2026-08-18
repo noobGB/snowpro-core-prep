@@ -7,9 +7,13 @@ one has a specific second purpose: **seed material for the possible future open-
 — a Docker-based frontend that helps anyone set up this same environment to study for SnowPro
 Core. See memory `project_snowpro_study_platform_idea.md` for that idea's status (not started).
 
-Append new steps here in order as we go, don't rewrite history — this is meant to read like an
-actual setup journey, mistakes and all, since that's exactly what a future onboarding flow needs
-to anticipate.
+Append new steps/issues here in order as we go, don't rewrite history — this is meant to read like
+an actual setup journey, mistakes and all, since that's exactly what a future onboarding flow
+needs to anticipate. Two sections: **Setup Steps** are the actions to actually perform, in order;
+**Known Issues & Fixes** are things that went wrong along the way, told separately so a step's own
+instructions stay a clean, linear checklist rather than mixed with troubleshooting. Every entry
+opens with a one-line `> **Summary:**` — the app's Setup page shows only that plus the essential
+command(s); the full narrative below it is for whoever wants the complete story.
 
 ## Status
 
@@ -29,7 +33,12 @@ to anticipate.
       issue. MCP setup is complete and correct; tool *calls* just can't succeed on this account
       tier. Use the CLI (`claude_sandbox`) for all hands-on work until/unless this changes.
 
-## Step 1 — Check for an existing Snowflake CLI install, don't assume
+## Setup Steps
+
+### Step 1 — Check for an existing Snowflake CLI install, don't assume
+
+> **Summary:** Run `snow --version` and `snow connection list` before assuming a clean slate —
+> this machine had a pre-existing CLI and a stale connection from an earlier trial.
 
 Ran `snow --version` before doing anything else and found `snow` already installed
 (v3.10.0) — worth checking, since a stale existing install is easy to miss. Also checked for an
@@ -37,7 +46,12 @@ existing connection (`snow connection list`) and found one already configured fr
 trial signup (different account than the one we ended up using — worth watching for on a machine
 that's been used for more than one trial).
 
-## Step 2 — Verify the installed version against latest, don't trust an existing install
+### Step 2 — Verify the installed version against latest, don't trust an existing install
+
+> **Summary:** Check the installed version against the current release before relying on it —
+> this install was 14 minor versions behind. Reinstall via Snowflake's own installer (not `pip`)
+> if it's stale, and confirm the CLI's actual config-file path with `snow --info` rather than
+> trusting the docs.
 
 Checked PyPI/GitHub for the current release and found the installed 3.10.0 was **14 minor
 versions behind** the actual latest (3.24.1, released one week earlier). This is now a standing
@@ -58,10 +72,13 @@ Also worth noting: the CLI's config file doesn't live where Snowflake's own docs
 cross-platform default (`~/.snowflake/connections.toml`) — on this machine it was actually at
 `C:\Users\<YOUR_USERNAME>\AppData\Local\snowflake\config.toml`. Found via `snow --info`'s
 `default_config_file_path` field, not by trusting the docs-stated path. General lesson that
-turned out to matter a lot later (see Step 7b): always check `snow --info` for the CLI's actual
-current config path rather than assuming it matches documentation.
+turned out to matter a lot later (see Issue 1 in Known Issues & Fixes): always check `snow --info`
+for the CLI's actual current config path rather than assuming it matches documentation.
 
-## Step 3 — Derive connection parameters from the trial account's URL
+### Step 3 — Derive connection parameters from the trial account's URL
+
+> **Summary:** The trial account's URL (`<org>-<account>.snowflakecomputing.com`) directly gives
+> the account identifier to use everywhere — CLI, connector, MCP config.
 
 Snowflake gave a dedicated account URL on trial signup:
 `https://<YOUR_ACCOUNT_IDENTIFIER>.snowflakecomputing.com`. This URL format (`<org>-<account>.
@@ -71,7 +88,11 @@ config) is exactly `<YOUR_ACCOUNT_IDENTIFIER>`, taken straight from the URL. (Th
 region/cloud directly in the hostname instead — that's the legacy locator style, not what a new
 trial account uses.)
 
-## Step 4 — Walk through `snow connection add` (interactive wizard)
+### Step 4 — Walk through `snow connection add` (interactive wizard)
+
+> **Summary:** Run the interactive wizard once to create a bootstrap connection with
+> `ACCOUNTADMIN`/`COMPUTE_WH` — the only role/warehouse guaranteed to exist on a brand-new trial
+> account.
 
 Ran `snow connection add` and answered each prompt as follows, with reasoning:
 
@@ -91,7 +112,10 @@ Ran `snow connection add` and answered each prompt as follows, with reasoning:
 | Workload identity provider | left blank | For Workload Identity Federation — only applies when the CLI runs *inside* a recognized cloud workload (AWS/Azure/GCP/GitHub Actions) that can present its own identity token. A local Windows machine doesn't qualify. |
 | Private key file | left blank | Only used when authenticator is `snowflake_jwt` (key-pair auth) — not this bootstrap connection. |
 
-## Step 5 — Test the connection
+### Step 5 — Test the connection
+
+> **Summary:** `snow connection test -c <name>` confirms end-to-end connectivity. Always pass
+> `-c` explicitly once more than one connection exists.
 
 `snow connection test -c snowpro_trial` returned `Status: OK`, confirming end-to-end connectivity
 (host `<YOUR_ACCOUNT_IDENTIFIER>.snowflakecomputing.com`, role `ACCOUNTADMIN`, warehouse `COMPUTE_WH`,
@@ -102,9 +126,13 @@ Two non-blocking things surfaced, worth tracking for a future onboarding flow to
   configured` — expected once more than one named connection exists; either always pass `-c`
   explicitly, or set one connection as default with `snow connection set-default`.
 - A `UserWarning: Encoding mismatch detected` appeared on every `snow` invocation on this machine
-  (suggested fix: `snow helpers detect-encoding`) — didn't block anything, not yet root-caused.
+  (suggested fix: `snow helpers detect-encoding`) — didn't block anything; root-caused and fixed
+  in Issue 2 (Known Issues & Fixes).
 
-## Step 6 — Provision a scoped sandbox (least-privilege, not `ACCOUNTADMIN`)
+### Step 6 — Provision a scoped sandbox (least-privilege, not `ACCOUNTADMIN`)
+
+> **Summary:** Using the bootstrap connection once, create a dedicated role/warehouse/database so
+> day-to-day work never runs as `ACCOUNTADMIN`.
 
 Using the bootstrap connection once, created a dedicated role/warehouse/database so day-to-day
 work never runs as `ACCOUNTADMIN`:
@@ -143,9 +171,14 @@ file calls for) but has zero reach into anything else in the account. This is th
 least-privilege pattern taught in `02_Domain2_Account_Mgmt_and_Governance.md` — worth noting this
 setup is itself a live example of the exam content, not just infrastructure incidental to it.
 
-## Step 7 — Key-pair authentication
+### Step 7 — Key-pair authentication
 
-### 7a. Generate the key pair
+> **Summary:** Replace the bootstrap password connection with key-pair auth for day-to-day use.
+
+#### 7a. Generate the key pair
+
+> **Summary:** Generate an unencrypted RSA key pair via `openssl` (Git Bash on Windows) and lock
+> down the private key file's permissions.
 
 No `openssl` on the plain Windows PowerShell PATH, but Git Bash bundles its own
 (`openssl 3.2.3`) — used that instead of installing anything new:
@@ -169,7 +202,232 @@ icacls "$env:USERPROFILE\.snowflake\keys\claude_sandbox_rsa_key.p8" /grant:r "$(
 (For a production/real-work setup rather than a trial sandbox, encrypt the private key with a
 passphrase and use a proper secrets manager instead of relying on file ACLs alone.)
 
-### 7b. ⚠️ Gotcha: creating `~/.snowflake/keys/` silently broke the existing connection
+**A real gotcha hit right here**: creating this `~/.snowflake/keys/` folder silently broke the
+existing connection — see Issue 1 in Known Issues & Fixes before you hit the same thing.
+
+#### 7b. Register the public key on the Snowflake user
+
+> **Summary:** Register the public key with `ALTER USER ... SET RSA_PUBLIC_KEY`, and
+> independently verify the fingerprint matches rather than trusting Snowflake's report alone.
+
+```sql
+ALTER USER <YOUR_USERNAME> SET RSA_PUBLIC_KEY='<public key body, header/footer and newlines stripped>';
+```
+
+Extracting the key body: `grep -v -- "-----" claude_sandbox_rsa_key.pub | tr -d '\n'`. Ran via
+the recovered `snowpro_trial` connection (see Issue 1). Confirmed via `DESC USER <YOUR_USERNAME>`:
+`HAS_KEYPAIR: true`, `RSA_PUBLIC_KEY_FP: SHA256:<YOUR_KEY_FINGERPRINT>`.
+
+**Verified independently rather than just trusting Snowflake's report** — recomputed the same
+fingerprint locally from the public key file and confirmed an exact match:
+
+```bash
+openssl rsa -pubin -in claude_sandbox_rsa_key.pub -outform DER | openssl dgst -sha256 -binary | openssl enc -base64
+# → <YOUR_KEY_FINGERPRINT>  (matches Snowflake's report exactly)
+```
+
+#### 7c. Create the scoped, key-pair connection (non-interactive this time)
+
+> **Summary:** Create the final `claude_sandbox` connection non-interactively via flags, now
+> that all values are known — this becomes the connection for all routine work going forward.
+
+`snow connection add` supports full non-interactive creation via flags (`--no-interactive`) —
+faster and more scriptable than the interactive wizard from Step 4, now that all the values are
+already known:
+
+```powershell
+snow connection add `
+  --connection-name claude_sandbox `
+  --account <YOUR_ACCOUNT_IDENTIFIER> `
+  --user <YOUR_USERNAME> `
+  --role CLAUDE_SANDBOX `
+  --warehouse CLAUDE_SANDBOX_WH `
+  --database CLAUDE_SANDBOX `
+  --schema PUBLIC `
+  --authenticator SNOWFLAKE_JWT `
+  --private-key "C:\Users\<YOUR_USERNAME>\.snowflake\keys\claude_sandbox_rsa_key.p8" `
+  --no-interactive
+```
+
+`snow connection test -c claude_sandbox` → `Status: OK`, zero password prompt anywhere in the
+flow. Functional test (create table → insert → select → drop, all via `claude_sandbox`) passed —
+confirms the role's actual privileges work, not just that authentication succeeds.
+
+**`claude_sandbox` is now the connection to use for all routine work.** `snowpro_trial` should
+only be reached again (via `--config-file`) for genuine account-admin tasks.
+
+### Step 8 — Cleanup: remove the plaintext-password bootstrap connection
+
+> **Summary:** Once the key-pair connection works, remove the bootstrap connection's plaintext
+> password from disk via `snow connection remove` rather than leaving it as a needless secret.
+
+Once `claude_sandbox` was confirmed working, the `snowpro_trial` connection (still holding a
+plaintext password in the old, now-orphaned config file) served no further purpose and was a
+needless secret sitting on disk. Removed via the CLI's own command rather than hand-editing TOML:
+
+```powershell
+snow --config-file "C:\Users\<YOUR_USERNAME>\AppData\Local\snowflake\config.toml" connection remove snowpro_trial
+```
+
+Note: `connection remove` takes the connection name as a **positional argument**, not a `-c`
+flag (unlike `sql`/`test`, which do use `-c`) — `snow connection remove --help` if unsure.
+Confirmed removed by reading the file directly afterward: `snowpro_trial`'s whole block, password
+included, was gone; the untouched `<STALE_ACCOUNT_IDENTIFIER>` connection (never had a stored password) was
+initially left alone, since removing it wasn't part of the original request.
+
+**Follow-up**: `<STALE_ACCOUNT_IDENTIFIER>` turned out to predate this whole session — it was already
+present the very first time `snow connection list` was run, before any setup work started, under
+an older-style account identifier (no hyphenated org prefix, unlike the current
+`<YOUR_ACCOUNT_IDENTIFIER>` trial). Confirmed it was stale/no longer relevant, so removed it the
+same way:
+
+```powershell
+snow --config-file "C:\Users\<YOUR_USERNAME>\AppData\Local\snowflake\config.toml" connection remove <STALE_ACCOUNT_IDENTIFIER>
+```
+
+The old config file now contains only its `[cli.logs]` section — no connections left at all.
+(The encoding-mismatch warning briefly reappeared during this command, since the Issue 2 fix
+lives only in the new canonical config file, not this old one — expected, and moot now that the
+old file has nothing left to connect with.)
+
+### Step 9 — MCP server: architecture correction
+
+> **Summary:** The Snowflake MCP integration is a **Snowflake-hosted server object** created via
+> SQL, reachable over HTTPS — not a locally-spawned process. Authentication is OAuth or a
+> Programmatic Access Token, not the CLI's key-pair/password auth.
+
+Initial research (during the CLI setup work) pointed at `Snowflake-Labs/mcp`, a locally-run
+server installed via `uvx`, authenticating with the same connector-based auth as the CLI
+(key-pair, password, etc.) — a local stdio process Claude Code/Desktop spawns itself.
+
+**That entire model is now deprecated.** Re-verified directly before installing anything (good
+thing — the first research pass was already stale). The current official mechanism is a
+**Snowflake-hosted MCP server**: a first-class object created *inside* the Snowflake account via
+SQL (`CREATE MCP SERVER`), exposed at an HTTPS URL under the account's own domain, which an MCP
+client connects to **remotely** rather than spawning locally. Authentication is OAuth by default
+(interactive browser consent) or a **Programmatic Access Token (PAT)** for non-interactive use —
+not the connector auth (key-pair/password) the CLI uses. The `claude_sandbox` key-pair connection
+doesn't carry over to this layer; it was built for a different auth handshake. Tools execute under
+normal Snowflake RBAC on the backend regardless.
+
+### Step 10 — Create the MCP server object
+
+> **Summary:** Create the MCP server object with `CREATE MCP SERVER ... FROM SPECIFICATION`,
+> starting with just the `SYSTEM_EXECUTE_SQL` tool — the only tool type needing zero prerequisite
+> Snowflake objects.
+
+Full tool-spec syntax (from Snowflake's own getting-started guide) supports five tool types —
+`SYSTEM_EXECUTE_SQL`, `CORTEX_ANALYST_MESSAGE`, `CORTEX_SEARCH_SERVICE_QUERY`,
+`CORTEX_AGENT_RUN`, and `GENERIC` (wraps a stored procedure). Only `SYSTEM_EXECUTE_SQL` needs
+zero prerequisite setup — the others each need a real Snowflake object to exist first (a semantic
+view, a Cortex Search Service, a Cortex Agent, or a stored procedure respectively). Started
+minimal, deliberately:
+
+```sql
+CREATE OR REPLACE MCP SERVER claude_sandbox_mcp FROM SPECIFICATION
+$$
+tools:
+  - name: "SQL_Execution_Tool"
+    type: "SYSTEM_EXECUTE_SQL"
+    description: "Executes SQL against the connected Snowflake database."
+    title: "SQL Execution Tool"
+$$;
+```
+
+Ran via `snow sql -c claude_sandbox -f create_mcp_server.sql` (had to write it to a file — the
+`$$...$$` YAML-in-SQL delimiter plus embedded quotes/newlines made inline `-q` escaping in
+PowerShell unreliable; same lesson as every other multi-statement script this session).
+
+**Worked directly with the least-privilege `claude_sandbox` connection — no elevated/ACCOUNTADMIN
+access needed.** `CREATE MCP SERVER` follows the same ownership model as tables/views: since
+`CLAUDE_SANDBOX` already owns its own database/schema, it could create the object there without
+any extra grant. Confirmed via `SHOW MCP SERVERS` (owner: `CLAUDE_SANDBOX`) and
+`SHOW GRANTS ON MCP SERVER claude_sandbox_mcp` (shows `OWNERSHIP` already held by the role that
+created it — no separate `GRANT USAGE` needed for the owner; that would only matter if a
+*different* role needed access to this same server later). Minor naming detail: Snowflake's
+internal object-type label for this is `CORTEX_AGENT_SERVER`, not literally "MCP SERVER" — shows
+up that way in `granted_on`.
+
+### Step 11 — Programmatic Access Token
+
+> **Summary:** Generate a role-restricted PAT (`ALTER USER ... ADD PROGRAMMATIC ACCESS TOKEN`)
+> by hand, not scripted — the token value is shown exactly once.
+
+SQL path confirmed to exist (no need for the Snowsight UI, though that works too):
+
+```sql
+ALTER USER <YOUR_USERNAME> ADD PROGRAMMATIC ACCESS TOKEN claude_mcp_token
+  ROLE_RESTRICTION = 'CLAUDE_SANDBOX'
+  DAYS_TO_EXPIRY = 90
+  COMMENT = 'Claude Code MCP access, sandbox-scoped';
+```
+
+`ROLE_RESTRICTION` hard-locks the token to only ever act as `CLAUDE_SANDBOX`, regardless of what
+else the underlying user account can do. **Deliberately run by hand, not scripted** —
+the token value is shown exactly once, in the SQL result at creation time, never retrievable
+again, and having it pass through an AI assistant's tool output would put it in a persisted
+transcript unnecessarily. Same reasoning applied to the private key and passwords throughout this
+session. Gotcha worth remembering: a PAT cannot be modified/rotated/revoked in a session that
+used that same PAT to authenticate — rotation has to go through a different auth method (e.g. the
+key-pair `claude_sandbox` connection).
+
+### Step 12 — Configure Claude Code, connect
+
+> **Summary:** Add an HTTP-transport MCP server entry to `~/.claude.json` with the PAT as a
+> bearer token from an environment variable, never hardcoded.
+
+Plan: add an entry to `~/.claude.json` using HTTP transport with a static bearer-token header,
+which the docs confirm makes Claude Code skip the OAuth flow entirely:
+
+```json
+{
+  "mcpServers": {
+    "snowflake": {
+      "type": "http",
+      "url": "https://<YOUR_ACCOUNT_IDENTIFIER>.snowflakecomputing.com/api/v2/databases/CLAUDE_SANDBOX/schemas/PUBLIC/mcp-servers/CLAUDE_SANDBOX_MCP",
+      "headers": {
+        "Authorization": "Bearer ${SNOWFLAKE_MCP_PAT}"
+      }
+    }
+  }
+}
+```
+
+PAT goes into a local environment variable (`SNOWFLAKE_MCP_PAT`), never hardcoded in the file.
+
+**Endpoint URL confirmed** against the official docs pattern
+(`https://<account_url>/api/v2/databases/{database}/schemas/{schema}/mcp-servers/{name}`):
+
+```
+https://<YOUR_ACCOUNT_IDENTIFIER>.snowflakecomputing.com/api/v2/databases/CLAUDE_SANDBOX/schemas/PUBLIC/mcp-servers/CLAUDE_SANDBOX_MCP
+```
+
+Added to `C:\Users\<YOUR_USERNAME>\.claude.json` at the top-level (user-scope) `mcpServers` key, alongside
+the existing `ha-mcp`-era `"Home Assistant"` entry — same `{"type": "http", "url": "..."}` shape,
+this one with a `headers` block added:
+
+```json
+"Snowflake": {
+  "type": "http",
+  "url": "https://<YOUR_ACCOUNT_IDENTIFIER>.snowflakecomputing.com/api/v2/databases/CLAUDE_SANDBOX/schemas/PUBLIC/mcp-servers/CLAUDE_SANDBOX_MCP",
+  "headers": {
+    "Authorization": "Bearer ${SNOWFLAKE_MCP_PAT}"
+  }
+}
+```
+
+**If Claude Code doesn't seem to see a PAT you just set as an environment variable**, that's a
+known gotcha, not a config mistake — see Issue 3 in Known Issues & Fixes before troubleshooting
+further.
+
+## Known Issues & Fixes
+
+### Issue 1 — Creating `~/.snowflake/keys/` silently broke the existing connection
+
+> **Summary:** Creating the keys folder flipped the CLI's config-file preference to a new, empty
+> config file — the working connection wasn't lost, just stranded in the old file. Fix: reach it
+> once via `--config-file`, then set up the new connection directly in the now-canonical
+> `~/.snowflake/config.toml`.
 
 Immediately after creating `~/.snowflake/keys/` (which is `C:\Users\<YOUR_USERNAME>\.snowflake\keys\` on
 Windows), `snow connection list` started returning **"No data"** and `snow sql -c snowpro_trial`
@@ -212,83 +470,11 @@ bug, given it should be rare/deliberate anyway. A future onboarding flow should 
 directly to `~/.snowflake/config.toml` from the start and never create this split in the first
 place.
 
-### 7c. Register the public key on the Snowflake user
+### Issue 2 — Recurring "Encoding mismatch" warning
 
-```sql
-ALTER USER <YOUR_USERNAME> SET RSA_PUBLIC_KEY='<public key body, header/footer and newlines stripped>';
-```
-
-Extracting the key body: `grep -v -- "-----" claude_sandbox_rsa_key.pub | tr -d '\n'`. Ran via
-the recovered `snowpro_trial` connection (see 7b). Confirmed via `DESC USER <YOUR_USERNAME>`:
-`HAS_KEYPAIR: true`, `RSA_PUBLIC_KEY_FP: SHA256:<YOUR_KEY_FINGERPRINT>`.
-
-**Verified independently rather than just trusting Snowflake's report** — recomputed the same
-fingerprint locally from the public key file and confirmed an exact match:
-
-```bash
-openssl rsa -pubin -in claude_sandbox_rsa_key.pub -outform DER | openssl dgst -sha256 -binary | openssl enc -base64
-# → <YOUR_KEY_FINGERPRINT>  (matches Snowflake's report exactly)
-```
-
-### 7d. Create the scoped, key-pair connection (non-interactive this time)
-
-`snow connection add` supports full non-interactive creation via flags (`--no-interactive`) —
-faster and more scriptable than the interactive wizard from Step 4, now that all the values are
-already known:
-
-```powershell
-snow connection add `
-  --connection-name claude_sandbox `
-  --account <YOUR_ACCOUNT_IDENTIFIER> `
-  --user <YOUR_USERNAME> `
-  --role CLAUDE_SANDBOX `
-  --warehouse CLAUDE_SANDBOX_WH `
-  --database CLAUDE_SANDBOX `
-  --schema PUBLIC `
-  --authenticator SNOWFLAKE_JWT `
-  --private-key "C:\Users\<YOUR_USERNAME>\.snowflake\keys\claude_sandbox_rsa_key.p8" `
-  --no-interactive
-```
-
-`snow connection test -c claude_sandbox` → `Status: OK`, zero password prompt anywhere in the
-flow. Functional test (create table → insert → select → drop, all via `claude_sandbox`) passed —
-confirms the role's actual privileges work, not just that authentication succeeds.
-
-**`claude_sandbox` is now the connection to use for all routine work.** `snowpro_trial` should
-only be reached again (via `--config-file`) for genuine account-admin tasks.
-
-## Step 8 — Cleanup: remove the plaintext-password bootstrap connection
-
-Once `claude_sandbox` was confirmed working, the `snowpro_trial` connection (still holding a
-plaintext password in the old, now-orphaned config file) served no further purpose and was a
-needless secret sitting on disk. Removed via the CLI's own command rather than hand-editing TOML:
-
-```powershell
-snow --config-file "C:\Users\<YOUR_USERNAME>\AppData\Local\snowflake\config.toml" connection remove snowpro_trial
-```
-
-Note: `connection remove` takes the connection name as a **positional argument**, not a `-c`
-flag (unlike `sql`/`test`, which do use `-c`) — `snow connection remove --help` if unsure.
-Confirmed removed by reading the file directly afterward: `snowpro_trial`'s whole block, password
-included, was gone; the untouched `<STALE_ACCOUNT_IDENTIFIER>` connection (never had a stored password) was
-initially left alone, since removing it wasn't part of the original request.
-
-**Follow-up**: `<STALE_ACCOUNT_IDENTIFIER>` turned out to predate this whole session — it was already
-present the very first time `snow connection list` was run, before any setup work started, under
-an older-style account identifier (no hyphenated org prefix, unlike the current
-`<YOUR_ACCOUNT_IDENTIFIER>` trial). Confirmed it was stale/no longer relevant, so removed it the
-same way:
-
-```powershell
-snow --config-file "C:\Users\<YOUR_USERNAME>\AppData\Local\snowflake\config.toml" connection remove <STALE_ACCOUNT_IDENTIFIER>
-```
-
-The old config file now contains only its `[cli.logs]` section — no connections left at all.
-(The encoding-mismatch warning briefly reappeared during this command, since the Step 9 fix
-lives only in the new canonical config file, not this old one — expected, and moot now that the
-old file has nothing left to connect with.)
-
-## Step 9 — Fix the recurring "Encoding mismatch" warning
+> **Summary:** Every `snow` command printed an encoding-mismatch warning caused by this machine's
+> `cp1252` PowerShell locale vs. the CLI's UTF-8 file I/O. Fixed with a scoped `[cli.encoding]`
+> block in the connection config, rather than a global Python env var.
 
 Every `snow` command had been printing:
 
@@ -332,128 +518,26 @@ stdout = "utf-8"
 Verified fixed: `snow connection test -c claude_sandbox` afterward printed no warning at all, and
 the connection still worked.
 
-## Step 10 — MCP server: architecture correction
+### Issue 3 — VS Code doesn't pick up a newly-set environment variable
 
-Initial research (during the CLI setup work) pointed at `Snowflake-Labs/mcp`, a locally-run
-server installed via `uvx`, authenticating with the same connector-based auth as the CLI
-(key-pair, password, etc.) — a local stdio process Claude Code/Desktop spawns itself.
+> **Summary:** A new Windows user environment variable doesn't propagate into an already-running
+> VS Code process — not even via "Reload Window." VS Code has to be fully closed and reopened
+> for Claude Code to see it.
 
-**That entire model is now deprecated.** Re-verified directly before installing anything (good
-thing — the first research pass was already stale). The current official mechanism is a
-**Snowflake-hosted MCP server**: a first-class object created *inside* the Snowflake account via
-SQL (`CREATE MCP SERVER`), exposed at an HTTPS URL under the account's own domain, which an MCP
-client connects to **remotely** rather than spawning locally. Authentication is OAuth by default
-(interactive browser consent) or a **Programmatic Access Token (PAT)** for non-interactive use —
-not the connector auth (key-pair/password) the CLI uses. The `claude_sandbox` key-pair connection
-doesn't carry over to this layer; it was built for a different auth handshake. Tools execute under
-normal Snowflake RBAC on the backend regardless.
-
-## Step 11 — Create the MCP server object
-
-Full tool-spec syntax (from Snowflake's own getting-started guide) supports five tool types —
-`SYSTEM_EXECUTE_SQL`, `CORTEX_ANALYST_MESSAGE`, `CORTEX_SEARCH_SERVICE_QUERY`,
-`CORTEX_AGENT_RUN`, and `GENERIC` (wraps a stored procedure). Only `SYSTEM_EXECUTE_SQL` needs
-zero prerequisite setup — the others each need a real Snowflake object to exist first (a semantic
-view, a Cortex Search Service, a Cortex Agent, or a stored procedure respectively). Started
-minimal, deliberately:
-
-```sql
-CREATE OR REPLACE MCP SERVER claude_sandbox_mcp FROM SPECIFICATION
-$$
-tools:
-  - name: "SQL_Execution_Tool"
-    type: "SYSTEM_EXECUTE_SQL"
-    description: "Executes SQL against the connected Snowflake database."
-    title: "SQL Execution Tool"
-$$;
-```
-
-Ran via `snow sql -c claude_sandbox -f create_mcp_server.sql` (had to write it to a file — the
-`$$...$$` YAML-in-SQL delimiter plus embedded quotes/newlines made inline `-q` escaping in
-PowerShell unreliable; same lesson as every other multi-statement script this session).
-
-**Worked directly with the least-privilege `claude_sandbox` connection — no elevated/ACCOUNTADMIN
-access needed.** `CREATE MCP SERVER` follows the same ownership model as tables/views: since
-`CLAUDE_SANDBOX` already owns its own database/schema, it could create the object there without
-any extra grant. Confirmed via `SHOW MCP SERVERS` (owner: `CLAUDE_SANDBOX`) and
-`SHOW GRANTS ON MCP SERVER claude_sandbox_mcp` (shows `OWNERSHIP` already held by the role that
-created it — no separate `GRANT USAGE` needed for the owner; that would only matter if a
-*different* role needed access to this same server later). Minor naming detail: Snowflake's
-internal object-type label for this is `CORTEX_AGENT_SERVER`, not literally "MCP SERVER" — shows
-up that way in `granted_on`.
-
-## Step 12 — Programmatic Access Token (in progress)
-
-SQL path confirmed to exist (no need for the Snowsight UI, though that works too):
-
-```sql
-ALTER USER <YOUR_USERNAME> ADD PROGRAMMATIC ACCESS TOKEN claude_mcp_token
-  ROLE_RESTRICTION = 'CLAUDE_SANDBOX'
-  DAYS_TO_EXPIRY = 90
-  COMMENT = 'Claude Code MCP access, sandbox-scoped';
-```
-
-`ROLE_RESTRICTION` hard-locks the token to only ever act as `CLAUDE_SANDBOX`, regardless of what
-else the underlying user account can do. **Deliberately run by hand, not scripted** —
-the token value is shown exactly once, in the SQL result at creation time, never retrievable
-again, and having it pass through an AI assistant's tool output would put it in a persisted
-transcript unnecessarily. Same reasoning applied to the private key and passwords throughout this
-session. Gotcha worth remembering: a PAT cannot be modified/rotated/revoked in a session that
-used that same PAT to authenticate — rotation has to go through a different auth method (e.g. the
-key-pair `claude_sandbox` connection).
-
-## Step 13 — Configure Claude Code, connect (pending)
-
-Plan: add an entry to `~/.claude.json` using HTTP transport with a static bearer-token header,
-which the docs confirm makes Claude Code skip the OAuth flow entirely:
-
-```json
-{
-  "mcpServers": {
-    "snowflake": {
-      "type": "http",
-      "url": "https://<YOUR_ACCOUNT_IDENTIFIER>.snowflakecomputing.com/api/v2/databases/CLAUDE_SANDBOX/schemas/PUBLIC/mcp-servers/CLAUDE_SANDBOX_MCP",
-      "headers": {
-        "Authorization": "Bearer ${SNOWFLAKE_MCP_PAT}"
-      }
-    }
-  }
-}
-```
-
-PAT goes into a local environment variable (`SNOWFLAKE_MCP_PAT`), never hardcoded in the file.
-
-**Endpoint URL confirmed** against the official docs pattern
-(`https://<account_url>/api/v2/databases/{database}/schemas/{schema}/mcp-servers/{name}`):
-
-```
-https://<YOUR_ACCOUNT_IDENTIFIER>.snowflakecomputing.com/api/v2/databases/CLAUDE_SANDBOX/schemas/PUBLIC/mcp-servers/CLAUDE_SANDBOX_MCP
-```
-
-Added to `C:\Users\<YOUR_USERNAME>\.claude.json` at the top-level (user-scope) `mcpServers` key, alongside
-the existing `ha-mcp`-era `"Home Assistant"` entry — same `{"type": "http", "url": "..."}` shape,
-this one with a `headers` block added:
-
-```json
-"Snowflake": {
-  "type": "http",
-  "url": "https://<YOUR_ACCOUNT_IDENTIFIER>.snowflakecomputing.com/api/v2/databases/CLAUDE_SANDBOX/schemas/PUBLIC/mcp-servers/CLAUDE_SANDBOX_MCP",
-  "headers": {
-    "Authorization": "Bearer ${SNOWFLAKE_MCP_PAT}"
-  }
-}
-```
-
-**Restart gotcha, worth remembering for next time**: setting a new Windows user environment
-variable via `[System.Environment]::SetEnvironmentVariable(...)` does **not** propagate into a
-VS Code process that was already running — env vars are captured once at OS process launch. A
-simple "Reload Window" only restarts the extension host inside the same process, so it still
-won't see the new variable. VS Code has to be **fully closed and reopened** (a genuinely new
-process) for `SNOWFLAKE_MCP_PAT` to be visible to Claude Code. Same underlying reasoning as the
+Setting a new Windows user environment variable via
+`[System.Environment]::SetEnvironmentVariable(...)` does **not** propagate into a VS Code process
+that was already running — env vars are captured once at OS process launch. A simple "Reload
+Window" only restarts the extension host inside the same process, so it still won't see the new
+variable. VS Code has to be **fully closed and reopened** (a genuinely new process) for
+`SNOWFLAKE_MCP_PAT` to be visible to Claude Code. Same underlying reasoning as the
 already-documented "Electron apps don't fully quit on window close" Claude Desktop gotcha, just
 the inverse case (needing a real restart rather than avoiding a fake one).
 
-## Step 14 — Debugging the connection: three distinct failures, in order
+### Issue 4 — Debugging the MCP connection: three distinct failures, in order
+
+> **Summary:** The first `/mcp` attempt failed with an opaque 401. Testing the PAT directly
+> against Snowflake's REST API isolated the real cause — a missing network policy on the user,
+> not a bad token — fixed with a time-boxed policy-requirement waiver on the token.
 
 First `/mcp` attempt: `Status: failed`, HTTP 401. Diagnosed by testing the PAT directly against
 Snowflake's general REST API (`Invoke-WebRequest` to `/api/v2/databases`), independent of Claude
@@ -476,7 +560,7 @@ Code's MCP client — isolates "is the token bad" from "is something else wrong"
    for ongoing use would be `CREATE NETWORK POLICY ... ALLOWED_IP_LIST = ('<public IP>/32')` +
    `ALTER USER <YOUR_USERNAME> SET NETWORK_POLICY = ...` — not yet applied, since it would also gate
    Snowsight logins and the `claude_sandbox` CLI connection for that user, and public IP isn't
-   guaranteed stable. Deferred until MCP is actually usable (see Step 15).
+   guaranteed stable. Deferred until MCP is actually usable (see Issue 5).
    - Own public IP for reference at time of testing: `<YOUR_PUBLIC_IP>` (via `api.ipify.org`).
    - `ALTER USER ... ADD/REMOVE PROGRAMMATIC ACCESS TOKEN` requires elevated privilege
      `CLAUDE_SANDBOX` doesn't have — run directly by hand each time, not scripted, both because
@@ -484,7 +568,12 @@ Code's MCP client — isolates "is the token bad" from "is something else wrong"
 
 After the fix: `/mcp` showed `connected`, and `mcp__Snowflake__SQL_Execution_Tool` became callable.
 
-## Step 15 — Final blocker: Cortex Agent is unavailable on trial-tier accounts
+### Issue 5 — Final blocker: Cortex Agent is unavailable on trial-tier accounts
+
+> **Summary:** MCP tool *execution* routes through Cortex Agent orchestration, which is blocked
+> account-wide on trial-tier Snowflake accounts — a licensing restriction, not a config problem.
+> Tool discovery/auth all succeed; only invocation fails. Fall back to the CLI for hands-on work
+> until the account moves off the trial tier.
 
 Calling the tool (`SELECT CURRENT_USER(), ...`) failed with:
 `Agent error (code 399504): Access denied for trial accounts.`

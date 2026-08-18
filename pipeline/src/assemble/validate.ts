@@ -97,6 +97,22 @@ export function validateBundle(
   checkUniqueIds(bundle.setup.map((s) => s.id), "setup", collector);
   checkUniqueIds(bundle.sets.map((s) => s.id), "sets", collector);
 
+  // setupLog.ts requires a "> **Summary:** ..." blockquote immediately under every heading, but
+  // can't enforce that itself (parseSetupLog has no ErrorCollector, matching every other leaf
+  // parser in this codebase — see index.ts) -- so a missing/mislabeled blockquote silently leaves
+  // `summary: ""` rather than failing the build, and the Setup page would render a card with a
+  // title and nothing else. Catch that here instead, where the collector already is.
+  for (const s of bundle.setup) {
+    if (!s.summary.trim()) {
+      collector.add({
+        file: "15_Hands_On_Snowflake_Setup_Log.md",
+        itemRef: s.id,
+        kind: "parse-error",
+        message: `setup item '${s.title}' has no "> **Summary:** ..." blockquote (or it isn't labeled exactly "Summary:") -- the Setup page would render this card with no content`,
+      });
+    }
+  }
+
   const questionById = new Map(bundle.questions.map((q) => [q.id, q]));
   for (const set of bundle.sets) {
     if (set.kind !== "mock" || !set.domainSplit) continue;

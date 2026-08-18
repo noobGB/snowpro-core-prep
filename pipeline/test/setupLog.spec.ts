@@ -1,9 +1,13 @@
 /**
- * Tests for setupLog.ts's id assignment against the real file's confirmed structure: duplicated,
- * out-of-order "Step N" headings (an append-only log, never renumbered) must produce stable,
- * unique, file-order ids rather than colliding on the parsed step number. Also covers the
- * unanchored gotcha match (a mid-paragraph mention, not just a paragraph-initial one) and
- * excluding an untagged fenced code block from `commands`.
+ * Tests for setupLog.ts against its real structure: two top-level sections ("## Setup Steps",
+ * "## Known Issues & Fixes") that set each entry's `kind`, a leading "## Status" section that
+ * isn't either and is skipped, a required "> **Summary:**" blockquote per entry, and
+ * content-derived ids that survive reordering/reclassifying entries -- the exact property a real
+ * review finding showed positional ids didn't have (a reorder silently reassigned old ids to
+ * different content; a saved progress.setup.checked id could point at the wrong entry with no
+ * error anywhere). The "assigns ids from an explicit map, not relative ordering" test below is
+ * deliberately an exact-value assertion, not a relative one, since `id` is the actual persisted
+ * progress key -- an exact-value test is what would have caught that regression at review time.
  */
 
 import { describe, expect, it } from "vitest";
@@ -13,9 +17,13 @@ const FIXTURE = `# Setup log fixture
 
 ## Status
 
-Some running status text that isn't a step.
+Some running status text that isn't a step or an issue.
 
-## Step 9 — First appearance
+## Setup Steps
+
+### Step 1 — First step
+
+> **Summary:** Do the first thing.
 
 Some body text.
 
@@ -23,63 +31,100 @@ Some body text.
 SELECT 1;
 \`\`\`
 
-## Step 10 — Also appears once here
+### Step 2 — Second step, has a sub-step
 
-More body text.
+> **Summary:** Do the second thing.
 
-## Step 9 — Second, later appearance of the same step number
-
-Body text again. Gotcha worth remembering: this is a mid-paragraph mention, not a prefix.
+Body text.
 
 \`\`\`
 plain untagged output, not a command
 \`\`\`
 
-### 9a. A sub-step under the second Step 9
+#### 2a. A sub-step under Step 2
+
+> **Summary:** Do the sub-thing.
 
 Sub-step body.
+
+## Known Issues & Fixes
+
+### Issue 1 — Something went wrong
+
+> **Summary:** It broke, here's why.
+
+Full narrative about what broke.
 `;
 
 describe("parseSetupLog", () => {
   const items = parseSetupLog(FIXTURE);
 
-  it("skips a leading non-Step H2 section (## Status)", () => {
+  it("skips the leading ## Status section entirely", () => {
     expect(items.some((i) => i.title.includes("Status"))).toBe(false);
   });
 
-  it("assigns stable, unique, file-order ids even though 'Step 9' appears twice non-consecutively", () => {
-    // Restrict to the H2-level "Step 9" entries themselves (title === group); the H3 sub-step
-    // under the second one also has a group starting with "Step 9" (correctly inherited from
-    // its parent), so a plain group-prefix filter would over-match it too.
-    const step9s = items.filter((i) => i.title === i.group && i.group.startsWith("Step 9"));
-    expect(step9s).toHaveLength(2);
+  it("tags Setup Steps entries with kind 'step'", () => {
+    const step1 = items.find((i) => i.title === "Step 1 — First step")!;
+    expect(step1.kind).toBe("step");
+  });
+
+  it("tags Known Issues entries with kind 'issue'", () => {
+    const issue1 = items.find((i) => i.title === "Issue 1 — Something went wrong")!;
+    expect(issue1.kind).toBe("issue");
+  });
+
+  it("assigns unique ids across the section boundary", () => {
     expect(new Set(items.map((i) => i.id)).size).toBe(items.length);
-    // file order: first "Step 9" comes before "Step 10", which comes before the second "Step 9"
-    const ids = items.map((i) => i.id);
-    expect(ids.indexOf(step9s[0]!.id)).toBeLessThan(ids.indexOf(step9s[1]!.id));
+  });
+
+  it("assigns ids from an explicit map, not relative ordering -- id is the persisted progress key", () => {
+    expect(Object.fromEntries(items.map((i) => [i.title, i.id]))).toEqual({
+      "Step 1 — First step": "s-step-1--first-step",
+      "Step 2 — Second step, has a sub-step": "s-step-2--second-step-has-a-sub-step",
+      "2a. A sub-step under Step 2": "s-2a-a-sub-step-under-step-2",
+      "Issue 1 — Something went wrong": "s-issue-1--something-went-wrong",
+    });
+  });
+
+  it("keeps an entry's id stable when unrelated entries are reordered/reclassified around it", () => {
+    // Same "Step 1" content, but with Setup Steps and Known Issues swapped and Step 2 dropped --
+    // simulates exactly the kind of restructure that broke positional ids once already.
+    const reordered = parseSetupLog(`# Fixture
+## Known Issues & Fixes
+### Issue 1 — Something went wrong
+> **Summary:** It broke, here's why.
+## Setup Steps
+### Step 1 — First step
+> **Summary:** Do the first thing.
+`);
+    const step1 = reordered.find((i) => i.title === "Step 1 — First step");
+    expect(step1?.id).toBe("s-step-1--first-step"); // unchanged despite moving to file position 2
+  });
+
+  it("extracts the '> **Summary:**' blockquote, stripping the label", () => {
+    const step1 = items.find((i) => i.title === "Step 1 — First step")!;
+    expect(step1.summary).toBe("Do the first thing.");
   });
 
   it("captures a language-tagged fenced code block as a command", () => {
-    const firstStep9 = items.find((i) => i.group === "Step 9 — First appearance")!;
-    expect(firstStep9.commands).toEqual(["SELECT 1;"]);
+    const step1 = items.find((i) => i.title === "Step 1 — First step")!;
+    expect(step1.commands).toEqual(["SELECT 1;"]);
   });
 
   it("excludes an untagged fenced code block from commands", () => {
-    const secondStep9 = items.find(
-      (i) => i.group === "Step 9 — Second, later appearance of the same step number",
-    )!;
-    expect(secondStep9.commands).toEqual([]);
+    const step2 = items.find((i) => i.title.startsWith("Step 2"))!;
+    expect(step2.commands).toEqual([]);
   });
 
-  it("matches a gotcha mid-paragraph, not just at the start", () => {
-    const secondStep9 = items.find(
-      (i) => i.group === "Step 9 — Second, later appearance of the same step number",
-    )!;
-    expect(secondStep9.gotchas.some((g) => g.includes("mid-paragraph mention"))).toBe(true);
+  it("gives an H4 sub-step its own entry, inheriting kind and the parent H3's title as group", () => {
+    const subStep = items.find((i) => i.title.includes("2a."));
+    expect(subStep?.group).toBe("Step 2 — Second step, has a sub-step");
+    expect(subStep?.kind).toBe("step");
+    expect(subStep?.summary).toBe("Do the sub-thing.");
   });
 
-  it("gives an H3 sub-step its own entry with the parent H2's text as group", () => {
-    const subStep = items.find((i) => i.title.includes("9a."));
-    expect(subStep?.group).toBe("Step 9 — Second, later appearance of the same step number");
+  it("slugifies the title into a GitHub-style sourceAnchor", () => {
+    const step1 = items.find((i) => i.title === "Step 1 — First step")!;
+    expect(step1.sourceAnchor).toBe("step-1--first-step");
   });
 });
