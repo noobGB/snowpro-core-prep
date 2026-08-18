@@ -13,7 +13,12 @@
   --hairline-strong: #383b3f;
   --hairline-faint: #1a1c1e;
   --text-muted: #8a8f98;
-  --text-dim: #62666d;
+  /* #62666d measured 3.30:1 against --card / 3.45:1 against --canvas -- both fail WCAG AA's 4.5:1
+     for normal-size text (this token is used at 11-13px throughout: kickers, timestamps, "Low
+     sample" warnings, the domain weight badge). #7a7e85 keeps the same cool-gray hue (channels
+     scaled up together, not shifted to neutral gray) while clearing 4.67:1 / 4.89:1 -- a real
+     margin above 4.5, not a borderline pass. */
+  --text-dim: #7a7e85;
   --text-body: #d0d6e0;
   --text-heading: #ffffff;
   --accent: #2bd4d9;
