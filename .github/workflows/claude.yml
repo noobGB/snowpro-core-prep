@@ -1,0 +1,43 @@
+name: Claude Code
+
+# Responds to "@claude" in a PR/issue comment or review — the fix-loop half of the review pipeline:
+# claude-review.yml leaves findings, and mentioning @claude on one of those findings (or anywhere
+# else in the PR) triggers this to act on it. Structure follows anthropics/claude-code-action's own
+# claude.yml example (verified current as of this workflow's creation).
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  issues:
+    types: [opened, assigned]
+
+jobs:
+  claude:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read # lets Claude read this PR's own CI results, not just the diff
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: |
+            --system-prompt "Follow this repo's conventions in CLAUDE.md before making any change. If a fix spans multiple files or adds a real component, make the doc sync (README.md, CLAUDE.md, TECH_STACK.md, and the relevant .github/screenshot-*.png if the UI changed) its own commit, separate from the code fix -- this repo's established practice."

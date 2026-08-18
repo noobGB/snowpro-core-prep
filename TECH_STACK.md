@@ -186,6 +186,29 @@ it's near-instant on a codebase this size, with zero config needed to get useful
 that, faster, via esbuild under the hood). `-b` is "build mode" / project references, which lets
 TypeScript check `app/`'s config as its own isolated unit rather than one flat project.
 
+## 9. CI/CD — GitHub Actions, Dependabot
+
+**GitHub Actions** — runs the same checks a developer would run locally (typecheck, test, lint,
+plus a Docker build-and-boot smoke test) automatically on every push and pull request, so a
+regression is caught before it's merged rather than the next time someone happens to run `npm
+test`. Three independent jobs here, one per package (`pipeline/`, `app/`, `mcp-server/`), because
+they aren't an npm workspace — each needs its own dependency install.
+
+**Docker smoke test** — `docker compose build` + boot + a real `curl` against `localhost:8080`
+inside CI. This isn't a deploy step (nothing here is deployed anywhere) — it's the closest thing
+this project has to an integration test, since the container-boot path (`verifyDataDirWritable()`
+then `runPipeline()` then bind the port, per `pipeline/src/server.ts`) is the one code path none
+of the unit tests exercise end-to-end.
+
+**Claude Code GitHub Action** (`anthropics/claude-code-action`) — an automated PR reviewer plus a
+mention-driven assistant (`@claude` in a PR comment) that can act on its own review findings,
+scoped by prompt to correctness/architecture/test-coverage rather than style (oxlint already
+covers that).
+
+**Dependabot** — opens a PR when a dependency has an update available, scanning each of the three
+`package.json`/lockfile pairs plus the workflow files themselves, weekly rather than daily since
+this is a low-traffic personal project and daily would just be noise.
+
 ---
 
 For how these pieces fit together architecturally (which file does what, the data flow end to end,
