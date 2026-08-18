@@ -26,6 +26,13 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # The action refuses to run for a bot-authored PR by default (a bot could otherwise
+          # trigger arbitrary Claude runs, e.g. burning API credits). Dependabot is a low-risk,
+          # explicit exception -- its diffs only ever bump a version string in package.json/a
+          # lockfile, and reviewing those (e.g. flagging a risky major-version bump) is exactly a
+          # sensible use of this workflow, confirmed useful the first time Dependabot actually
+          # opened PRs against this repo.
+          allowed_bots: "dependabot[bot]"
           track_progress: true
           prompt: |
             REPO: ${{ github.repository }}
