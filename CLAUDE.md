@@ -109,6 +109,17 @@ that can't be read at all) throws directly.
   pre-offset one — the frontend (`app/src/lib/planDates.ts`) remaps every day by the delta between
   the plan's own last day and the live exam date, and computes a plan-length-derived default (never
   a hardcoded calendar date) when no exam date is set yet.
+- **`src/parsers/setupLog.ts`** splits `15_Hands_On_Snowflake_Setup_Log.md` into two kinds — `##
+  Setup Steps` (things to actually do, in order) and `## Known Issues & Fixes` (things that went
+  wrong along the way) — so a step's instructions stay a clean checklist instead of mixed with
+  troubleshooting narrative (reworked 2026-08-18 from a single flat list, per direct feedback that
+  the old page read like a log dump). Each entry's only app-visible content is its own
+  `> **Summary:**` blockquote and its commands; the full narrative stays in the file, reachable
+  via a GitHub-slugified `sourceAnchor` deep link — don't add the full body back into `SetupItem`
+  without a real reason, that's the exact thing this rework removed. Ids stay positional
+  (`s-1`, `s-2`, ...), never parsed from the visible "Step N"/"Issue N" text, for the same reason
+  as before: the log is append-only and a future addition could reintroduce numbering drift, but
+  positional ids can't corrupt or collide either way.
 - **`src/assemble/validate.ts`** runs structural cross-reference checks after everything else has
   parsed (every `questionIds` reference resolves, no duplicate ids, a mock set's `domainSplit` is
   independently recomputed from its questions and cross-checked against both the stored value and

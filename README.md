@@ -58,9 +58,12 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
   against the real exam's time budget.
 - **Resources** — official links plus per-domain study resources, with a standing caution against
   "exam dump" sites.
-- **Setup** — a checkable, step-by-step walkthrough for hands-on practice against a real Snowflake
-  account (CLI install, key-pair auth, a least-privilege sandbox role) — commands are copyable,
-  each step is its own checkbox.
+- **Setup** — a checkable walkthrough for hands-on practice against a real Snowflake account
+  (CLI install, key-pair auth, a least-privilege sandbox role), split into **Setup Steps** (the
+  actions to actually perform, in order) and **Known Issues & Fixes** (what went wrong along the
+  way, kept separate so the steps stay a clean checklist) — commands are copyable, each entry is
+  its own checkbox, and a one-line summary per card links out to the full walkthrough in
+  `15_Hands_On_Snowflake_Setup_Log.md` for anyone who wants the complete story.
 - **MCP server** (`mcp-server/`) — quiz yourself conversationally from Claude Desktop, Claude Code,
   or any other MCP-compatible host instead of clicking through the web UI. Reads/writes the exact
   same progress file the container serves, so a session run through the MCP server shows up in the
