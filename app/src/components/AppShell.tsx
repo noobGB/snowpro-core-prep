@@ -8,10 +8,12 @@ import type { ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { MobileTopBar } from "./MobileTopBar";
 import { MobileBottomNav } from "./MobileBottomNav";
+import { ConflictBanner } from "./ConflictBanner";
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "var(--canvas)" }}>
+      <ConflictBanner />
       <MobileTopBar />
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         <div className="desktop-only">

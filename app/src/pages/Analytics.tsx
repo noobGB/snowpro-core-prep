@@ -56,7 +56,7 @@ export function Analytics() {
       </div>
 
       <div style={cardStyle}>
-        <div style={kicker}>Domain readiness vs. pass line</div>
+        <div style={kicker}>Domain accuracy vs. pass line</div>
         {progress.attempts.length === 0 ? (
           <div style={{ fontSize: 13, color: "var(--text-dim)" }}>No attempts yet.</div>
         ) : (
@@ -69,7 +69,10 @@ export function Analytics() {
                     <span>
                       D{domain?.number} {domain?.title}
                     </span>
-                    <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-heading)" }}>{d.scaled ?? "—"}</span>
+                    <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-heading)" }}>
+                      {d.scaled ?? "—"}
+                      <span style={{ color: "var(--text-dim)", fontSize: 11 }}> / 1000</span>
+                    </span>
                   </div>
                   <div style={{ position: "relative", height: 6, background: "var(--hairline)", borderRadius: 3 }}>
                     <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${d.scaled ? d.scaled / 10 : 0}%`, background: "var(--text-body)", borderRadius: 3 }} />

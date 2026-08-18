@@ -162,10 +162,19 @@ async function persist(): Promise<void> {
   }
 }
 
-/** Timestamp of the most recent write conflict, if any — surfaced so the UI can eventually show
- *  "a change didn't save" instead of this being invisible. Not yet wired into any component. */
+/** Timestamp of the most recent write conflict, if any. `persist()` sets this and then always
+ *  calls `hydrateFromServer()` -> `setState()` -> notifies `listeners` right after, so this value
+ *  and the listener notification change together — safe to read via the same subscribe/listeners
+ *  pair `useProgress()` uses, below. */
 export function getLastProgressConflictAt(): string | null {
   return conflictAt;
+}
+
+/** Reactive form of `getLastProgressConflictAt()` — re-renders when a write conflict happens, so
+ *  the UI can surface "a change didn't save" (see `ConflictBanner.tsx`) instead of this being
+ *  silent beyond a console warning. */
+export function useProgressConflict(): string | null {
+  return useSyncExternalStore(subscribe, getLastProgressConflictAt, getLastProgressConflictAt);
 }
 
 function writeNow(): void {

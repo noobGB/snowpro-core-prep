@@ -6,7 +6,7 @@
  * being a permanent placeholder.
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useContent } from "../lib/useContent";
 import { useProgress, updateProgress } from "../lib/progress";
@@ -45,6 +45,7 @@ const kicker: React.CSSProperties = {
 export function Dashboard() {
   const { content, error } = useContent();
   const progress = useProgress();
+  const [openWeightTip, setOpenWeightTip] = useState<string | null>(null);
 
   const today = useMemo(() => new Date(), []);
   const examDate = progress.examDate ?? (content ? defaultExamDate(content.plan) : isoDate(today));
@@ -79,6 +80,8 @@ export function Dashboard() {
   const nextDomainId = pickWeakestDomain(content, progress.attempts);
   const nextDomain = nextDomainId ? content.domains.find((d) => d.id === nextDomainId) : undefined;
   const nextDomainSet = nextDomainId ? content.sets.find((s) => s.domainId === nextDomainId && s.kind === "domain") : undefined;
+  const nextDomainReadiness = readiness?.perDomain.find((d) => d.domainId === nextDomainId);
+  const nextDomainReason = nextDomainReadiness?.scaled === null ? "Not started yet" : "Lowest score so far";
   const mockSet = content.sets.find((s) => s.kind === "mock");
   const remappedPlan = remapPlan(content.plan, examDate);
   const todayIso = isoDate(today);
@@ -180,6 +183,22 @@ export function Dashboard() {
             <>
               <div>
                 <div style={{ ...kicker, color: "var(--accent)" }}>{hasData ? "Keep going" : "Start"}</div>
+                {hasData && nextDomain && (
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 11,
+                      color: "var(--accent)",
+                      background: "rgba(43,212,217,.12)",
+                      borderRadius: 4,
+                      padding: "2px 7px",
+                      display: "inline-block",
+                      marginBottom: 6,
+                    }}
+                  >
+                    {nextDomainReason}
+                  </span>
+                )}
                 <div style={{ fontSize: 22, fontWeight: 500, color: "var(--text-heading)", letterSpacing: "-0.012em", lineHeight: 1.25 }}>
                   {nextDomain ? `Domain ${nextDomain.number} — ${nextDomain.title}` : "Practice"}
                 </div>
@@ -232,15 +251,52 @@ export function Dashboard() {
                     <div style={{ display: "flex", alignItems: "baseline", gap: 9, minWidth: 0 }}>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)" }}>D{domain?.number}</span>
                       <span style={{ fontSize: 14, color: "var(--text-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{domain?.title}</span>
-                      <span
-                        title="Share of the exam this domain counts for — not a score"
-                        style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", background: "rgba(255,255,255,.05)", borderRadius: 4, padding: "1px 6px", whiteSpace: "nowrap" }}
-                      >
-                        {domain ? Math.round(domain.weight * 100) : 0}% weight
+                      <span style={{ position: "relative", display: "inline-block" }}>
+                        <button
+                          type="button"
+                          aria-label="Share of the exam this domain counts for — not a score"
+                          title="Share of the exam this domain counts for — not a score"
+                          onClick={() => setOpenWeightTip((cur) => (cur === d.domainId ? null : d.domainId))}
+                          onBlur={() => setOpenWeightTip((cur) => (cur === d.domainId ? null : cur))}
+                          style={{
+                            fontFamily: "var(--font-mono)",
+                            fontSize: 11,
+                            color: "var(--text-dim)",
+                            background: "rgba(255,255,255,.05)",
+                            borderRadius: 4,
+                            padding: "1px 6px",
+                            whiteSpace: "nowrap",
+                            border: "none",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {domain ? Math.round(domain.weight * 100) : 0}% weight
+                        </button>
+                        {openWeightTip === d.domainId && (
+                          <span
+                            role="tooltip"
+                            style={{
+                              position: "absolute",
+                              top: "100%",
+                              left: 0,
+                              marginTop: 4,
+                              background: "var(--raised)",
+                              border: "1px solid var(--hairline)",
+                              borderRadius: 6,
+                              padding: "6px 10px",
+                              fontSize: 11,
+                              color: "var(--text-body)",
+                              whiteSpace: "nowrap",
+                              zIndex: 10,
+                            }}
+                          >
+                            Share of the exam this domain counts for — not a score
+                          </span>
+                        )}
                       </span>
                     </div>
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text-heading)", whiteSpace: "nowrap" }}>
-                      {d.earnedPoints !== null ? `${d.earnedPoints} / ${d.maxPoints}` : `— / ${d.maxPoints}`}
+                      {d.earnedPoints !== null ? `${d.earnedPoints} pts / ${d.maxPoints}` : `— / ${d.maxPoints}`}
                     </span>
                   </div>
                   <div style={{ position: "relative", height: 6, background: "var(--hairline)", borderRadius: 3, overflow: "hidden" }}>
