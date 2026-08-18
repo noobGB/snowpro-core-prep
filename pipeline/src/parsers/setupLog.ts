@@ -1,11 +1,15 @@
 /**
- * Parses the setup log (15) into SetupItem records. Confirmed real and important: step numbers
- * in the "## Step N — Title" headings are duplicated and out of file order (e.g. "Step 9" and
- * "Step 10" each appear twice, non-consecutively) — the log is append-only per its own documented
- * convention, never renumbered. Ids are therefore assigned by file-order position ("s-1", "s-2",
- * ...), never parsed from the heading text, and duplicate group/title text across two separate
- * entries is correct, not a bug. A leading "## Status" section (before any "## Step" heading) is
- * not a step and is skipped.
+ * Parses the setup log (15) into SetupItem records. The "## Step N — Title" headings are
+ * sequential and in file order (renumbered 2026-08-18 — an earlier append to the log had reused
+ * "Step 9"/"Step 10" for two unrelated entries each, landing out of numeric order relative to the
+ * MCP-server section inserted between them; fixed by renumbering the headings in place, without
+ * reordering any content, since the log's own convention is to append new steps as they're
+ * actually encountered rather than reorder history). Ids are still assigned by file-order position
+ * ("s-1", "s-2", ...), never parsed from the heading text — kept that way deliberately, since the
+ * log stays append-only going forward and a future addition could reintroduce the same numbering
+ * drift; positional ids mean that can never corrupt ids or duplicate/collide, only the cosmetic
+ * step numbers, same as this fix just corrected. A leading "## Status" section (before any
+ * "## Step" heading) is not a step and is skipped.
  *
  * H2 steps and their nested H3 sub-steps (e.g. "### 7a. Generate the key pair") each become their
  * own flat entry — group = the owning H2's text either way, title = that heading's own text.
