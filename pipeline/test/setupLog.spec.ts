@@ -1,8 +1,13 @@
 /**
  * Tests for setupLog.ts against its real structure: two top-level sections ("## Setup Steps",
  * "## Known Issues & Fixes") that set each entry's `kind`, a leading "## Status" section that
- * isn't either and is skipped, a required "> **Summary:**" blockquote per entry, and stable
- * file-order ids even across a section boundary.
+ * isn't either and is skipped, a required "> **Summary:**" blockquote per entry, and
+ * content-derived ids that survive reordering/reclassifying entries -- the exact property a real
+ * review finding showed positional ids didn't have (a reorder silently reassigned old ids to
+ * different content; a saved progress.setup.checked id could point at the wrong entry with no
+ * error anywhere). The "assigns ids from an explicit map, not relative ordering" test below is
+ * deliberately an exact-value assertion, not a relative one, since `id` is the actual persisted
+ * progress key -- an exact-value test is what would have caught that regression at review time.
  */
 
 import { describe, expect, it } from "vitest";
@@ -68,12 +73,32 @@ describe("parseSetupLog", () => {
     expect(issue1.kind).toBe("issue");
   });
 
-  it("assigns stable, unique, file-order ids across the section boundary", () => {
+  it("assigns unique ids across the section boundary", () => {
     expect(new Set(items.map((i) => i.id)).size).toBe(items.length);
-    const ids = items.map((i) => i.id);
-    const step2Idx = ids.indexOf(items.find((i) => i.title.startsWith("Step 2"))!.id);
-    const issue1Idx = ids.indexOf(items.find((i) => i.title.startsWith("Issue 1"))!.id);
-    expect(step2Idx).toBeLessThan(issue1Idx);
+  });
+
+  it("assigns ids from an explicit map, not relative ordering -- id is the persisted progress key", () => {
+    expect(Object.fromEntries(items.map((i) => [i.title, i.id]))).toEqual({
+      "Step 1 — First step": "s-step-1--first-step",
+      "Step 2 — Second step, has a sub-step": "s-step-2--second-step-has-a-sub-step",
+      "2a. A sub-step under Step 2": "s-2a-a-sub-step-under-step-2",
+      "Issue 1 — Something went wrong": "s-issue-1--something-went-wrong",
+    });
+  });
+
+  it("keeps an entry's id stable when unrelated entries are reordered/reclassified around it", () => {
+    // Same "Step 1" content, but with Setup Steps and Known Issues swapped and Step 2 dropped --
+    // simulates exactly the kind of restructure that broke positional ids once already.
+    const reordered = parseSetupLog(`# Fixture
+## Known Issues & Fixes
+### Issue 1 — Something went wrong
+> **Summary:** It broke, here's why.
+## Setup Steps
+### Step 1 — First step
+> **Summary:** Do the first thing.
+`);
+    const step1 = reordered.find((i) => i.title === "Step 1 — First step");
+    expect(step1?.id).toBe("s-step-1--first-step"); // unchanged despite moving to file position 2
   });
 
   it("extracts the '> **Summary:**' blockquote, stripping the label", () => {

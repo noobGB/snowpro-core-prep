@@ -86,6 +86,7 @@ function fixtureBundle(): ContentBundle {
     setup: [
       { id: "s-1", kind: "step", group: "Install", title: "Install CLI", summary: "", commands: [], sourceAnchor: "install-cli" },
       { id: "s-2", kind: "step", group: "Install", title: "Configure auth", summary: "", commands: [], sourceAnchor: "configure-auth" },
+      { id: "s-3", kind: "issue", group: "Known Issues", title: "Known blocker", summary: "", commands: [], sourceAnchor: "known-blocker" },
     ],
   };
 }
@@ -334,7 +335,7 @@ describe("getSetupChecklist / setSetupStep", () => {
   it("reports done counts and toggles a step", () => {
     const bundle = fixtureBundle();
     const before = getSetupChecklist(bundle);
-    expect(before.totalCount).toBe(2);
+    expect(before.totalCount).toBe(3);
     expect(before.doneCount).toBe(0);
 
     const set = setSetupStep(bundle, "s-1", true);
@@ -344,6 +345,13 @@ describe("getSetupChecklist / setSetupStep", () => {
     expect(after.doneCount).toBe(1);
     expect(after.steps.find((s) => s.id === "s-1")!.done).toBe(true);
     expect(after.steps.find((s) => s.id === "s-2")!.done).toBe(false);
+  });
+
+  it("surfaces kind so a caller can tell an actionable step from a known issue", () => {
+    const bundle = fixtureBundle();
+    const { steps } = getSetupChecklist(bundle);
+    expect(steps.find((s) => s.id === "s-1")!.kind).toBe("step");
+    expect(steps.find((s) => s.id === "s-3")!.kind).toBe("issue");
   });
 
   it("errors on an unknown step id without touching state", () => {

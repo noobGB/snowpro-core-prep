@@ -240,10 +240,10 @@ export function registerTools(server: McpServer, bundle: ContentBundle): void {
     "get_setup_checklist",
     {
       description:
-        "Get the hands-on Snowflake CLI/MCP setup checklist (id, group, title, done status only — not the full walkthrough text of each step). Use this to report progress or decide what to guide the user through next.",
+        "Get the hands-on Snowflake CLI/MCP setup checklist (id, kind, group, title, done status only — not the full walkthrough text of each step). `kind` is \"step\" (an action to actually perform) or \"issue\" (a known problem + fix, not something to instruct the user to go do) — check it before presenting an entry as a task. Use this to report progress or decide what to guide the user through next.",
       inputSchema: {},
       outputSchema: {
-        steps: z.array(z.object({ id: z.string(), group: z.string(), title: z.string(), done: z.boolean() })),
+        steps: z.array(z.object({ id: z.string(), kind: z.enum(["step", "issue"]), group: z.string(), title: z.string(), done: z.boolean() })),
         doneCount: z.number(),
         totalCount: z.number(),
       },

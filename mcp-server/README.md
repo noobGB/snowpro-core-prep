@@ -27,7 +27,7 @@ Analytics/Dashboard, and vice versa.
 | `set_exam_date` | Sets or clears (`date:null`) the exam date. The study plan shifts to match. |
 | `get_study_plan` | Full day-by-day plan remapped to the live exam date, each task's done status, each day flagged `isToday`/`isPast`. |
 | `set_plan_task` | Marks one study-plan task done/not-done. |
-| `get_setup_checklist` | The hands-on setup checklist (id/group/title/done — not the full step text). |
+| `get_setup_checklist` | The hands-on setup checklist (id/kind/group/title/done — not the full step text). `kind` distinguishes an actionable "step" from a "issue" (a known problem+fix, not a task). |
 | `set_setup_step` | Marks one setup step done/not-done. |
 
 Deliberately excluded: JSON import/export (the web UI's Settings backup feature) — pasting a

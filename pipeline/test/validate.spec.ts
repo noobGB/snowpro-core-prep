@@ -81,6 +81,23 @@ describe("validateBundle", () => {
     expect(collector.hasErrors).toBe(true);
   });
 
+  it("catches a setup item with no summary (missing/mislabeled '> **Summary:**' blockquote)", () => {
+    const bundle = baseBundle();
+    bundle.setup.push({
+      id: "s-step-1",
+      kind: "step",
+      group: "Step 1 — Test",
+      title: "Step 1 — Test",
+      summary: "",
+      commands: [],
+      sourceAnchor: "step-1--test",
+    });
+    const collector = new ErrorCollector();
+    validateBundle(bundle, collector);
+    expect(collector.hasErrors).toBe(true);
+    expect(collector.all.some((e) => e.message.includes("no") && e.message.includes("Summary"))).toBe(true);
+  });
+
   it("catches a mock set whose stored domainSplit doesn't match its own questionIds", () => {
     const bundle = baseBundle();
     bundle.sets.push({

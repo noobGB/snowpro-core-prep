@@ -64,32 +64,40 @@ export function Setup() {
         <code style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>15_Hands_On_Snowflake_Setup_Log.md</code>.
       </p>
 
-      <div style={{ ...kicker, marginBottom: 12 }}>Setup steps</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 32 }}>
-        {steps.map((step) => (
-          <StepCard
-            key={step.id}
-            step={step}
-            nested={step.group !== step.title}
-            done={progress.setup.checked.includes(step.id)}
-            onToggle={() => toggleStep(step.id)}
-          />
-        ))}
-      </div>
+      {steps.length > 0 && (
+        <>
+          <div style={{ ...kicker, marginBottom: 12 }}>Setup steps</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 32 }}>
+            {steps.map((step) => (
+              <StepCard
+                key={step.id}
+                step={step}
+                nested={step.group !== step.title}
+                done={progress.setup.checked.includes(step.id)}
+                onToggle={() => toggleStep(step.id)}
+              />
+            ))}
+          </div>
+        </>
+      )}
 
-      <div style={{ ...kicker, color: "var(--status-warning)", marginBottom: 12 }}>Known issues &amp; fixes</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {issues.map((issue) => (
-          <StepCard
-            key={issue.id}
-            step={issue}
-            nested={false}
-            done={progress.setup.checked.includes(issue.id)}
-            onToggle={() => toggleStep(issue.id)}
-            accent="var(--status-warning)"
-          />
-        ))}
-      </div>
+      {issues.length > 0 && (
+        <>
+          <div style={{ ...kicker, color: "var(--status-warning)", marginBottom: 12 }}>Known issues &amp; fixes</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {issues.map((issue) => (
+              <StepCard
+                key={issue.id}
+                step={issue}
+                nested={issue.group !== issue.title}
+                done={progress.setup.checked.includes(issue.id)}
+                onToggle={() => toggleStep(issue.id)}
+                accent="var(--status-warning)"
+              />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

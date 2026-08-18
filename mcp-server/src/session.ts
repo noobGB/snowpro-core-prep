@@ -424,6 +424,7 @@ export function setPlanTask(bundle: ContentBundle, taskId: string, checked: bool
 
 export interface SetupStepStatusOutput {
   id: string;
+  kind: "step" | "issue";
   group: string;
   title: string;
   done: boolean;
@@ -435,12 +436,15 @@ export interface GetSetupChecklistOutput {
   totalCount: number;
 }
 
-/** Deliberately just id/group/title/done — not the full step body/commands/gotchas, which would
- *  bloat every status check. Read the source setup-log markdown directly for the full walkthrough
- *  text of a specific step when actually guiding the user through it. */
+/** Deliberately just id/kind/group/title/done — not the full summary/commands, which would bloat
+ *  every status check. Read the source setup-log markdown directly for the full walkthrough text
+ *  of a specific step when actually guiding the user through it. `kind` ("step" vs. "issue") is
+ *  included specifically so a caller doesn't present a Known Issues & Fixes entry (e.g. "Cortex
+ *  Agent is unavailable on trial-tier accounts") as an actionable setup step the user should go
+ *  perform — confirmed as a real failure mode a review caught, not hypothetical. */
 export function getSetupChecklist(bundle: ContentBundle): GetSetupChecklistOutput {
   const progress = readProgress();
-  const steps = bundle.setup.map((s) => ({ id: s.id, group: s.group, title: s.title, done: progress.setup.checked.includes(s.id) }));
+  const steps = bundle.setup.map((s) => ({ id: s.id, kind: s.kind, group: s.group, title: s.title, done: progress.setup.checked.includes(s.id) }));
   return { steps, doneCount: steps.filter((s) => s.done).length, totalCount: steps.length };
 }
 

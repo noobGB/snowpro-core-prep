@@ -5,28 +5,37 @@
  * rather than mixed with troubleshooting narrative) — plus a leading "## Status" section that
  * isn't either and is skipped. Every "### Step N"/"### Issue N" heading (and each "#### Na."
  * sub-heading nested under a step) becomes its own flat SetupItem, `kind` inherited from whichever
- * top-level section it's under. Ids are assigned by file-order position ("s-1", "s-2", ...), never
- * parsed from the heading text — kept that way deliberately, since the log stays append-only going
- * forward (new steps/issues get appended as they're actually encountered, history never rewritten)
- * and a future addition could reintroduce numbering drift; positional ids mean that can never
- * corrupt ids or collide, only the cosmetic step numbers (which is exactly what happened once
- * already — see this file's git history, fixed by renumbering the headings in place).
+ * top-level section it's under.
+ *
+ * Ids are content-derived (`"s-" + githubSlug(title)`), NOT positional ("s-1", "s-2", ...) —
+ * changed 2026-08-18 after a real review finding: positional ids assume entries only ever get
+ * *appended*, but this same PR *reordered and reclassified* existing entries (splitting steps and
+ * issues into separate sections), which silently reassigned old ids to different content — anyone
+ * with a saved `progress.setup.checked` id would have had it point at the wrong entry after
+ * upgrading, with no error anywhere. A content-derived id can't suffer that: it only changes if
+ * that specific heading's own text changes, which is a narrower, rarer, and more legible kind of
+ * break (a title edit obviously invalidates a checkmark for *that* item, not a random reshuffle of
+ * everyone else's). `checkUniqueIds(bundle.setup...)` in `assemble/validate.ts` already asserts no
+ * two ids collide, which now also transitively guarantees no two headings slugify to the same
+ * anchor — GitHub's own duplicate-heading suffixing (`-1`, `-2`, ...) is deliberately not
+ * replicated here; a real collision should fail the build loudly, not link silently to the wrong
+ * heading.
  *
  * Each entry's `summary` is its own "> **Summary:** ..." blockquote, required by convention
  * immediately under the heading — this is deliberately the ONLY thing the app's Setup page
  * renders inline; the full narrative stays in this file for whoever wants it, reachable via
- * `sourceAnchor` (a GitHub-slugified version of the heading text, for a "full details" deep link
- * back to this file on GitHub). `commands` are still extracted the same way as before (any
- * language-tagged fenced code block in the entry's range — untagged blocks are error/output text,
- * not commands, and are correctly excluded) since a copyable command is useful inline and isn't
- * what made the old page feel like a log dump; long prose paragraphs were the problem, and those
- * no longer get rendered at all.
+ * `sourceAnchor` (the same slug used for the id) as a "full details" deep link back to this file
+ * on GitHub. A missing/mislabeled Summary is caught by `assemble/validate.ts`, not here — see that
+ * file for why. `commands` are still extracted the same way as the old model (any language-tagged
+ * fenced code block in the entry's range — untagged blocks are error/output text, not commands,
+ * and are correctly excluded) since a copyable command is useful inline and isn't what made the
+ * old page feel like a log dump; long prose paragraphs were the problem, and those no longer get
+ * rendered at all.
  */
 
 import { visit } from "unist-util-visit";
 import type { Blockquote, Code, Heading, Paragraph, Root } from "mdast";
 import type { SetupItem } from "../types.js";
-import { SequentialId } from "../util/ids.js";
 import { flattenText, headingText, parseMd } from "../util/markdown.js";
 
 const SUMMARY_PREFIX_RE = /^Summary:\s*/i;
@@ -42,11 +51,16 @@ function sectionKind(h2Title: string): Kind | null {
 /** Best-effort match of GitHub's own heading-anchor algorithm: lowercase, strip anything that
  *  isn't a word character/space/hyphen (drops backticks, em dashes, punctuation entirely rather
  *  than substituting a hyphen), then replace each remaining space with its own hyphen (GitHub
- *  does not collapse runs of spaces into a single hyphen). */
+ *  does not collapse runs of spaces into a single hyphen). The `u` flag on the character-class
+ *  regex is deliberate, not decorative -- without it, `\w` is ASCII-only and silently drops
+ *  accented/non-Latin letters that GitHub's own anchors keep (a heading like "Café setup" would
+ *  slugify to "caf-setup" instead of "café-setup", landing the link at the top of the file instead
+ *  of the heading -- confirmed as a real gap, not hypothetical, even though no current heading
+ *  triggers it). */
 function githubSlug(heading: string): string {
   return heading
     .toLowerCase()
-    .replace(/[^\w\s-]/g, "")
+    .replace(/[^\w\s-]/gu, "")
     .replace(/ /g, "-");
 }
 
@@ -65,6 +79,7 @@ interface EntryDraft {
   bodyEndLine: number; // 1-based, inclusive
   summary: string;
   commands: string[];
+  sourceAnchor: string;
 }
 
 function collectBoundaries(root: Root): Boundary[] {
@@ -83,7 +98,6 @@ export function parseSetupLog(raw: string): SetupItem[] {
   const root = parseMd(raw);
   const lines = raw.split(/\r?\n/);
   const boundaries = collectBoundaries(root);
-  const nextId = new SequentialId("s-");
 
   const entries: EntryDraft[] = [];
   let currentKind: Kind | null = null;
@@ -93,6 +107,7 @@ export function parseSetupLog(raw: string): SetupItem[] {
     const nextLineStart = boundaries[i + 1]?.lineStart;
     const bodyStartLine = b.lineStart + 1;
     const bodyEndLine = (nextLineStart ?? lines.length + 1) - 1;
+    const anchor = githubSlug(b.title);
 
     if (b.depth === 2) {
       currentKind = sectionKind(b.title);
@@ -103,7 +118,7 @@ export function parseSetupLog(raw: string): SetupItem[] {
     if (b.depth === 3) {
       if (currentKind === null) return; // H3 outside "Setup Steps"/"Known Issues" (shouldn't happen) -- ignore
       entries.push({
-        id: nextId.take(),
+        id: `s-${anchor}`,
         kind: currentKind,
         group: b.title,
         title: b.title,
@@ -111,6 +126,7 @@ export function parseSetupLog(raw: string): SetupItem[] {
         bodyEndLine,
         summary: "",
         commands: [],
+        sourceAnchor: anchor,
       });
       currentH3Index = entries.length - 1;
       return;
@@ -119,7 +135,7 @@ export function parseSetupLog(raw: string): SetupItem[] {
     // depth 4
     if (currentKind === null || currentH3Index === null) return; // H4 outside a recognized Step -- ignore
     entries.push({
-      id: nextId.take(),
+      id: `s-${anchor}`,
       kind: currentKind,
       group: entries[currentH3Index]!.title,
       title: b.title,
@@ -127,6 +143,7 @@ export function parseSetupLog(raw: string): SetupItem[] {
       bodyEndLine,
       summary: "",
       commands: [],
+      sourceAnchor: anchor,
     });
   });
 
@@ -156,6 +173,6 @@ export function parseSetupLog(raw: string): SetupItem[] {
     title: e.title,
     summary: e.summary,
     commands: e.commands,
-    sourceAnchor: githubSlug(e.title),
+    sourceAnchor: e.sourceAnchor,
   }));
 }
