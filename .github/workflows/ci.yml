@@ -68,7 +68,24 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: mcp-server/package-lock.json
+          cache-dependency-path: |
+            pipeline/package-lock.json
+            app/package-lock.json
+            mcp-server/package-lock.json
+      # mcp-server isn't an npm workspace with pipeline/app (see CLAUDE.md), but it imports their
+      # .ts source directly by relative path (session.ts -> app/src/lib/{readiness,scoring}.ts,
+      # etc.) rather than reimplementing that logic. tsc resolves those files' OWN imports (react,
+      # unified, mdast, ...) through pipeline/'s and app/'s own node_modules, not mcp-server's -- so
+      # typecheck needs both siblings' dependencies installed too, even though nothing in mcp-server
+      # actually runs their code. Confirmed as a real gap, not a hypothetical: this never surfaced
+      # locally because every dev machine already had all three node_modules installed already, but
+      # a genuinely clean checkout (as CI always is) does not.
+      - name: Install pipeline/ deps (mcp-server's typecheck resolves types through here)
+        working-directory: pipeline
+        run: npm ci
+      - name: Install app/ deps (mcp-server's typecheck resolves types through here)
+        working-directory: app
+        run: npm ci
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
