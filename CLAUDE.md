@@ -293,11 +293,18 @@ Three GitHub Actions workflows, all repo-wide (not scoped to one package):
   checklist. The second responds to an `@claude` mention in a PR/issue comment or review, closing
   the review → fix loop — its `claude_args`' `--system-prompt` tells it to follow this file's
   conventions and keep doc-sync commits separate from code commits, the practice already
-  established in this repo's own history. `claude-review.yml` also sets `allowed_bots:
-  "dependabot[bot]"` — the action refuses to run for any bot-authored PR by default, and this repo's
-  Dependabot PRs are a confirmed real trigger for it (its diffs are low-risk version bumps, worth
-  reviewing for e.g. a risky major-version jump). Both need the `ANTHROPIC_API_KEY` repo secret
-  (Settings → Secrets and variables → Actions) and the Claude GitHub App installed
+  established in this repo's own history. **`claude-review.yml` does NOT review Dependabot PRs** —
+  the action refuses any bot-authored PR by default, and a brief attempt to allowlist
+  `dependabot[bot]` was deliberately reverted: a real timed run against an actual Dependabot PR
+  (a one-line `actions/setup-node` bump) took 3+ minutes of Claude Code Action execution for a diff
+  the review prompt's own criteria (ETag contract, package drift, test coverage) can't meaningfully
+  apply to — a Dependabot diff never touches application code. `ci.yml`'s typecheck/test/lint is the
+  actually-relevant signal for a dependency bump and already runs on every Dependabot PR for free;
+  use an `@claude` mention on a specific PR (e.g. a risky major-version jump) if a real second
+  opinion is ever wanted, rather than paying for one on every routine bump automatically. Don't
+  re-add `allowed_bots` here without weighing this tradeoff again. Both workflows need the
+  `ANTHROPIC_API_KEY` repo secret (Settings → Secrets and variables → Actions) and the Claude
+  GitHub App installed
   (`https://github.com/apps/claude`) — neither is provisionable by a file change alone. If you ever
   touch these workflows, re-verify `anthropics/claude-code-action`'s current example files
   (`examples/claude.yml`, `examples/pr-review-comprehensive.yml` in that repo) before trusting this
