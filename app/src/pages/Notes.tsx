@@ -62,7 +62,20 @@ export function Notes() {
   if (!domain) return <div style={{ color: "var(--text-dim)" }}>No such domain: {domainId}</div>;
 
   return (
-    <div>
+    // Centered, not left-hugging `<main>`'s full width — content+TOC's natural width (~825px:
+    // 545px prose + 32px gap + 200px TOC) is much narrower than `<main>`'s own 1180px cap (which
+    // Practice.tsx's responsive card grid genuinely needs, so that cap can't just be lowered
+    // globally). Left-aligning a narrower block inside a much wider container reads as "half the
+    // page is broken," not "deliberate margins" — confirmed the hard way: capping just the content
+    // column's width (a real fix for the text-overlapping-the-TOC gap that motivated it) looked
+    // *worse* on a wide monitor than the original bug, because it relocated the dead space to a
+    // single lopsided strip on the right instead of removing it.
+    // This is one of two centering layers, not a duplicate of the other: AppShell.tsx now also
+    // centers `<main>` itself within the space left of the sidebar (the fix for the *other* half of
+    // this same bug class — `<main>` stopping at its own maxWidth with nothing claiming the
+    // leftover flex space). That fixes every page's outer margins; this fixes this page's specific
+    // internal composition (content column vs. TOC), which no other page has.
+    <div style={{ maxWidth: 860, margin: "0 auto" }}>
       <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
         {content.domains.map((d) => (
           <Link

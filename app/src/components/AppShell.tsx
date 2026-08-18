@@ -19,7 +19,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="desktop-only">
           <Sidebar />
         </div>
-        <main className="app-main" style={{ flex: 1, minWidth: 0, padding: "32px 40px 96px", maxWidth: 1180 }}>
+        {/* `margin: "0 auto"` centers this box within whatever space is left after the sidebar,
+            once `flex: 1` growth is stopped by `maxWidth`. Without it, that leftover space just
+            sits unclaimed to the right — invisible on a normal laptop screen where 1180px is most
+            of the viewport, but a wall of dead canvas on a wide monitor (e.g. ~1440px of nothing
+            at a 2858px viewport, confirmed via screenshot) that every page inherited silently. */}
+        <main className="app-main" style={{ flex: 1, minWidth: 0, padding: "32px 40px 96px", maxWidth: 1180, margin: "0 auto" }}>
           {children}
         </main>
       </div>
