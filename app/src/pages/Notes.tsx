@@ -83,8 +83,18 @@ export function Notes() {
         ))}
       </div>
 
+      {/* "ch" is the digit-glyph width, not the average prose character width — Inter's lowercase
+          average runs narrower, so a nominal 68ch box was actually rendering ~85 characters per
+          line. 54ch targets the same ~65-70 real character measure Notion/Linear use.
+          Capped on THIS row (header + prose together), not just the prose paragraphs below —
+          `flex: 1` alone lets this column grow to fill the row's full width regardless of its own
+          content, so a maxWidth only on the inner prose div left a real, visible dead-space gap
+          between the text and the TOC sidebar on any viewport wider than content+TOC (confirmed:
+          868px column, 545px of actual prose, a 323px gap, on a 2000px viewport — not a rounding
+          artifact, a real bug a user caught in production). flex-basis 54ch lets it still shrink
+          below that on narrow viewports (flex-shrink defaults to 1), so mobile is unaffected. */}
       <div style={{ display: "flex", gap: 32, alignItems: "flex-start" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: "0 1 54ch", minWidth: 0, maxWidth: "54ch" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 24, paddingBottom: 16, borderBottom: "1px solid var(--hairline)" }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
               <h1 style={{ margin: 0, fontSize: 24, fontWeight: 500, letterSpacing: "-0.014em", color: "var(--text-heading)" }}>{domain.title}</h1>
@@ -102,10 +112,7 @@ export function Notes() {
             )}
           </div>
 
-          {/* "ch" is the digit-glyph width, not the average prose character width — Inter's lowercase
-              average runs narrower, so a nominal 68ch box was actually rendering ~85 characters per
-              line. 54ch targets the same ~65-70 real character measure Notion/Linear use. */}
-          <div style={{ maxWidth: "54ch" }}>
+          <div>
             {notes?.sections.map((section) => {
               const sectionQuestionCount = questionsBySection.get(section.id) ?? 0;
               return (
