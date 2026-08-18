@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  pipeline:
+    name: pipeline (typecheck + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pipeline
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: pipeline/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: npm audit (report only, non-blocking)
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+  app:
+    name: app (typecheck + lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      # No `npm test` — app/ has no test script/infrastructure yet (see CLAUDE.md's "Frontend app"
+      # section; tracked as a real follow-up, not silently skipped).
+      - name: npm audit (report only, non-blocking)
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+  mcp-server:
+    name: mcp-server (typecheck + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mcp-server
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: mcp-server/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: npm audit (report only, non-blocking)
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+  docker-smoke:
+    name: docker build + boot smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # Fresh checkout has no ./data (gitignored). The final image stage runs as non-root `node`
+      # (Dockerfile's USER node); a runtime bind mount overlays the image's own chown with the HOST
+      # directory's ownership. Left to Docker to auto-create implicitly, ./data comes up root-owned
+      # and non-writable by `node`, so server.ts's verifyDataDirWritable() fails its write probe and
+      # the container exits 1 -- a CI-only false negative, not a real image bug. Pre-creating it
+      # with open perms avoids that.
+      - name: Pre-create ./data (see Dockerfile's non-root USER + bind-mount interaction)
+        run: mkdir -p data && chmod 777 data
+      - name: docker compose build
+        run: docker compose build
+      - name: docker compose up -d
+        run: docker compose up -d
+      - name: Wait for readiness (pipeline runs at boot before the port binds)
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/ -o /dev/null; then
+              echo "Up after ${i} attempt(s)."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Container never became ready within 60s"
+          exit 1
+      - name: Smoke-test HTTP 200
+        run: curl --fail -sS http://localhost:8080/ -o /dev/null
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Tear down (always, so the runner doesn't leak containers/networks)
+        if: always()
+        run: docker compose down -v
