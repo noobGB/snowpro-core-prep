@@ -62,7 +62,10 @@ export interface ProgressState {
   flashcards: { seen: string[]; lastIndex: number; grades: Record<string, "known" | "missed"> };
   plan: { checked: string[] };
   setup: { checked: string[] };
-  settings: { theme: "dark" };
+  /** "system" defers to prefers-color-scheme (see lib/theme.ts's resolveThemeAttribute()). Default
+   *  stays "dark" (not "system") so no existing persisted record sees an unrequested visual change
+   *  the moment this field's type widened. */
+  settings: { theme: "dark" | "light" | "system" };
 }
 
 const STORAGE_KEY = "snowprep.progress";

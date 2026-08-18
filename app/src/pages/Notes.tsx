@@ -88,7 +88,7 @@ export function Notes() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 24, paddingBottom: 16, borderBottom: "1px solid var(--hairline)" }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
               <h1 style={{ margin: 0, fontSize: 24, fontWeight: 500, letterSpacing: "-0.014em", color: "var(--text-heading)" }}>{domain.title}</h1>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", background: "rgba(255,255,255,.05)", borderRadius: 4, padding: "2px 7px" }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", background: "var(--surface-subtle)", borderRadius: 4, padding: "2px 7px" }}>
                 {Math.round(domain.weight * 100)}%
               </span>
             </div>

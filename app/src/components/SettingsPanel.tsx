@@ -1,6 +1,6 @@
 /**
- * Settings — a light-mode switch (present but stubbed for later), progress backup/restore, reset
- * all progress behind a typed confirmation, and a read-only content-version line. Deliberately
+ * Settings — an Appearance (System/Light/Dark) control, progress backup/restore, reset all
+ * progress behind a typed confirmation, and a read-only content-version line. Deliberately
  * does NOT have an exam-date field — that used to live here too, duplicating the Dashboard Exam
  * card's own date picker for no reason (a bare date input is nearly meaningless without the
  * days-left countdown right next to it, which only Dashboard has). Removed after a UX pass;
@@ -12,7 +12,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useContent } from "../lib/useContent";
-import { getProgress, getStorageBackend, resetProgress, updateProgress, type ProgressState } from "../lib/progress";
+import { getProgress, getStorageBackend, resetProgress, updateProgress, useProgress, type ProgressState } from "../lib/progress";
 import { isoDate } from "../lib/planDates";
 import { closeSettings, useSettingsOpen } from "../lib/settingsStore";
 
@@ -29,8 +29,40 @@ function looksLikeProgressState(value: unknown): value is ProgressState {
   );
 }
 
+const THEME_OPTIONS: { value: ProgressState["settings"]["theme"]; label: string }[] = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
+
+/** Same visual pattern as Practice.tsx's FilterTab (inactive = transparent + muted label, active
+ *  = --raised + heading label), just equal-width for a 3-segment row instead of Practice's
+ *  content-width tabs — this file's own Export/Import row already uses the equal-width shape. */
+function ThemeTab({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        flex: 1,
+        padding: "8px 0",
+        minHeight: 36,
+        border: "1px solid var(--hairline)",
+        borderRadius: 6,
+        background: active ? "var(--raised)" : "transparent",
+        color: active ? "var(--text-heading)" : "var(--text-muted)",
+        fontSize: 13,
+        cursor: "pointer",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 export function SettingsPanel() {
   const open = useSettingsOpen();
+  const { settings } = useProgress();
   const { content } = useContent();
   const [resetInput, setResetInput] = useState("");
   const [resetDone, setResetDone] = useState(false);
@@ -79,10 +111,10 @@ export function SettingsPanel() {
   if (!open) return null;
 
   return (
-    <div onClick={closeSettings} style={{ position: "fixed", inset: 0, background: "rgba(5,5,6,.6)", display: "flex", alignItems: "flex-start", justifyContent: "flex-end", padding: 16, zIndex: 60 }}>
+    <div onClick={closeSettings} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "flex-start", justifyContent: "flex-end", padding: 16, zIndex: 60 }}>
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ width: 320, background: "var(--raised)", border: "1px solid var(--hairline)", borderRadius: 12, padding: 20 }}
+        style={{ width: 320, background: "var(--raised)", border: "1px solid var(--hairline)", borderRadius: 12, padding: 20, boxShadow: "var(--overlay-shadow)" }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
           <span style={{ fontSize: 15, fontWeight: 500, color: "var(--text-heading)" }}>Settings</span>
@@ -91,11 +123,18 @@ export function SettingsPanel() {
           </button>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-          <span style={{ fontSize: 13, color: "var(--text-body)" }}>Light mode</span>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-dim)", border: "1px solid var(--hairline)", borderRadius: 4, padding: "2px 6px" }}>
-            coming later
-          </span>
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ display: "block", fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>Appearance</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            {THEME_OPTIONS.map((opt) => (
+              <ThemeTab
+                key={opt.value}
+                label={opt.label}
+                active={settings.theme === opt.value}
+                onClick={() => updateProgress((prev) => ({ ...prev, settings: { ...prev.settings, theme: opt.value } }))}
+              />
+            ))}
+          </div>
         </div>
 
         <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: 16, marginBottom: 18 }}>
@@ -152,7 +191,7 @@ export function SettingsPanel() {
             style={{
               width: "100%",
               background: resetInput === RESET_PHRASE ? "var(--status-incorrect)" : "var(--hairline)",
-              color: resetInput === RESET_PHRASE ? "#08090a" : "var(--text-dim)",
+              color: resetInput === RESET_PHRASE ? "var(--canvas)" : "var(--text-dim)",
               border: "none",
               borderRadius: 6,
               padding: "9px 0",

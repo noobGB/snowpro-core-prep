@@ -150,8 +150,15 @@ stable across unrelated content edits.
 
 ## Frontend app (`app/`)
 
-Vite + React 19 + TypeScript SPA (`react-router-dom` for routing, dark theme only — light mode is
-stubbed in Settings but not built). Not an npm workspace with `pipeline/` — `src/lib/content.ts`'s
+Vite + React 19 + TypeScript SPA (`react-router-dom` for routing). Theme is System/Light/Dark
+(`settings.theme`, default `"dark"`) — `src/lib/theme.ts` resolves the preference to a `data-theme`
+attribute on `document.documentElement` (set from an `App.tsx` root effect, not `AppShell`, since
+`CommandPalette`/`SettingsPanel` are siblings of the routed tree and `Runner.tsx`'s session route
+bypasses `AppShell` entirely — anything `AppShell`-scoped would miss them), and `tokens.css` carries
+both palettes off that attribute plus a `prefers-color-scheme` media query for `"system"`. An inline
+script in `index.html`, before any stylesheet, pre-applies `"light"` synchronously from localStorage
+to avoid a flash — see its own comment for why this only fully covers the localStorage-backed case,
+not the HTTP-backed deployment. Not an npm workspace with `pipeline/` — `src/lib/content.ts`'s
 types are hand-duplicated from `pipeline/src/types.ts`; keep them in sync manually.
 
 ### Commands (run from `app/`)

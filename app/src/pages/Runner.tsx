@@ -556,7 +556,7 @@ function QuestionCard({
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)" }}>Q{index + 1}</span>
         {isMulti && (
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", background: "rgba(255,255,255,.05)", borderRadius: 4, padding: "1px 6px" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", background: "var(--surface-subtle)", borderRadius: 4, padding: "1px 6px" }}>
             select {question.correct.length}
           </span>
         )}

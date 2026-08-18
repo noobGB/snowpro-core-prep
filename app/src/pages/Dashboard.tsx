@@ -268,7 +268,7 @@ export function Dashboard() {
                             fontFamily: "var(--font-mono)",
                             fontSize: 11,
                             color: "var(--text-dim)",
-                            background: "rgba(255,255,255,.05)",
+                            background: "var(--surface-subtle)",
                             borderRadius: 4,
                             padding: "1px 6px",
                             whiteSpace: "nowrap",

@@ -50,7 +50,7 @@ export function MobileMoreSheet({ onClose }: { onClose: () => void }) {
   return (
     <div
       onClick={onClose}
-      style={{ position: "fixed", inset: 0, background: "rgba(5,5,6,.6)", zIndex: 50, display: "flex", alignItems: "flex-end" }}
+      style={{ position: "fixed", inset: 0, background: "var(--scrim)", zIndex: 50, display: "flex", alignItems: "flex-end" }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -61,6 +61,7 @@ export function MobileMoreSheet({ onClose }: { onClose: () => void }) {
           borderBottom: "none",
           borderRadius: "12px 12px 0 0",
           paddingBottom: "env(safe-area-inset-bottom, 0px)",
+          boxShadow: "var(--overlay-shadow)",
         }}
       >
         <div style={{ display: "flex", justifyContent: "center", padding: "10px 0 4px" }}>

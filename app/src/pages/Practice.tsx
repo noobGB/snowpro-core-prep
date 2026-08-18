@@ -73,7 +73,7 @@ export function Practice() {
               <button key={set.id} type="button" style={cardStyle} onClick={() => navigate(`/session/${set.id}`)}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)" }}>D{domain?.number}</span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", background: "rgba(255,255,255,.05)", borderRadius: 4, padding: "1px 6px" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", background: "var(--surface-subtle)", borderRadius: 4, padding: "1px 6px" }}>
                     {domain ? Math.round(domain.weight * 100) : 0}%
                   </span>
                 </div>

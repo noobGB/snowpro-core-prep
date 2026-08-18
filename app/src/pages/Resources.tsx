@@ -46,7 +46,7 @@ export function Resources() {
               ) : (
                 <span style={{ fontSize: 14, color: "var(--text-body)" }}>{r.title}</span>
               )}
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-dim)", background: "rgba(255,255,255,.05)", borderRadius: 4, padding: "1px 6px" }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-dim)", background: "var(--surface-subtle)", borderRadius: 4, padding: "1px 6px" }}>
                 official
               </span>
             </div>

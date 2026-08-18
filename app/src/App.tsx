@@ -1,7 +1,10 @@
+import { useEffect } from "react";
 import { Outlet, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { CommandPalette } from "./components/CommandPalette";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { applyTheme } from "./lib/theme";
+import { useProgress } from "./lib/progress";
 import { Analytics } from "./pages/Analytics";
 import { Dashboard } from "./pages/Dashboard";
 import { Flashcards } from "./pages/Flashcards";
@@ -25,6 +28,15 @@ function ShellLayout() {
 }
 
 export default function App() {
+  const { settings } = useProgress();
+
+  // Root-level, not AppShell-scoped: CommandPalette/SettingsPanel are siblings of the routed tree
+  // here, not descendants of AppShell's div, and Runner's /session/:setId route bypasses AppShell
+  // entirely. document.documentElement is the only place an attribute reaches all of them.
+  useEffect(() => {
+    applyTheme(settings.theme);
+  }, [settings.theme]);
+
   return (
     <>
       <Routes>
