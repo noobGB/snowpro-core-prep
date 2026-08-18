@@ -1,5 +1,5 @@
 /**
- * Settings — an Appearance (System/Light/Dark) control, progress backup/restore, reset all
+ * Settings — an Appearance (Light/Dark) control, progress backup/restore, reset all
  * progress behind a typed confirmation, and a read-only content-version line. Deliberately
  * does NOT have an exam-date field — that used to live here too, duplicating the Dashboard Exam
  * card's own date picker for no reason (a bare date input is nearly meaningless without the
@@ -29,8 +29,10 @@ function looksLikeProgressState(value: unknown): value is ProgressState {
   );
 }
 
+// "System" was dropped from the UI on request -- the underlying "system" theme value and its
+// prefers-color-scheme handling in theme.ts/tokens.css are untouched, so a record that already has
+// settings.theme: "system" persisted keeps resolving correctly; a user just can't pick it here.
 const THEME_OPTIONS: { value: ProgressState["settings"]["theme"]; label: string }[] = [
-  { value: "system", label: "System" },
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
 ];
