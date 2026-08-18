@@ -3,6 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Pre-paint theme sync — avoids a flash of dark UI before React mounts and App.tsx's effect
+      // runs. Only "light" needs handling here: "dark"/"system"/missing/invalid data all already
+      // render correctly from tokens.css's defaults with zero JS. This only fully covers the
+      // localStorage-backed case (vite dev, or the built files opened directly) — the HTTP-backed
+      // deployment (SNOWPRO_DATA_DIR/api/progress, see progress.ts) still gets a brief flash since
+      // persist() never writes localStorage in that mode. Known, accepted tradeoff: closing it
+      // fully needs server-side HTML templating, which pipeline/src/server.ts doesn't have today —
+      // disproportionate cost for a personal-scale app.
+      try {
+        var raw = localStorage.getItem("snowprep.progress");
+        var parsed = raw ? JSON.parse(raw) : null;
+        if (parsed && parsed.settings && parsed.settings.theme === "light") {
+          document.documentElement.dataset.theme = "light";
+        }
+      } catch {
+        // Non-JSON/garbage localStorage — fall through to the CSS default (dark).
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

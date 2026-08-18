@@ -26,7 +26,7 @@ export function ConflictBanner() {
         justifyContent: "space-between",
         gap: 12,
         padding: "10px 16px",
-        background: "rgba(255,180,60,.12)",
+        background: "var(--warning-tint)",
         borderBottom: "1px solid var(--status-warning)",
         fontSize: 13,
         color: "var(--text-body)",

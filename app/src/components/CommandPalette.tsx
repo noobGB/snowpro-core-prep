@@ -119,11 +119,11 @@ export function CommandPalette() {
   return (
     <div
       onClick={() => closePalette()}
-      style={{ position: "fixed", inset: 0, background: "rgba(5,5,6,.6)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "12vh 16px 16px", zIndex: 60 }}
+      style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "12vh 16px 16px", zIndex: 60 }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{ width: "100%", maxWidth: 640, background: "var(--raised)", border: "1px solid var(--hairline)", borderRadius: 12, overflow: "hidden" }}
+        style={{ width: "100%", maxWidth: 640, background: "var(--raised)", border: "1px solid var(--hairline)", borderRadius: 12, overflow: "hidden", boxShadow: "var(--overlay-shadow)" }}
       >
         <input
           ref={inputRef}
@@ -169,7 +169,7 @@ export function CommandPalette() {
                       padding: "10px 12px",
                       borderRadius: 6,
                       cursor: "pointer",
-                      background: flatIndex === highlight ? "#1e2022" : "transparent",
+                      background: flatIndex === highlight ? "var(--palette-highlight)" : "transparent",
                     }}
                   >
                     <span style={{ fontSize: 14, color: "var(--text-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.text}</span>

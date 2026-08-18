@@ -27,6 +27,19 @@
   --status-incorrect: #eb5757;
   --status-warning: #c9bb4a;
 
+  /* Dark-mode values below are today's existing hardcoded call sites, pulled out into tokens so
+     they can vary by theme — each dark value is an exact match to what was already shipping, so
+     dark mode is a pure no-op from this widen. */
+  --surface-subtle: rgba(255, 255, 255, 0.05);
+  --overlay-shadow: none;
+  --date-icon-invert: 0.6;
+  --scrim: rgba(5, 5, 6, 0.6);
+  --palette-highlight: #1e2022;
+  /* ConflictBanner's amber tint — a distinct hue from --status-warning itself (this app already
+     mixes the two in dark mode; not treated as a bug), so it gets its own token rather than being
+     derived from --status-warning. */
+  --warning-tint: rgba(255, 180, 60, 0.12);
+
   /* Type */
   --font-sans: Inter, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
@@ -40,6 +53,69 @@
   --radius-badge: 4px;
   --radius-control: 6px;
   --radius-card: 12px;
+}
+
+/* Light mode — every value below was independently contrast-verified (WCAG AA) during the design
+   pass for issue #34; don't hand-tune these without re-checking contrast. Two selectors carry the
+   identical override block: the media query covers "system" (no data-theme attribute at all, so
+   :not([data-theme]) doesn't fight an explicit choice) and the attribute selector covers an
+   explicit "light" pick, which must win regardless of OS setting. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --canvas: #f4f4f5;
+    --card: #ffffff;
+    --raised: #eceef1;
+    --hairline: #848a92;
+    --hairline-strong: #767c84;
+    --hairline-faint: #e4e6e9;
+    --text-dim: #686d75;
+    --text-muted: #565b62;
+    --text-body: #3a3f47;
+    --text-heading: #14161a;
+    --accent: #0a7a80;
+    --accent-hover: #065f64;
+    --status-correct: #1a7a34;
+    --status-incorrect: #b3261e;
+    --status-warning: #7a5d00;
+
+    --surface-subtle: rgba(20, 22, 26, 0.05);
+    --overlay-shadow: 0 8px 24px rgba(20, 22, 26, 0.12);
+    --date-icon-invert: 0;
+    --scrim: rgba(15, 16, 20, 0.45);
+    --palette-highlight: #e2e5e9;
+    --warning-tint: rgba(122, 93, 0, 0.12);
+  }
+}
+
+:root[data-theme="light"] {
+  --canvas: #f4f4f5;
+  --card: #ffffff;
+  --raised: #eceef1;
+  --hairline: #848a92;
+  --hairline-strong: #767c84;
+  --hairline-faint: #e4e6e9;
+  --text-dim: #686d75;
+  --text-muted: #565b62;
+  --text-body: #3a3f47;
+  --text-heading: #14161a;
+  --accent: #0a7a80;
+  --accent-hover: #065f64;
+  --status-correct: #1a7a34;
+  --status-incorrect: #b3261e;
+  --status-warning: #7a5d00;
+
+  --surface-subtle: rgba(20, 22, 26, 0.05);
+  --overlay-shadow: 0 8px 24px rgba(20, 22, 26, 0.12);
+  --date-icon-invert: 0;
+  --scrim: rgba(15, 16, 20, 0.45);
+  --palette-highlight: #e2e5e9;
+  --warning-tint: rgba(122, 93, 0, 0.12);
+}
+
+/* Explicit "dark" pick — no-op today (dark values live on bare :root), but kept as a real
+   selector rather than assumed, so a future dark-mode-only tweak has somewhere to go without
+   having to reintroduce this rule. */
+:root[data-theme="dark"] {
 }
 
 * {
@@ -74,7 +150,7 @@ input {
   font-family: inherit;
 }
 input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(0.6);
+  filter: invert(var(--date-icon-invert));
   cursor: pointer;
 }
 
