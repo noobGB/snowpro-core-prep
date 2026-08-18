@@ -8,39 +8,55 @@ some notes or questions here could be quietly wrong. This file exists so you don
 re-verify everything from scratch to find out — check the tripwire first, then use the checklist
 below only where it points you.
 
-## 1. Run the automated tripwire first
+## 1. How the mechanism actually works
 
-```
-cd pipeline
-npm run check:freshness
-```
+The idea: the study content makes factual claims sourced from specific Snowflake documentation
+pages. Rather than re-reading all of it by hand on a schedule, a script re-fetches those same
+pages and fingerprints their content, so you only get pointed at the ones that actually moved.
 
-This fetches the ~12 specific Snowflake documentation pages that this session's content updates
-were verified against (`pipeline/scripts/freshness-baseline.json`), hashes each page's visible
-content, and compares against the hash stored the last time someone verified this repo. It reports
-three states per page:
+Mechanically (`pipeline/scripts/check-content-freshness.mjs`):
 
-- **✓ unchanged** — that page's content is byte-for-byte the same (after stripping scripts/styles)
-  as when it was last checked. Not proof nothing you care about changed elsewhere on
-  docs.snowflake.com, but a real, cheap signal for the pages this content actually cites.
-- **⚠ CHANGED** — the page's content differs. This does **not** mean the study material is wrong —
-  Snowflake edits pages for typos, formatting, and unrelated additions constantly. It means: open
-  that page and read the specific claim(s) listed against it in the table below, by hand.
-- **✗ unreachable** — couldn't fetch it (network issue, or the URL moved/404s). A moved/404 URL is
-  itself a signal worth investigating — Snowflake does reorganize its docs site periodically.
+1. `pipeline/scripts/freshness-baseline.json` stores one `{label, url, hash}` entry per Snowflake
+   doc page that was cited while verifying a fact in this content — currently ~12 pages (see the
+   table in §2).
+2. `npm run check:freshness` (from `pipeline/`) re-fetches each URL live, strips
+   `<script>`/`<style>` tags and all remaining HTML markup down to visible text, and computes a
+   SHA-256 hash of that text.
+3. Compares the fresh hash against the one stored in the baseline. Three outcomes per page:
+   - **✓ unchanged** — hash matches. A real, cheap signal that page hasn't been edited since the
+     baseline was taken — not proof nothing changed anywhere else on docs.snowflake.com.
+   - **⚠ CHANGED** — hash differs. Open that page and read the specific claim(s) listed against it
+     in §2's table, by hand.
+   - **✗ unreachable** — couldn't fetch it (network issue, or the URL moved/404s). A moved/404 URL
+     is itself worth investigating — Snowflake reorganizes its docs site periodically.
+4. Once you've manually re-read whatever got flagged and confirmed the notes still hold up, reset
+   the baseline: `npm run check:freshness -- --update`. Exit code is nonzero if anything changed,
+   so it's CI-friendly if you ever want it on a schedule.
 
-Exit code is nonzero if anything changed, so it's CI-friendly if you ever want to wire it into a
-scheduled check. After manually re-verifying whatever it flagged, reset the baseline with:
+### What it catches
 
-```
-npm run check:freshness -- --update
-```
+Any edit to the *visible content* of the ~12 tracked pages — a renamed function, a changed
+default value, a reworded eligibility rule, a newly-added paragraph. This was validated
+end-to-end: the baseline was populated from live fetches, then a second run against the same live
+pages reported a clean 12/12 unchanged.
 
-**This mechanism has a real, known limitation**: it only covers the specific pages someone
-happened to cite while writing or updating content. It will never flag a change to a Snowflake
-feature nobody has sourced a fact from yet, and it says nothing about whether the *exam guide
-itself* (a PDF, not a web page — see §3) has been revised. Treat a clean run as "the pages we know
-we depend on haven't moved," not "this repo is definitely current."
+### What it does NOT catch — read this before trusting a clean run
+
+- **Two structural blind spots get their own full explanation in §3, not repeated here**: the exam
+  guide PDF itself (not a URL this script can fetch or diff at all), and any feature still in
+  preview graduating to GA (nothing to fingerprint until it exists as a stable page).
+- **Facts from pages nobody has cited yet.** The tracked list is exactly the pages *this session's*
+  research happened to touch, not comprehensive coverage of every Snowflake feature these notes
+  describe. Most of the original content (written before this mechanism existed) has no
+  corresponding tracked page at all — a clean run says nothing about whether *that* material is
+  still accurate.
+- **Cosmetic, unrelated edits producing false positives.** Snowflake fixing a typo, reformatting a
+  code sample, or adding an unrelated paragraph elsewhere on a tracked page all flip that page's
+  hash to "changed" even though nothing this repo actually tests moved. A ⚠ CHANGED result means
+  "go look," not "something here is now provably wrong" — don't skip the manual read.
+
+Bottom line: treat a clean run as "the pages we know we depend on haven't moved," never as "this
+repo is definitely current."
 
 ## 2. What each tracked page backs
 
