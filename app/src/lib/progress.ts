@@ -103,6 +103,16 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 type Backend = "localStorage" | "http";
 let backend: Backend = "localStorage";
 
+// The ETag (server's progress.json mtime) as of the last GET/successful PUT — see server.ts's
+// If-Match check. progress.json also gets written directly by the snowprep-quiz MCP server
+// (bind-mounted to the same file, no HTTP involved), so this tab's in-memory `state` goes stale
+// the moment that happens. Without tracking a revision and checking it on write, this tab's next
+// autosave — which can fire from routine navigation, not just an explicit edit — would silently
+// overwrite whatever the MCP server just persisted. That already happened once; see
+// progressStore.ts's ProgressConflictError for the other half of this fix.
+let rev: string | null = null;
+let conflictAt: string | null = null;
+
 function setState(next: ProgressState): void {
   state = next;
   listeners.forEach((l) => l());
@@ -114,6 +124,7 @@ async function hydrateFromServer(): Promise<void> {
     if (!res.ok) return; // no such route (e.g. `vite dev`, or opened as plain static files)
     const server = await res.json();
     backend = "http";
+    rev = res.headers.get("ETag");
     setState({ ...defaultState(), ...server });
   } catch {
     // network error / opened as plain files — stay on localStorage
@@ -121,16 +132,40 @@ async function hydrateFromServer(): Promise<void> {
 }
 if (typeof window !== "undefined") hydrateFromServer();
 
-function persist(): void {
+async function persist(): Promise<void> {
   if (backend === "http") {
-    fetch("/api/progress", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(state),
-    }).catch((err) => console.error("progress PUT failed", err));
+    try {
+      const res = await fetch("/api/progress", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "If-Match": rev ?? "0" },
+        body: JSON.stringify(state),
+      });
+      if (res.status === 409) {
+        // Someone else (almost certainly the MCP quiz server) wrote since this tab last read.
+        // Re-sync to their copy rather than retrying the stale write — this tab's own pending
+        // change is lost, but that's strictly better than silently erasing theirs.
+        conflictAt = new Date().toISOString();
+        console.warn(
+          "progress.ts: PUT /api/progress conflict (409) — another writer updated progress.json first. " +
+            "Re-hydrating from the server; this tab's most recent local change was not saved.",
+        );
+        await hydrateFromServer();
+        return;
+      }
+      if (!res.ok) throw new Error(`PUT /api/progress → ${res.status}`);
+      rev = res.headers.get("ETag");
+    } catch (err) {
+      console.error("progress PUT failed", err);
+    }
   } else {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
+}
+
+/** Timestamp of the most recent write conflict, if any — surfaced so the UI can eventually show
+ *  "a change didn't save" instead of this being invisible. Not yet wired into any component. */
+export function getLastProgressConflictAt(): string | null {
+  return conflictAt;
 }
 
 function writeNow(): void {

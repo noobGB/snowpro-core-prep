@@ -14,7 +14,7 @@
 
 import express from "express";
 import path from "node:path";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { resolveConfig } from "./config.js";
 import { runPipeline } from "./index.js";
 import { writeOutput } from "./write/output.js";
@@ -98,8 +98,25 @@ const config = bootPipeline();
 const app = express();
 
 // --- Progress: GET/PUT /api/progress, backed by /data/progress.json. Always the whole object —
-//     no partial merges — matching spec §4's write contract exactly. ---
+//     no partial merges — matching spec §4's write contract exactly.
+//
+//     progress.json has more than one writer: this route, and the snowprep-quiz MCP server
+//     writing the same file directly (mcp-server/src/progressStore.ts — bind-mounted to the same
+//     path, no HTTP involved). Without a concurrency check, a browser tab's debounced PUT of its
+//     own (possibly stale) in-memory state can silently overwrite an attempt the MCP server just
+//     wrote a moment earlier, with no error anywhere — a real incident, not a hypothetical one.
+//     ETag/If-Match (mtimeMs as the revision) closes that: GET reports the revision it read at,
+//     PUT must echo it back, and a mismatch means someone else wrote in between. ---
+function currentMtimeMs(): number | null {
+  try {
+    return statSync(PROGRESS_FILE).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
 app.get("/api/progress", (_req, res) => {
+  res.set("ETag", String(currentMtimeMs() ?? 0));
   if (!existsSync(PROGRESS_FILE)) {
     res.json(defaultProgressState());
     return;
@@ -117,11 +134,22 @@ app.put("/api/progress", express.json({ limit: "2mb" }), (req, res) => {
     res.status(400).json({ error: "body must be a JSON object" });
     return;
   }
+  const ifMatch = req.get("If-Match");
+  if (ifMatch === undefined) {
+    res.status(400).json({ error: "If-Match header required (send back the ETag from GET /api/progress)" });
+    return;
+  }
+  if (ifMatch !== String(currentMtimeMs() ?? 0)) {
+    res.status(409).json({
+      error: "progress.json was modified since you last read it (e.g. by the MCP quiz server). Re-fetch GET /api/progress and retry your change against the fresh copy.",
+    });
+    return;
+  }
   try {
     const tmp = `${PROGRESS_FILE}.tmp-${process.pid}`;
     writeFileSync(tmp, JSON.stringify(req.body), "utf8");
     renameSync(tmp, PROGRESS_FILE); // atomic swap, same pattern as write/output.ts's writer
-    res.status(204).end();
+    res.set("ETag", String(currentMtimeMs() ?? 0)).status(204).end();
   } catch (err) {
     console.error(`PUT /api/progress: failed writing ${PROGRESS_FILE}: ${err}`);
     res.status(500).json({ error: "failed to persist progress" });
