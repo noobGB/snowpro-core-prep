@@ -159,6 +159,23 @@ describe("domainReadiness", () => {
     expect(result.earnedPoints).toBe(92);
   });
 
+  it("excludes an attempt recorded against an older bankVersion from pooling entirely", () => {
+    const content = makeContent({ d1: 0.5, d2: 0.5 });
+    const attempts: Attempt[] = [
+      // Stale bankVersion, perfect score -- must NOT be pooled in, and must NOT consume one of
+      // the 3 "most recent" slots (the current-bankVersion attempt below should still count fully).
+      makeAttempt({ setId: "set-d1", bankVersion: "sha256:old", byDomain: { d1: { answered: 10, credit: 10, scaled: 1000 } } }),
+      makeAttempt({ setId: "set-d1", bankVersion: "sha256:test", byDomain: { d1: { answered: 10, credit: 4, scaled: 400 } } }),
+    ];
+
+    const result = domainReadiness(content, attempts, "d1");
+
+    // If the stale attempt were pooled in: (10 + 4) / 20 = 700. Excluded, it's just the one
+    // current-bankVersion attempt: 4 / 10 = 400.
+    expect(result.attemptsUsed).toBe(1);
+    expect(result.scaled).toBe(400);
+  });
+
   it("returns nulls and zero attemptsUsed when no attempt has touched the domain", () => {
     const content = makeContent({ d1: 0.5, d2: 0.5 });
     const result = domainReadiness(content, [], "d1");

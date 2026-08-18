@@ -24,6 +24,15 @@
  * always draw from every domain). Pooling credit + question-count across the 3 most recent
  * qualifying attempts (rather than averaging their individual scaled scores) is the literal
  * reading of "scaled score across the three most recent attempts."
+ *
+ * "Qualifying" also means the attempt's own `bankVersion` matches the currently-loaded content's
+ * `bankVersion` — an attempt recorded against an older question bank is excluded entirely (not
+ * counted toward the 3-attempt window, not pooled in), not just down-weighted. Without this, a
+ * domain's practice-question pool growing later (new questions added to
+ * SnowPro_Notes_and_Questions/) would retroactively shift old attempts' pooled accuracy even
+ * though nothing about the original attempt actually changed — `domainQuestionCountInAttempt()`
+ * always reads the *current* set size, so an old attempt's stored `credit` would silently get
+ * divided by a denominator it was never actually measured against.
  */
 
 import type { ContentBundle } from "./content";
@@ -54,7 +63,7 @@ export function domainReadiness(content: ContentBundle, attempts: Attempt[], dom
   const maxPoints = Math.round(domainWeight(content, domainId) * 1000);
 
   const touching = attempts
-    .filter((a) => a.byDomain[domainId] !== undefined)
+    .filter((a) => a.byDomain[domainId] !== undefined && a.bankVersion === content.bankVersion)
     .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))
     .slice(0, 3);
 
