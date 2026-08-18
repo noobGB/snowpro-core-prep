@@ -247,11 +247,17 @@ export function Dashboard() {
               const domain = content.domains.find((cd) => cd.id === d.domainId);
               return (
                 <div key={d.domainId}>
-                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 7 }}>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 9, minWidth: 0 }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)" }}>D{domain?.number}</span>
-                      <span style={{ fontSize: 14, color: "var(--text-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{domain?.title}</span>
-                      <span style={{ position: "relative", display: "inline-block" }}>
+                  {/* alignItems: flex-start (not baseline) on both this row and the inner-left
+                      group -- the title below now wraps to two lines on narrow viewports instead
+                      of truncating (domain names are the primary identifying info here, more
+                      important than the badges next to them), so a taller left side needs the
+                      points span on the right, and the D-number/weight-badge siblings on the
+                      left, pinned to the top rather than aligned to a now-ambiguous baseline. */}
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 7 }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 9, minWidth: 0 }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", paddingTop: 1 }}>D{domain?.number}</span>
+                      <span style={{ fontSize: 14, color: "var(--text-body)", minWidth: 0, flex: "1 1 auto" }}>{domain?.title}</span>
+                      <span style={{ position: "relative", display: "inline-block", flexShrink: 0, paddingTop: 1 }}>
                         <button
                           type="button"
                           aria-label="Share of the exam this domain counts for — not a score"
