@@ -302,7 +302,11 @@ Three GitHub Actions workflows, all repo-wide (not scoped to one package):
   actually-relevant signal for a dependency bump and already runs on every Dependabot PR for free;
   use an `@claude` mention on a specific PR (e.g. a risky major-version jump) if a real second
   opinion is ever wanted, rather than paying for one on every routine bump automatically. Don't
-  re-add `allowed_bots` here without weighing this tradeoff again. Both workflows need the
+  re-add `allowed_bots` here without weighing this tradeoff again. Enforced via a job-level
+  `if: github.event.pull_request.user.type != 'Bot'` guard, not just relying on the action's own
+  default bot-refusal — that default *errors* (exit code 1) rather than skipping cleanly, which
+  would otherwise show a red "review: fail" on every single Dependabot PR forever, as pure noise.
+  Both workflows need the
   `ANTHROPIC_API_KEY` repo secret (Settings → Secrets and variables → Actions) and the Claude
   GitHub App installed
   (`https://github.com/apps/claude`) — neither is provisionable by a file change alone. If you ever
