@@ -35,7 +35,7 @@ jobs:
         continue-on-error: true
 
   app:
-    name: app (typecheck + lint)
+    name: app (typecheck + lint + test)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -48,10 +48,16 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci
-      - run: npx tsc --noEmit
+      # NOT `tsc --noEmit` -- app/tsconfig.json is solution-style ("files": [], references to
+      # tsconfig.app.json/tsconfig.node.json), which only does real work under `tsc -b`. A bare
+      # `tsc --noEmit` against it silently typechecks zero files and exits 0 unconditionally --
+      # confirmed by injecting an obvious type error and watching it exit 0 anyway. This job (and
+      # every manual `tsc --noEmit` run against this package) has never actually caught a type
+      # error since this tsconfig was set up. `tsc -b --noEmit` resolves the project references
+      # and genuinely typechecks.
+      - run: npx tsc -b --noEmit
       - run: npm run lint
-      # No `npm test` — app/ has no test script/infrastructure yet (see CLAUDE.md's "Frontend app"
-      # section; tracked as a real follow-up, not silently skipped).
+      - run: npm test
       - name: npm audit (report only, non-blocking)
         run: npm audit --audit-level=high
         continue-on-error: true
