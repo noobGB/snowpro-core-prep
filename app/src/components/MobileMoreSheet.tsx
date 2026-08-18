@@ -8,6 +8,7 @@
  * in one glance after one tap instead of buried last below 5 other rows.
  */
 
+import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { openSettings } from "../lib/settingsStore";
 
@@ -35,6 +36,16 @@ const rowStyle: React.CSSProperties = {
 
 export function MobileMoreSheet({ onClose }: { onClose: () => void }) {
   const location = useLocation();
+
+  // Escape dismisses the sheet, matching every other overlay in this app (SettingsPanel,
+  // CommandPalette) — this one was missing it entirely.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   return (
     <div

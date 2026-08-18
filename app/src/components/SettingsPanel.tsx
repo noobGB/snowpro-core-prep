@@ -10,7 +10,7 @@
  * overlays and each closes the other on open.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useContent } from "../lib/useContent";
 import { getProgress, getStorageBackend, resetProgress, updateProgress, type ProgressState } from "../lib/progress";
 import { isoDate } from "../lib/planDates";
@@ -35,6 +35,7 @@ export function SettingsPanel() {
   const [resetInput, setResetInput] = useState("");
   const [resetDone, setResetDone] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const exportProgress = () => {
     const blob = new Blob([JSON.stringify(getProgress(), null, 2)], { type: "application/json" });
@@ -66,6 +67,15 @@ export function SettingsPanel() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  // Move focus into the panel on open — without this, focus stays on the Sidebar's trigger
+  // button and the next Tab press lands on whatever's next in the underlying page's DOM order
+  // (e.g. Dashboard's exam-date input), which is visually behind this panel's backdrop. Matches
+  // CommandPalette's own "grab focus into the overlay on open" pattern (its `inputRef.current
+  // ?.focus()`), just landing on the close button here since there's no search input to focus.
+  useEffect(() => {
+    if (open) requestAnimationFrame(() => closeButtonRef.current?.focus());
+  }, [open]);
+
   if (!open) return null;
 
   return (
@@ -76,7 +86,7 @@ export function SettingsPanel() {
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
           <span style={{ fontSize: 15, fontWeight: 500, color: "var(--text-heading)" }}>Settings</span>
-          <button type="button" onClick={closeSettings} style={{ background: "transparent", border: "none", color: "var(--text-dim)", fontSize: 16, cursor: "pointer" }}>
+          <button ref={closeButtonRef} type="button" onClick={closeSettings} style={{ background: "transparent", border: "none", color: "var(--text-dim)", fontSize: 16, cursor: "pointer" }}>
             ✕
           </button>
         </div>
