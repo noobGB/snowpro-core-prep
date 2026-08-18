@@ -1,0 +1,26 @@
+{
+  "name": "snowprep-mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP server exposing the SnowPro Core Prep question bank + progress tracking as tools for a conversational quizzing agent.",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "inspect": "npx -y @modelcontextprotocol/inspector tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.4.3",
+    "tsx": "^4.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}
