@@ -257,7 +257,7 @@ confirms the role's actual privileges work, not just that authentication succeed
 **`claude_sandbox` is now the connection to use for all routine work.** `snowpro_trial` should
 only be reached again (via `--config-file`) for genuine account-admin tasks.
 
-## Step 9 — Cleanup: remove the plaintext-password bootstrap connection
+## Step 8 — Cleanup: remove the plaintext-password bootstrap connection
 
 Once `claude_sandbox` was confirmed working, the `snowpro_trial` connection (still holding a
 plaintext password in the old, now-orphaned config file) served no further purpose and was a
@@ -284,11 +284,11 @@ snow --config-file "C:\Users\<YOUR_USERNAME>\AppData\Local\snowflake\config.toml
 ```
 
 The old config file now contains only its `[cli.logs]` section — no connections left at all.
-(The encoding-mismatch warning briefly reappeared during this command, since the Step 10 fix
+(The encoding-mismatch warning briefly reappeared during this command, since the Step 9 fix
 lives only in the new canonical config file, not this old one — expected, and moot now that the
 old file has nothing left to connect with.)
 
-## Step 10 — Fix the recurring "Encoding mismatch" warning
+## Step 9 — Fix the recurring "Encoding mismatch" warning
 
 Every `snow` command had been printing:
 
@@ -332,7 +332,7 @@ stdout = "utf-8"
 Verified fixed: `snow connection test -c claude_sandbox` afterward printed no warning at all, and
 the connection still worked.
 
-## Step 8 — MCP server: architecture correction
+## Step 10 — MCP server: architecture correction
 
 Initial research (during the CLI setup work) pointed at `Snowflake-Labs/mcp`, a locally-run
 server installed via `uvx`, authenticating with the same connector-based auth as the CLI
@@ -348,7 +348,7 @@ not the connector auth (key-pair/password) the CLI uses. The `claude_sandbox` ke
 doesn't carry over to this layer; it was built for a different auth handshake. Tools execute under
 normal Snowflake RBAC on the backend regardless.
 
-## Step 9 — Create the MCP server object
+## Step 11 — Create the MCP server object
 
 Full tool-spec syntax (from Snowflake's own getting-started guide) supports five tool types —
 `SYSTEM_EXECUTE_SQL`, `CORTEX_ANALYST_MESSAGE`, `CORTEX_SEARCH_SERVICE_QUERY`,
@@ -382,7 +382,7 @@ created it — no separate `GRANT USAGE` needed for the owner; that would only m
 internal object-type label for this is `CORTEX_AGENT_SERVER`, not literally "MCP SERVER" — shows
 up that way in `granted_on`.
 
-## Step 10 — Programmatic Access Token (in progress)
+## Step 12 — Programmatic Access Token (in progress)
 
 SQL path confirmed to exist (no need for the Snowsight UI, though that works too):
 
@@ -402,7 +402,7 @@ session. Gotcha worth remembering: a PAT cannot be modified/rotated/revoked in a
 used that same PAT to authenticate — rotation has to go through a different auth method (e.g. the
 key-pair `claude_sandbox` connection).
 
-## Step 11 — Configure Claude Code, connect (pending)
+## Step 13 — Configure Claude Code, connect (pending)
 
 Plan: add an entry to `~/.claude.json` using HTTP transport with a static bearer-token header,
 which the docs confirm makes Claude Code skip the OAuth flow entirely:
@@ -453,7 +453,7 @@ process) for `SNOWFLAKE_MCP_PAT` to be visible to Claude Code. Same underlying r
 already-documented "Electron apps don't fully quit on window close" Claude Desktop gotcha, just
 the inverse case (needing a real restart rather than avoiding a fake one).
 
-## Step 12 — Debugging the connection: three distinct failures, in order
+## Step 14 — Debugging the connection: three distinct failures, in order
 
 First `/mcp` attempt: `Status: failed`, HTTP 401. Diagnosed by testing the PAT directly against
 Snowflake's general REST API (`Invoke-WebRequest` to `/api/v2/databases`), independent of Claude
@@ -476,7 +476,7 @@ Code's MCP client — isolates "is the token bad" from "is something else wrong"
    for ongoing use would be `CREATE NETWORK POLICY ... ALLOWED_IP_LIST = ('<public IP>/32')` +
    `ALTER USER <YOUR_USERNAME> SET NETWORK_POLICY = ...` — not yet applied, since it would also gate
    Snowsight logins and the `claude_sandbox` CLI connection for that user, and public IP isn't
-   guaranteed stable. Deferred until MCP is actually usable (see Step 13).
+   guaranteed stable. Deferred until MCP is actually usable (see Step 15).
    - Own public IP for reference at time of testing: `<YOUR_PUBLIC_IP>` (via `api.ipify.org`).
    - `ALTER USER ... ADD/REMOVE PROGRAMMATIC ACCESS TOKEN` requires elevated privilege
      `CLAUDE_SANDBOX` doesn't have — run directly by hand each time, not scripted, both because
@@ -484,7 +484,7 @@ Code's MCP client — isolates "is the token bad" from "is something else wrong"
 
 After the fix: `/mcp` showed `connected`, and `mcp__Snowflake__SQL_Execution_Tool` became callable.
 
-## Step 13 — Final blocker: Cortex Agent is unavailable on trial-tier accounts
+## Step 15 — Final blocker: Cortex Agent is unavailable on trial-tier accounts
 
 Calling the tool (`SELECT CURRENT_USER(), ...`) failed with:
 `Agent error (code 399504): Access denied for trial accounts.`
