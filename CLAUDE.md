@@ -17,7 +17,8 @@ are grey-box wireframes for each screen, and `Nav.dc.html` covers the sidebar/na
 (storage adapter, `Dockerfile`, `docker-compose.yml`). A subsequent UI/UX review pass (an
 engineering review plus a design critique, both driving the running app with Playwright) produced
 17 follow-up fixes, also complete — see recent commit messages for the full list. There is no
-pending build-order work; changes from here are maintenance, new features, or content updates.
+pending build-order work; changes from here are maintenance, new features, or content updates. The
+`mcp-server/` package (below) is one such post-spec addition — it isn't in the original spec at all.
 
 **Before treating any Snowflake fact in `SnowPro_Notes_and_Questions/` as ground truth in a
 session happening well after the repo's last commit**, run `cd pipeline && npm run check:freshness`
@@ -179,6 +180,24 @@ shallow, so old stored data has the parent key present but missing a newly-added
 the parent key absent entirely (see `flashcards.grades` for the pattern, and its own doc comment
 for why this bit a real bug once).
 
+**`progress.json` has two independent writers**, not one: this HTTP route, and `mcp-server/`
+writing the exact same bind-mounted file directly (no HTTP involved). `GET /api/progress` returns
+an `ETag` (the file's mtime); `PUT` must echo it back via `If-Match`, and a mismatch — someone else
+wrote in between — gets a 409, which `progress.ts` handles by re-hydrating from the server rather
+than retrying the stale write. This isn't defensive boilerplate; a silent overwrite between the two
+writers happened once for real before this existed. If you add a third writer of this file, it
+needs to speak the same ETag protocol, not bypass it.
+
+**Readiness** (`src/lib/readiness.ts`) is a cumulative points model, not an extrapolation — each
+domain owns a fixed slice of 1000 points (its exam weight), unmeasured domains contribute 0 rather
+than being excluded and the remaining weights renormalized, so the headline number only rises as
+more of the actual exam gets covered. A domain's own `scaled` field stays a domain-relative
+accuracy rate (0-1000, independent of that domain's weight) precisely so `pickWeakestDomain()` —
+also exported from here, shared with `mcp-server/`'s auto weak-domain pick — recommends by
+knowledge gap, not by which domain happens to be worth the most exam points. `Dashboard.tsx`'s
+"Keep going" card calls this rather than hardcoding a domain; if it ever goes back to pointing at a
+fixed domain, that's a regression, not a simplification.
+
 **Settings and the ⌘K palette** (`src/lib/settingsStore.ts`, `src/lib/paletteStore.ts`) are both
 tiny external stores following the same pattern, mounted once at the App root (`src/App.tsx`) so
 their global keyboard shortcuts work on every route including the session runner, which has no
@@ -201,3 +220,34 @@ notifying update function (e.g. `updateProgress()`) from *inside* another `setSt
 updater trips "Cannot update a component while rendering a different component." Always call
 side-effecting store updates as sibling statements in an event handler or effect, never nested
 inside another component's `setState` updater callback.
+
+## MCP server (`mcp-server/`)
+
+A standalone MCP server exposing quiz sessions and progress tracking as tools, so an MCP host
+(Claude Desktop, Claude Code, a voice agent) can quiz someone conversationally instead of driving
+the web UI. Not part of the Docker image or the spec's original 15-step build order — a later
+addition, run separately (`npm start` in `mcp-server/`, or registered with a host per its own
+README). Full tool list, environment variables, and a manual test recipe live in
+[`mcp-server/README.md`](mcp-server/README.md) — this section is only the "how it fits with the
+rest of the repo" summary.
+
+- **Same state, two front doors.** It reads/writes `data/progress.json` directly — the identical
+  file `pipeline/src/server.ts` serves over HTTP to the container — via a Docker bind mount, not a
+  named volume, so both processes see the literal same file on disk with no sync step. See the
+  ETag/`If-Match` protocol above (Frontend app → Progress/persistence) for how the two writers
+  avoid clobbering each other.
+- **Never reimplements scoring or readiness.** `mcp-server/src/session.ts` imports
+  `app/src/lib/scoring.ts` (`questionCredit`/`scaledScore`/`byDomainBreakdown`) and
+  `app/src/lib/readiness.ts` (`overallReadiness`, `pickWeakestDomain`) directly, so a quiz taken
+  through this server is scored identically to one taken in the web app, and its weak-domain
+  auto-pick is the same function the Dashboard's "Keep going" card calls.
+- **Not an npm workspace member either** — like `pipeline/`/`app/`, it imports the other two
+  packages' `.ts` source via relative path rather than a shared package boundary; see its own
+  README's "Design notes" for why (the `moduleResolution` compatibility shim needed to typecheck
+  against both packages' different import-suffix conventions in one program, and why it hand-copies
+  `defaultProgressState()` a third time instead of importing `app/src/lib/progress.ts`, whose
+  module top level calls browser-only `localStorage` unconditionally).
+- **Content, read without the container.** It runs `runPipeline()` itself (same function
+  `pipeline/src/server.ts` calls at boot) rather than depending on `content.json` already existing
+  — so it works with the Docker container stopped, reading straight from
+  `SnowPro_Notes_and_Questions/`.

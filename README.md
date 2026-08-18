@@ -59,6 +59,10 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
 - **Setup** — a checkable, step-by-step walkthrough for hands-on practice against a real Snowflake
   account (CLI install, key-pair auth, a least-privilege sandbox role) — commands are copyable,
   each step is its own checkbox.
+- **MCP server** (`mcp-server/`) — quiz yourself conversationally from Claude Desktop, Claude Code,
+  or any other MCP-compatible host instead of clicking through the web UI. Reads/writes the exact
+  same progress file the container serves, so a session run through the MCP server shows up in the
+  web app's Analytics and vice versa. See [`mcp-server/README.md`](mcp-server/README.md).
 - **⌘K/Ctrl+K search** — one command palette across pages, notes, and questions.
 - **Responsive** — a sidebar on desktop, a bottom-tab nav + "More" sheet under 900px wide.
 - **Fully offline** — progress persists to a local file (via Docker) or `localStorage` (without
@@ -110,9 +114,10 @@ Open **http://localhost:8080** and:
 
 1. **Dashboard's Exam card** → set your real exam date in the date field. The countdown and the
    study plan both remap against it immediately.
-2. Same Dashboard → the "Start" card always points at Domain 1 (the heaviest-weighted domain) —
-   click straight into practice, or open **Study plan** in the sidebar to follow the day-by-day
-   checklist instead.
+2. Same Dashboard → the "Start"/"Keep going" card points at whichever domain your own readiness
+   data says needs the most work (an untouched domain always outranks one you've merely scored low
+   on) — click straight into practice, or open **Study plan** in the sidebar to follow the
+   day-by-day checklist instead.
 3. Come back daily: **Study plan** for today's tasks, **Practice**/**Mock exams** to drill and get
    scored, **Flashcards** for quick review, **Analytics** to see readiness by domain once you've
    taken a few. **Settings** (gear icon, bottom of the sidebar) has backup and reset — see
@@ -171,6 +176,24 @@ Anything Claude Code adds or edits in `SnowPro_Notes_and_Questions/` shows up in
 next `docker compose restart` (or immediately in `npm run build:content:watch`, see
 [Local development](#local-development-without-docker)) — the two approaches share one source of
 truth, so switching between them costs nothing.
+
+### Option C — MCP server (conversational quizzing, any MCP host)
+
+A narrower, more structured alternative to Option B: instead of an open-ended agent editing files,
+this runs actual scored quiz sessions — same question bank, same scoring, same progress file — as
+MCP tools any MCP-compatible host can call (Claude Desktop, Claude Code, or a custom voice agent).
+Useful when you want to be quizzed hands-free or from outside an editor, without giving the agent
+open-ended file access.
+
+```bash
+cd mcp-server
+npm install
+claude mcp add snowprep-quiz -- npx tsx mcp-server/src/index.ts   # registers it with Claude Code
+```
+
+See [`mcp-server/README.md`](mcp-server/README.md) for the full tool list, Claude Desktop setup,
+and environment variables. Sessions started here appear in the web app's Analytics/Dashboard
+immediately — it shares `data/progress.json` with the container, not a separate store.
 
 ## Keeping content fresh
 
@@ -315,6 +338,11 @@ cd app && npx tsc --noEmit           # typecheck
 - **`Dockerfile`** — a three-stage build (frontend, pipeline production deps, runtime) that runs
   the content pipeline at container boot, before the server binds — so a bad markdown file is
   caught at start-up, not on first page load.
+- **`mcp-server/`** — a standalone MCP server (not part of the Docker image) exposing quiz
+  sessions and progress as tools for an MCP host. Imports `app/`'s and `pipeline/`'s scoring and
+  content logic directly rather than reimplementing it, and reads/writes the same
+  `data/progress.json` the container does, so it's a second front door onto identical state, not a
+  parallel system.
 
 See [`CLAUDE.md`](CLAUDE.md) for the full architecture writeup (parser internals, the progress
 storage adapter, known gotchas) — written for AI coding agents working in this repo, but equally

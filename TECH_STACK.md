@@ -131,7 +131,32 @@ production runtime inside the Docker container** — `pipeline/package.json` del
 under `dependencies`, not `devDependencies`, because a production `npm ci --omit=dev` install would
 otherwise silently lack it and the container would fail to start.
 
-## 6. Containerization — Docker, Docker Compose
+## 6. The MCP server — the same data, exposed as tools for an LLM agent
+
+**MCP (Model Context Protocol)** — a standard way for an LLM-based agent (Claude Desktop, Claude
+Code, a custom voice assistant) to call a fixed set of *typed* actions ("start a quiz session,"
+"submit this answer") instead of scraping a web page or being handed raw file access. The agent
+sees a menu of named tools with typed inputs/outputs; it doesn't need to know this app has a React
+frontend at all. `mcp-server/src/index.ts` is a **stdio server** specifically — it talks
+newline-delimited JSON-RPC over stdin/stdout to whatever process spawned it, no network port, no
+auth, because the "client" is a process on your own machine, not a remote caller.
+
+**`@modelcontextprotocol/sdk`** — the library that implements the MCP protocol itself (message
+framing, the request/response lifecycle, the stdio transport) so `mcp-server/src/tools.ts` only has
+to describe *what* each tool does, not how JSON-RPC works.
+
+**Zod** — runtime schema validation. TypeScript's `interface`/`type` checks are compile-time only
+and vanish the moment code actually runs — useless for validating a tool call's input, which
+arrives over the wire as untyped JSON from a process you don't control. Zod schemas describe the
+same shape but check it *at runtime*, rejecting a malformed tool call (wrong type, missing field)
+with a clear error instead of it crashing three functions deeper or silently producing garbage.
+Used for every tool's input schema in `mcp-server/src/tools.ts`.
+
+This package deliberately imports `app/`'s and `pipeline/`'s source directly rather than
+duplicating scoring/readiness logic — see `CLAUDE.md`'s "MCP server" section for exactly what it
+reuses and why.
+
+## 7. Containerization — Docker, Docker Compose
 
 **Docker** — packages the app plus everything it needs to run (a specific Node version, installed
 dependencies) into one portable image, so "works on my machine" becomes "works anywhere Docker
@@ -150,7 +175,7 @@ the server's two progress routes read/write `progress.json`. Mounting instead of
 and running `docker compose restart` picks up the change — no rebuild needed, since the pipeline
 re-reads `/content` fresh at every container boot.
 
-## 7. Dev tooling
+## 8. Dev tooling
 
 **`oxlint`** — a linter (flags likely-bugs and style issues: unused variables, suspicious
 comparisons) written in Rust for speed, used here instead of the more common ESLint mainly because
