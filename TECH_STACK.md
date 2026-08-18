@@ -200,10 +200,12 @@ this project has to an integration test, since the container-boot path (`verifyD
 then `runPipeline()` then bind the port, per `pipeline/src/server.ts`) is the one code path none
 of the unit tests exercise end-to-end.
 
-**Claude Code GitHub Action** (`anthropics/claude-code-action`) — an automated PR reviewer plus a
-mention-driven assistant (`@claude` in a PR comment) that can act on its own review findings,
-scoped by prompt to correctness/architecture/test-coverage rather than style (oxlint already
-covers that).
+**Claude Code GitHub Action** (`anthropics/claude-code-action`) — a mention-driven assistant
+(`@claude` in a PR/issue comment) that can review, diagnose a CI failure, or make a fix on request,
+scoped by its system prompt to correctness/architecture/test-coverage rather than style (oxlint
+already covers that). Deliberately on-demand only, not automatic on every PR — an earlier
+automatic-review variant was removed on cost grounds (see `CLAUDE.md`'s CI/CD section) once real
+per-PR spend came in, even though it did catch a genuine bug once.
 
 **Dependabot** — opens a PR when a dependency has an update available, scanning each of the three
 `package.json`/lockfile pairs plus the workflow files themselves, weekly rather than daily since
