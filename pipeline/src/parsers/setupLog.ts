@@ -1,52 +1,70 @@
 /**
- * Parses the setup log (15) into SetupItem records. The "## Step N — Title" headings are
- * sequential and in file order (renumbered 2026-08-18 — an earlier append to the log had reused
- * "Step 9"/"Step 10" for two unrelated entries each, landing out of numeric order relative to the
- * MCP-server section inserted between them; fixed by renumbering the headings in place, without
- * reordering any content, since the log's own convention is to append new steps as they're
- * actually encountered rather than reorder history). Ids are still assigned by file-order position
- * ("s-1", "s-2", ...), never parsed from the heading text — kept that way deliberately, since the
- * log stays append-only going forward and a future addition could reintroduce the same numbering
- * drift; positional ids mean that can never corrupt ids or duplicate/collide, only the cosmetic
- * step numbers, same as this fix just corrected. A leading "## Status" section (before any
- * "## Step" heading) is not a step and is skipped.
+ * Parses the setup log (15) into SetupItem records. The file has two top-level sections —
+ * "## Setup Steps" (things to actually do, in order) and "## Known Issues & Fixes" (things that
+ * went wrong along the way, told separately so a step's own instructions stay a clean checklist
+ * rather than mixed with troubleshooting narrative) — plus a leading "## Status" section that
+ * isn't either and is skipped. Every "### Step N"/"### Issue N" heading (and each "#### Na."
+ * sub-heading nested under a step) becomes its own flat SetupItem, `kind` inherited from whichever
+ * top-level section it's under. Ids are assigned by file-order position ("s-1", "s-2", ...), never
+ * parsed from the heading text — kept that way deliberately, since the log stays append-only going
+ * forward (new steps/issues get appended as they're actually encountered, history never rewritten)
+ * and a future addition could reintroduce numbering drift; positional ids mean that can never
+ * corrupt ids or collide, only the cosmetic step numbers (which is exactly what happened once
+ * already — see this file's git history, fixed by renumbering the headings in place).
  *
- * H2 steps and their nested H3 sub-steps (e.g. "### 7a. Generate the key pair") each become their
- * own flat entry — group = the owning H2's text either way, title = that heading's own text.
- * `body` is a byte-faithful raw-line slice (not a remark-serialized re-render, which could subtly
- * reformat the source). `commands` come from any language-tagged fenced code block in an entry's
- * range (untagged blocks are error/output text, confirmed real, and are correctly excluded).
- * `gotchas` are scanned two ways since the source marks them three inconsistent ways: any
- * paragraph whose flattened text contains "gotcha" ANYWHERE (not just at the start — two real
- * cases, a mid-paragraph mention and a bold prefix that doesn't start with the word itself, would
- * be missed by an anchored match), and any child H3 heading containing "gotcha" (attached to the
- * parent H2's gotchas array, in addition to the H3 having its own entry).
+ * Each entry's `summary` is its own "> **Summary:** ..." blockquote, required by convention
+ * immediately under the heading — this is deliberately the ONLY thing the app's Setup page
+ * renders inline; the full narrative stays in this file for whoever wants it, reachable via
+ * `sourceAnchor` (a GitHub-slugified version of the heading text, for a "full details" deep link
+ * back to this file on GitHub). `commands` are still extracted the same way as before (any
+ * language-tagged fenced code block in the entry's range — untagged blocks are error/output text,
+ * not commands, and are correctly excluded) since a copyable command is useful inline and isn't
+ * what made the old page feel like a log dump; long prose paragraphs were the problem, and those
+ * no longer get rendered at all.
  */
 
 import { visit } from "unist-util-visit";
-import type { Code, Heading, Paragraph, Root } from "mdast";
+import type { Blockquote, Code, Heading, Paragraph, Root } from "mdast";
 import type { SetupItem } from "../types.js";
 import { SequentialId } from "../util/ids.js";
 import { flattenText, headingText, parseMd } from "../util/markdown.js";
 
-const STEP_HEADING_RE = /^Step \d+/i;
-const GOTCHA_RE = /\bgotcha\b/i;
+const SUMMARY_PREFIX_RE = /^Summary:\s*/i;
+
+type Kind = "step" | "issue";
+
+function sectionKind(h2Title: string): Kind | null {
+  if (/^Setup Steps/i.test(h2Title)) return "step";
+  if (/^Known Issues/i.test(h2Title)) return "issue";
+  return null; // e.g. "## Status" -- a real section, just not one this parser turns into items
+}
+
+/** Best-effort match of GitHub's own heading-anchor algorithm: lowercase, strip anything that
+ *  isn't a word character/space/hyphen (drops backticks, em dashes, punctuation entirely rather
+ *  than substituting a hyphen), then replace each remaining space with its own hyphen (GitHub
+ *  does not collapse runs of spaces into a single hyphen). */
+function githubSlug(heading: string): string {
+  return heading
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/ /g, "-");
+}
 
 interface Boundary {
-  depth: 2 | 3;
+  depth: 2 | 3 | 4;
   title: string;
   lineStart: number; // 1-based, the heading's own line
 }
 
 interface EntryDraft {
   id: string;
+  kind: Kind;
   group: string;
   title: string;
   bodyStartLine: number; // 1-based, inclusive
   bodyEndLine: number; // 1-based, inclusive
+  summary: string;
   commands: string[];
-  gotchas: string[];
-  parentH2Index: number | null;
 }
 
 function collectBoundaries(root: Root): Boundary[] {
@@ -54,7 +72,7 @@ function collectBoundaries(root: Root): Boundary[] {
   for (const node of root.children) {
     if (node.type !== "heading") continue;
     const h = node as Heading;
-    if ((h.depth === 2 || h.depth === 3) && h.position) {
+    if ((h.depth === 2 || h.depth === 3 || h.depth === 4) && h.position) {
       boundaries.push({ depth: h.depth, title: headingText(h), lineStart: h.position.start.line });
     }
   }
@@ -68,8 +86,8 @@ export function parseSetupLog(raw: string): SetupItem[] {
   const nextId = new SequentialId("s-");
 
   const entries: EntryDraft[] = [];
-  let currentGroup: string | null = null;
-  let currentH2Index: number | null = null;
+  let currentKind: Kind | null = null;
+  let currentH3Index: number | null = null;
 
   boundaries.forEach((b, i) => {
     const nextLineStart = boundaries[i + 1]?.lineStart;
@@ -77,41 +95,39 @@ export function parseSetupLog(raw: string): SetupItem[] {
     const bodyEndLine = (nextLineStart ?? lines.length + 1) - 1;
 
     if (b.depth === 2) {
-      if (!STEP_HEADING_RE.test(b.title)) {
-        currentGroup = null;
-        currentH2Index = null;
-        return;
-      }
-      currentGroup = b.title;
+      currentKind = sectionKind(b.title);
+      currentH3Index = null;
+      return;
+    }
+
+    if (b.depth === 3) {
+      if (currentKind === null) return; // H3 outside "Setup Steps"/"Known Issues" (shouldn't happen) -- ignore
       entries.push({
         id: nextId.take(),
+        kind: currentKind,
         group: b.title,
         title: b.title,
         bodyStartLine,
         bodyEndLine,
+        summary: "",
         commands: [],
-        gotchas: [],
-        parentH2Index: null,
       });
-      currentH2Index = entries.length - 1;
+      currentH3Index = entries.length - 1;
       return;
     }
 
-    // H3
-    if (currentGroup === null) return; // an H3 outside any recognized "## Step" group — ignore
+    // depth 4
+    if (currentKind === null || currentH3Index === null) return; // H4 outside a recognized Step -- ignore
     entries.push({
       id: nextId.take(),
-      group: currentGroup,
+      kind: currentKind,
+      group: entries[currentH3Index]!.title,
       title: b.title,
       bodyStartLine,
       bodyEndLine,
+      summary: "",
       commands: [],
-      gotchas: [],
-      parentH2Index: currentH2Index,
     });
-    if (GOTCHA_RE.test(b.title) && currentH2Index !== null) {
-      entries[currentH2Index]!.gotchas.push(b.title);
-    }
   });
 
   const entryFor = (line: number): EntryDraft | undefined =>
@@ -123,20 +139,23 @@ export function parseSetupLog(raw: string): SetupItem[] {
     if (entry) entry.commands.push(node.value);
   });
 
-  visit(root, "paragraph", (node: Paragraph) => {
+  visit(root, "blockquote", (node: Blockquote) => {
     if (!node.position) return;
-    const text = flattenText(node);
-    if (!GOTCHA_RE.test(text)) return;
     const entry = entryFor(node.position.start.line);
-    if (entry) entry.gotchas.push(text);
+    if (!entry || entry.summary) return; // first blockquote in range wins
+    const firstParagraph = node.children.find((c): c is Paragraph => c.type === "paragraph");
+    if (!firstParagraph) return;
+    const text = flattenText(firstParagraph);
+    if (SUMMARY_PREFIX_RE.test(text)) entry.summary = text.replace(SUMMARY_PREFIX_RE, "");
   });
 
   return entries.map((e) => ({
     id: e.id,
+    kind: e.kind,
     group: e.group,
     title: e.title,
-    body: lines.slice(e.bodyStartLine - 1, e.bodyEndLine).join("\n").trim(),
+    summary: e.summary,
     commands: e.commands,
-    gotchas: e.gotchas,
+    sourceAnchor: githubSlug(e.title),
   }));
 }

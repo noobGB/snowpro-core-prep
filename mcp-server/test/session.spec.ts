@@ -84,8 +84,8 @@ function fixtureBundle(): ContentBundle {
     ],
     resources: [],
     setup: [
-      { id: "s-1", group: "Install", title: "Install CLI", body: "", commands: [], gotchas: [] },
-      { id: "s-2", group: "Install", title: "Configure auth", body: "", commands: [], gotchas: [] },
+      { id: "s-1", kind: "step", group: "Install", title: "Install CLI", summary: "", commands: [], sourceAnchor: "install-cli" },
+      { id: "s-2", kind: "step", group: "Install", title: "Configure auth", summary: "", commands: [], sourceAnchor: "configure-auth" },
     ],
   };
 }

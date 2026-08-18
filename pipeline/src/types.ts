@@ -87,12 +87,13 @@ export interface Resource {
 }
 
 export interface SetupItem {
-  id: string; // "s-<n>", file-order position, never the parsed "Step N" number
-  group: string;
-  title: string;
-  body: string; // raw markdown, byte-faithful to source
-  commands: string[];
-  gotchas: string[];
+  id: string; // "s-<n>", file-order position, never the parsed "Step N"/"Issue N" number
+  kind: "step" | "issue"; // which top-level section ("## Setup Steps" / "## Known Issues & Fixes") this came from
+  group: string; // owning heading's own text (itself, for a top-level entry; its parent's, for a sub-entry)
+  title: string; // this heading's own text
+  summary: string; // the "> **Summary:** ..." blockquote immediately under the heading
+  commands: string[]; // language-tagged fenced code blocks in this entry's range
+  sourceAnchor: string; // GitHub-slug of `title`, for a "full details" deep link back to the source file
 }
 
 export interface ContentBundle {

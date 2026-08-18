@@ -80,11 +80,12 @@ export interface Resource {
 
 export interface SetupItem {
   id: string;
+  kind: "step" | "issue";
   group: string;
   title: string;
-  body: string;
+  summary: string;
   commands: string[];
-  gotchas: string[];
+  sourceAnchor: string;
 }
 
 export interface ContentBundle {
