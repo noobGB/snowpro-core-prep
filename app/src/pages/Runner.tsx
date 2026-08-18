@@ -516,6 +516,41 @@ function QuestionCard({
   onToggle: (key: string) => void;
 }) {
   const isMulti = question.type === "multi";
+  const optionRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  // Roving tabindex for the single-select radiogroup (ARIA APG pattern): only one option is ever
+  // a Tab stop at a time — the currently-selected one, or the first option before anything's
+  // picked. isMulti's checkboxes are deliberately left out of this: each one stays independently
+  // Tab-able (its native default), which is already correct ARIA behavior for a checkbox group.
+  const [rovingKey, setRovingKey] = useState<string>(() => picked[0] ?? question.options[0]?.key ?? "");
+
+  // A new question swaps `question`/`picked` together in the same render (Runner reuses this
+  // component instance rather than remounting it per-question), so re-seed roving focus whenever
+  // the question identity changes — otherwise the previous question's roving key would linger.
+  useEffect(() => {
+    setRovingKey(picked[0] ?? question.options[0]?.key ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [question.id]);
+
+  const moveRovingFocus = (key: string) => {
+    setRovingKey(key);
+    onToggle(key);
+    optionRefs.current[key]?.focus();
+  };
+
+  const onGroupKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const keys = question.options.map((o) => o.key);
+    if (keys.length === 0) return;
+    const currentPos = Math.max(0, keys.indexOf(rovingKey));
+    if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+      e.preventDefault();
+      moveRovingFocus(keys[(currentPos + 1) % keys.length]!);
+    } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+      e.preventDefault();
+      moveRovingFocus(keys[(currentPos - 1 + keys.length) % keys.length]!);
+    }
+  };
+
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-card)", padding: 20 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
@@ -529,16 +564,28 @@ function QuestionCard({
       <div id={`stem-${question.id}`} className="inline-md" style={{ fontSize: 16, lineHeight: 1.6, color: "var(--text-body)", marginBottom: 16 }}>
         {renderInline(question.stem)}
       </div>
-      <div role={isMulti ? "group" : "radiogroup"} aria-labelledby={`stem-${question.id}`} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div
+        role={isMulti ? "group" : "radiogroup"}
+        aria-labelledby={`stem-${question.id}`}
+        onKeyDown={isMulti ? undefined : onGroupKeyDown}
+        style={{ display: "flex", flexDirection: "column", gap: 6 }}
+      >
         {question.options.map((opt) => {
           const selected = picked.includes(opt.key);
           return (
             <button
               key={opt.key}
+              ref={(el) => {
+                optionRefs.current[opt.key] = el;
+              }}
               type="button"
               role={isMulti ? "checkbox" : "radio"}
               aria-checked={selected}
-              onClick={() => onToggle(opt.key)}
+              tabIndex={isMulti ? undefined : opt.key === rovingKey ? 0 : -1}
+              onClick={() => {
+                if (!isMulti) setRovingKey(opt.key);
+                onToggle(opt.key);
+              }}
               style={{
                 display: "flex",
                 alignItems: "flex-start",

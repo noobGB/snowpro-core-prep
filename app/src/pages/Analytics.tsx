@@ -141,9 +141,14 @@ function ScoreTrend({ attempts, currentBankVersion }: { attempts: Attempt[]; cur
               fill={isOldBank ? "var(--card)" : "var(--text-body)"}
               stroke="var(--text-body)"
               strokeWidth={isOldBank ? 2 : 0}
+              tabIndex={0}
+              role="img"
+              aria-label={`${p.attempt.scaled} out of 1000, ${new Date(p.attempt.submittedAt).toLocaleDateString()}${isOldBank ? ", older content version" : ""}`}
               style={{ cursor: "pointer" }}
               onMouseEnter={() => setHover(i)}
               onMouseLeave={() => setHover((h) => (h === i ? null : h))}
+              onFocus={() => setHover(i)}
+              onBlur={() => setHover((h) => (h === i ? null : h))}
             />
           );
         })}
