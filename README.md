@@ -1,5 +1,7 @@
 # SnowPro Core Prep
 
+[![CI](https://github.com/noobGB/snowpro-core-prep/actions/workflows/ci.yml/badge.svg)](https://github.com/noobGB/snowpro-core-prep/actions/workflows/ci.yml)
+
 A local, offline-first study app for the Snowflake **SnowPro Core (COF-C03)** certification —
 turns a folder of markdown notes into a full study tool: domain notes, practice questions, timed
 mock exams, flashcards, a day-by-day plan, and analytics. No account, no cloud service, no

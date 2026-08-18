@@ -270,3 +270,41 @@ rest of the repo" summary.
   `pipeline/src/server.ts` calls at boot) rather than depending on `content.json` already existing
   — so it works with the Docker container stopped, reading straight from
   `SnowPro_Notes_and_Questions/`.
+
+## CI/CD (`.github/`)
+
+Three GitHub Actions workflows, all repo-wide (not scoped to one package):
+
+- **`workflows/ci.yml`** — four jobs on every push to `master` and every PR: `pipeline`
+  (typecheck + vitest), `app` (typecheck + oxlint — no test script exists yet, see the app/
+  section above), `mcp-server` (typecheck + vitest), and `docker-smoke` (`docker compose build`,
+  boot the container, curl `localhost:8080` for a real 200, always tear down). Each npm job runs
+  `npm ci` in its own package directory — these three packages aren't an npm workspace, so there's
+  no single root install step. `docker-smoke` pre-creates `./data` with open permissions before
+  building — a fresh checkout has no `./data` (gitignored), and since the final image stage runs as
+  the non-root `node` user while `docker-compose.yml` bind-mounts `./data` at runtime (overlaying
+  the image's own build-time `chown`), an implicitly-auto-created host directory would come up
+  root-owned and fail `server.ts`'s `verifyDataDirWritable()` boot check — a CI-only false negative,
+  not a real bug, if that step is ever removed.
+- **`workflows/claude-review.yml`** / **`workflows/claude.yml`** — the Claude Code GitHub Action
+  (`anthropics/claude-code-action@v1`). The first reviews every PR automatically on open/sync,
+  scoped by prompt to this repo's actual risk areas (the progress.json ETag/If-Match contract,
+  drift between the three hand-duplicated packages, missing test coverage) rather than a generic
+  checklist. The second responds to an `@claude` mention in a PR/issue comment or review, closing
+  the review → fix loop — its `claude_args`' `--system-prompt` tells it to follow this file's
+  conventions and keep doc-sync commits separate from code commits, the practice already
+  established in this repo's own history. Both need the `ANTHROPIC_API_KEY` repo secret (Settings →
+  Secrets and variables → Actions) and the Claude GitHub App installed
+  (`https://github.com/apps/claude`) — neither is provisionable by a file change alone. If you ever
+  touch these workflows, re-verify `anthropics/claude-code-action`'s current example files
+  (`examples/claude.yml`, `examples/pr-review-comprehensive.yml` in that repo) before trusting this
+  file's existing YAML — its inputs (`prompt` vs. `direct_prompt`, `claude_args` vs. separate
+  top-level flags) have changed across versions before.
+- **`dependabot.yml`** — weekly (Monday) dependency PRs for each of the three npm packages plus
+  the workflow files themselves, with minor/patch bumps grouped per package to keep PR volume down
+  on a low-traffic repo.
+
+Branch protection is intentionally not configured — this is a private repo, and GitHub's branch
+protection rulesets require a paid plan or a public repo (confirmed via a 403 from the API); CI
+still reports pass/fail status on every PR/commit via the Checks tab, it just doesn't technically
+block merging.
