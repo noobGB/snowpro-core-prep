@@ -186,7 +186,12 @@ an `ETag` (the file's mtime); `PUT` must echo it back via `If-Match`, and a mism
 wrote in between — gets a 409, which `progress.ts` handles by re-hydrating from the server rather
 than retrying the stale write. This isn't defensive boilerplate; a silent overwrite between the two
 writers happened once for real before this existed. If you add a third writer of this file, it
-needs to speak the same ETag protocol, not bypass it.
+needs to speak the same ETag protocol, not bypass it. The 409 path is reactive end to end now, not
+silent: `persist()` sets `conflictAt` and re-hydrates, `useProgressConflict()` (a second
+`useSyncExternalStore` reader sharing the same `subscribe`/`listeners` pair `useProgress()` uses)
+re-renders on that change, and `components/ConflictBanner.tsx` — mounted once in `AppShell.tsx`, so
+it's visible on every route — turns it into a dismissible "a change didn't save" message instead of
+only a `console.warn`.
 
 **Readiness** (`src/lib/readiness.ts`) is a cumulative points model, not an extrapolation — each
 domain owns a fixed slice of 1000 points (its exam weight), unmeasured domains contribute 0 rather
@@ -196,7 +201,21 @@ accuracy rate (0-1000, independent of that domain's weight) precisely so `pickWe
 also exported from here, shared with `mcp-server/`'s auto weak-domain pick — recommends by
 knowledge gap, not by which domain happens to be worth the most exam points. `Dashboard.tsx`'s
 "Keep going" card calls this rather than hardcoding a domain; if it ever goes back to pointing at a
-fixed domain, that's a regression, not a simplification.
+fixed domain, that's a regression, not a simplification. It also renders a one-line reason chip
+("Not started yet" vs. "Lowest score so far", from that domain's own `scaled === null` check) next
+to the recommendation — a bare recommendation with no visible rationale reads as untrustworthy the
+first time a user checks the math themselves, so don't drop the reason without replacing it with an
+equivalent one. **`Dashboard.tsx`'s domain rows and `Analytics.tsx`'s domain rows intentionally show
+different numbers for the same domain** (e.g. "103 pts / 310" vs. "333 / 1000") — one is
+weight-scaled earned points, the other is domain-relative accuracy — and both are labeled
+accordingly (`pts` suffix; `/ 1000` suffix + the kicker reads "accuracy" not "readiness") precisely
+because an earlier version showed both as bare unlabeled numbers and a design review confirmed that
+reads as flatly inconsistent, not just under-explained. The weight badge next to each domain title
+is a real `<button>` (not a plain `<span title="...">`) for the same reason — a hover-only tooltip
+is invisible to keyboard and touch input, which failed WCAG 1.4.13/2.1.1 outright on the sub-900px
+layout this repo treats as first-class; it has an `aria-label` for screen readers plus a
+click/Enter-toggled visible tooltip (state lives in `Dashboard.tsx`, not the badge itself) for
+sighted keyboard/touch users. Don't revert either of these to a plain hover-only `title` attribute.
 
 **Settings and the ⌘K palette** (`src/lib/settingsStore.ts`, `src/lib/paletteStore.ts`) are both
 tiny external stores following the same pattern, mounted once at the App root (`src/App.tsx`) so
