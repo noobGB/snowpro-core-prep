@@ -11,6 +11,13 @@ on:
 
 jobs:
   review:
+    # The action refuses any bot-authored PR by default and exits non-zero rather than skipping
+    # cleanly (confirmed: "Workflow initiated by non-human actor... Process completed with exit
+    # code 1") -- so without this guard, every Dependabot PR shows a red "review: fail" forever,
+    # purely as noise (not a real signal; see CLAUDE.md for why bot PRs are deliberately not
+    # reviewed by this workflow). Checking user.type == 'Bot' rather than hardcoding
+    # 'dependabot[bot]' so this also covers any other bot that opens PRs here later.
+    if: github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-latest
     permissions:
       contents: read
