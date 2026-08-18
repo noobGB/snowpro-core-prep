@@ -293,8 +293,11 @@ Three GitHub Actions workflows, all repo-wide (not scoped to one package):
   checklist. The second responds to an `@claude` mention in a PR/issue comment or review, closing
   the review → fix loop — its `claude_args`' `--system-prompt` tells it to follow this file's
   conventions and keep doc-sync commits separate from code commits, the practice already
-  established in this repo's own history. Both need the `ANTHROPIC_API_KEY` repo secret (Settings →
-  Secrets and variables → Actions) and the Claude GitHub App installed
+  established in this repo's own history. `claude-review.yml` also sets `allowed_bots:
+  "dependabot[bot]"` — the action refuses to run for any bot-authored PR by default, and this repo's
+  Dependabot PRs are a confirmed real trigger for it (its diffs are low-risk version bumps, worth
+  reviewing for e.g. a risky major-version jump). Both need the `ANTHROPIC_API_KEY` repo secret
+  (Settings → Secrets and variables → Actions) and the Claude GitHub App installed
   (`https://github.com/apps/claude`) — neither is provisionable by a file change alone. If you ever
   touch these workflows, re-verify `anthropics/claude-code-action`'s current example files
   (`examples/claude.yml`, `examples/pr-review-comprehensive.yml` in that repo) before trusting this
