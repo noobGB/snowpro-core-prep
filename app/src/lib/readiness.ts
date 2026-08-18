@@ -1,10 +1,23 @@
 /**
  * Readiness computation, per spec §4's "Derived numbers" table:
- *   - Domain readiness: scaled score pooled across that domain's questions in the three most
- *     recent attempts touching it (practice and mock count equally). Blank until an attempt
- *     exists.
- *   - Overall readiness: domain readiness weighted 31/21/20/18/10; domains with no data are
- *     excluded and the remaining weights renormalized.
+ *   - Domain readiness: `scaled` is an accuracy rate (0-1000) pooled across that domain's
+ *     questions in the three most recent attempts touching it (practice and mock count equally).
+ *     Blank until an attempt exists. This is domain-relative — a domain worth 10% of the exam and
+ *     one worth 31% both read 1000 on a perfect run — so it stays the right signal for picking the
+ *     weakest domain to study next (knowledge gap, not exam-weight size).
+ *   - `maxPoints` is that domain's own slice of the 1000-point exam (its weight × 1000, e.g. a 31%
+ *     domain owns 310) and `earnedPoints` is how much of that slice has actually been earned
+ *     (accuracy rate × maxPoints). Both are always derived from `content.domains[].weight` and the
+ *     live question-bank size — never hardcoded — so they track any change to domain weighting or
+ *     question counts automatically.
+ *   - Overall readiness sums `earnedPoints` across all domains and rescales against the sum of all
+ *     `maxPoints` (nominally 1000, but computed rather than assumed, to absorb any rounding drift
+ *     from per-domain weight → point conversion). Domains with no data yet contribute 0 earned
+ *     points but still hold their max — they are NOT excluded and weights are NOT renormalized —
+ *     so overall only rises as more of the whole exam gets covered, and a perfect score on one
+ *     small domain can't inflate the headline number on its own. `measuredWeight` (sum of exam
+ *     weight for domains with data) is reported separately for the "N% of the exam measured"
+ *     caveat in the UI.
  *
  * "Touching" a domain means the attempt's set actually contained questions from it — every
  * domain-kind attempt touches exactly one domain (its own), every mock touches all five (mocks
@@ -19,8 +32,14 @@ import type { Attempt } from "./progress";
 export interface DomainReadiness {
   domainId: string;
   scaled: number | null;
+  earnedPoints: number | null;
+  maxPoints: number;
   attemptsUsed: number;
   lowSample: boolean;
+}
+
+function domainWeight(content: ContentBundle, domainId: string): number {
+  return content.domains.find((d) => d.id === domainId)?.weight ?? 0;
 }
 
 function domainQuestionCountInAttempt(content: ContentBundle, attempt: Attempt, domainId: string): number {
@@ -32,13 +51,16 @@ function domainQuestionCountInAttempt(content: ContentBundle, attempt: Attempt, 
 export function domainReadiness(content: ContentBundle, attempts: Attempt[], domainId: string): DomainReadiness {
   const domainSet = content.sets.find((s) => s.domainId === domainId && s.kind === "domain");
   const lowSample = (domainSet?.questionIds.length ?? 0) < 10;
+  const maxPoints = Math.round(domainWeight(content, domainId) * 1000);
 
   const touching = attempts
     .filter((a) => a.byDomain[domainId] !== undefined)
     .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))
     .slice(0, 3);
 
-  if (touching.length === 0) return { domainId, scaled: null, attemptsUsed: 0, lowSample };
+  if (touching.length === 0) {
+    return { domainId, scaled: null, earnedPoints: null, maxPoints, attemptsUsed: 0, lowSample };
+  }
 
   let totalCredit = 0;
   let totalQuestions = 0;
@@ -47,9 +69,13 @@ export function domainReadiness(content: ContentBundle, attempts: Attempt[], dom
     totalQuestions += domainQuestionCountInAttempt(content, a, domainId);
   }
 
+  const rate = totalQuestions > 0 ? totalCredit / totalQuestions : null;
+
   return {
     domainId,
-    scaled: totalQuestions > 0 ? Math.round((totalCredit / totalQuestions) * 1000) : null,
+    scaled: rate !== null ? Math.round(rate * 1000) : null,
+    earnedPoints: rate !== null ? Math.round(rate * maxPoints) : null,
+    maxPoints,
     attemptsUsed: touching.length,
     lowSample,
   };
@@ -66,13 +92,31 @@ export function overallReadiness(content: ContentBundle, attempts: Attempt[]): O
   const measured = perDomain.filter((d) => d.scaled !== null);
   if (measured.length === 0) return { overall: null, measuredWeight: 0, perDomain };
 
-  const weightOf = (domainId: string) => content.domains.find((d) => d.id === domainId)?.weight ?? 0;
-  const totalWeight = measured.reduce((sum, d) => sum + weightOf(d.domainId), 0);
-  const weightedSum = measured.reduce((sum, d) => sum + (d.scaled ?? 0) * weightOf(d.domainId), 0);
+  const examMax = perDomain.reduce((sum, d) => sum + d.maxPoints, 0);
+  const measuredWeight = measured.reduce((sum, d) => sum + domainWeight(content, d.domainId), 0);
+  const earnedSum = perDomain.reduce((sum, d) => sum + (d.earnedPoints ?? 0), 0);
 
   return {
-    overall: totalWeight > 0 ? Math.round(weightedSum / totalWeight) : null,
-    measuredWeight: totalWeight,
+    overall: examMax > 0 ? Math.round((earnedSum / examMax) * 1000) : null,
+    measuredWeight,
     perDomain,
   };
+}
+
+/**
+ * Picks the domain most worth studying next: ascending by accuracy rate (`scaled`), with
+ * never-attempted domains (`scaled === null`) treated as most urgent and sorted first. Ties
+ * (e.g. everything untouched) fall back to `content.domains`' own order, so this isn't
+ * hardcoded to "Domain 1" — it just happens to recommend whichever domain content.json lists
+ * first until any domain has data, same as the MCP server's auto-pick.
+ */
+export function pickWeakestDomain(content: ContentBundle, attempts: Attempt[]): string | null {
+  const readiness = overallReadiness(content, attempts);
+  const sorted = [...readiness.perDomain].sort((a, b) => {
+    if (a.scaled === null && b.scaled === null) return 0;
+    if (a.scaled === null) return -1;
+    if (b.scaled === null) return 1;
+    return a.scaled - b.scaled;
+  });
+  return sorted[0]?.domainId ?? null;
 }

@@ -10,7 +10,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useContent } from "../lib/useContent";
 import { useProgress, updateProgress } from "../lib/progress";
-import { overallReadiness } from "../lib/readiness";
+import { overallReadiness, pickWeakestDomain } from "../lib/readiness";
 import { daysBetweenIso, defaultExamDate, isoDate, remapPlan } from "../lib/planDates";
 
 function daysBetween(today: Date, exam: Date): number {
@@ -76,8 +76,9 @@ export function Dashboard() {
   }
   if (!content) return <div style={kicker}>Loading…</div>;
 
-  const domain1 = content.domains.find((d) => d.number === 1);
-  const set1 = content.sets.find((s) => s.id === "set-d1");
+  const nextDomainId = pickWeakestDomain(content, progress.attempts);
+  const nextDomain = nextDomainId ? content.domains.find((d) => d.id === nextDomainId) : undefined;
+  const nextDomainSet = nextDomainId ? content.sets.find((s) => s.domainId === nextDomainId && s.kind === "domain") : undefined;
   const mockSet = content.sets.find((s) => s.kind === "mock");
   const remappedPlan = remapPlan(content.plan, examDate);
   const todayIso = isoDate(today);
@@ -180,19 +181,19 @@ export function Dashboard() {
               <div>
                 <div style={{ ...kicker, color: "var(--accent)" }}>{hasData ? "Keep going" : "Start"}</div>
                 <div style={{ fontSize: 22, fontWeight: 500, color: "var(--text-heading)", letterSpacing: "-0.012em", lineHeight: 1.25 }}>
-                  {domain1 ? `Domain 1 — ${domain1.title}` : "Domain 1"}
+                  {nextDomain ? `Domain ${nextDomain.number} — ${nextDomain.title}` : "Practice"}
                 </div>
                 <div style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 6 }}>
-                  {domain1 ? `${Math.round(domain1.weight * 100)}% of the exam` : ""}
-                  {set1 ? ` · ${set1.questionIds.length} practice questions` : ""}
+                  {nextDomain ? `${Math.round(nextDomain.weight * 100)}% of the exam` : ""}
+                  {nextDomainSet ? ` · ${nextDomainSet.questionIds.length} practice questions` : ""}
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <Link
-                  to={set1 ? `/session/${set1.id}` : "/practice"}
+                  to={nextDomainSet ? `/session/${nextDomainSet.id}` : "/practice"}
                   style={{ display: "inline-flex", alignItems: "center", background: "var(--accent)", color: "var(--canvas)", borderRadius: 6, padding: "11px 18px", minHeight: 44, fontSize: 14, fontWeight: 500 }}
                 >
-                  {hasData ? "Practice Domain 1" : "Start Domain 1 practice"}
+                  {hasData && nextDomain ? `Practice Domain ${nextDomain.number}` : "Start Domain 1 practice"}
                 </Link>
                 <Link
                   to={mockSet ? `/session/${mockSet.id}` : "/mocks"}
@@ -219,7 +220,6 @@ export function Dashboard() {
               </div>
               <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 8 }}>
                 Weighted by exam domain weight · pass line 750
-                {readiness.measuredWeight < 0.999 && ` · ${Math.round(readiness.measuredWeight * 100)}% of the exam measured`}
               </div>
             </div>
           </div>
@@ -232,12 +232,15 @@ export function Dashboard() {
                     <div style={{ display: "flex", alignItems: "baseline", gap: 9, minWidth: 0 }}>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)" }}>D{domain?.number}</span>
                       <span style={{ fontSize: 14, color: "var(--text-body)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{domain?.title}</span>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", background: "rgba(255,255,255,.05)", borderRadius: 4, padding: "1px 6px" }}>
-                        {domain ? Math.round(domain.weight * 100) : 0}%
+                      <span
+                        title="Share of the exam this domain counts for — not a score"
+                        style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)", background: "rgba(255,255,255,.05)", borderRadius: 4, padding: "1px 6px", whiteSpace: "nowrap" }}
+                      >
+                        {domain ? Math.round(domain.weight * 100) : 0}% weight
                       </span>
                     </div>
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text-heading)", whiteSpace: "nowrap" }}>
-                      {d.scaled ?? "not measured"}
+                      {d.earnedPoints !== null ? `${d.earnedPoints} / ${d.maxPoints}` : `— / ${d.maxPoints}`}
                     </span>
                   </div>
                   <div style={{ position: "relative", height: 6, background: "var(--hairline)", borderRadius: 3, overflow: "hidden" }}>
@@ -257,7 +260,7 @@ export function Dashboard() {
           </div>
           <p style={{ fontSize: 14, lineHeight: 1.65, color: "var(--text-muted)", margin: "0 0 14px", maxWidth: "38em" }}>
             Readiness appears here once you have taken something. Until then the plan is the better
-            guide{domain1 ? ` — Domain 1 is ${Math.round(domain1.weight * 100)}% of the exam and the natural place to start.` : "."}
+            guide{nextDomain ? ` — Domain ${nextDomain.number} is ${Math.round(nextDomain.weight * 100)}% of the exam and the natural place to start.` : "."}
             {" "}Today's tasks are in the card below
             {planStartsIn !== null && ` (the plan itself starts in ${planStartsIn} ${planStartsIn === 1 ? "day" : "days"})`}.
           </p>
