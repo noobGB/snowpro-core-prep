@@ -266,6 +266,16 @@ rest of the repo" summary.
   against both packages' different import-suffix conventions in one program, and why it hand-copies
   `defaultProgressState()` a third time instead of importing `app/src/lib/progress.ts`, whose
   module top level calls browser-only `localStorage` unconditionally).
+- **`tsconfig.json` needs an explicit `"types": ["node"]`** — confirmed the hard way when bumping
+  to `typescript@7`: that version stopped reliably auto-including ambient `@types/*` packages
+  specifically for a program that spans files *outside* its own tsconfig directory (this
+  `tsconfig.json`'s `include` only lists `mcp-server/`'s own files, but `session.ts` etc. pull in
+  `../pipeline/src/*.ts` and `../app/src/lib/*.ts` by relative import, which is exactly that
+  situation). Symptom: `tsc --noEmit` failing with `TS2591: Cannot find name 'process'`/`'node:*'`
+  across both `mcp-server/`'s own files and the imported `pipeline/`/`app/` files, despite
+  `@types/node` genuinely being installed. `pipeline/` and `app/` don't need this (their tsconfigs
+  only include files inside their own directory), so don't copy this fix there without confirming
+  they actually need it too.
 - **Content, read without the container.** It runs `runPipeline()` itself (same function
   `pipeline/src/server.ts` calls at boot) rather than depending on `content.json` already existing
   — so it works with the Docker container stopped, reading straight from
