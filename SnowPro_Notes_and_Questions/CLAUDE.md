@@ -7,7 +7,9 @@ project; read [00_Study_Plan.md](00_Study_Plan.md) first for the intended day-by
 ## Context
 
 - Exam version: **COF-C03**. If you're reading this later, re-verify against the current official
-  guide before trusting these notes — Snowflake revises it periodically.
+  guide before trusting these notes — Snowflake revises it periodically. Start with
+  `cd ../pipeline && npm run check:freshness` (see [CONTENT_FRESHNESS.md](CONTENT_FRESHNESS.md) for
+  what it does and doesn't cover) rather than re-reading everything blind.
 - **All domain files (01-05) are verified against the official Snowflake COF-C03 Exam Study Guide
   PDF** (kept locally as `SnowProCoreStudyGuideC03.pdf`, gitignored — copyrighted, not
   redistributed with this repo; download your own copy from Snowflake if you want to re-verify).
@@ -43,6 +45,8 @@ project; read [00_Study_Plan.md](00_Study_Plan.md) first for the intended day-by
   intentional repetition anywhere). Mock 5 is deliberately the hardest, leaning into comparative,
   easy-to-confuse pairs rather than single-fact recall — take the five in order. Numbering leaves
   `21`+ open for any future mock beyond these five.
+- `CONTENT_FRESHNESS.md` — how to check whether this content has gone stale since it was last
+  verified (an automated tripwire script plus a manual checklist), and what to do if it has.
 
 ## Adding or editing content
 

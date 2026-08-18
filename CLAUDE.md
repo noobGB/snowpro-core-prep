@@ -19,6 +19,11 @@ engineering review plus a design critique, both driving the running app with Pla
 17 follow-up fixes, also complete — see recent commit messages for the full list. There is no
 pending build-order work; changes from here are maintenance, new features, or content updates.
 
+**Before treating any Snowflake fact in `SnowPro_Notes_and_Questions/` as ground truth in a
+session happening well after the repo's last commit**, run `cd pipeline && npm run check:freshness`
+— the content is a dated snapshot, not a live feed, and Snowflake's docs/exam guide do change. See
+[`SnowPro_Notes_and_Questions/CONTENT_FRESHNESS.md`](SnowPro_Notes_and_Questions/CONTENT_FRESHNESS.md).
+
 ## Running it
 
 The normal path is Docker — one container serves the built frontend plus a small API, backed by
@@ -62,6 +67,9 @@ npm run typecheck              # tsc --noEmit
 npm test                       # vitest run
 npx vitest run test/questionCore.spec.ts   # run a single test file
 npm start                      # tsx src/server.ts — the container's actual entry point (§ below)
+npm run check:freshness        # re-fetch the ~12 Snowflake doc pages this content was last
+                                # verified against, flag any that changed since — see
+                                # SnowPro_Notes_and_Questions/CONTENT_FRESHNESS.md
 ```
 
 The pipeline **fails loudly and writes nothing** if any source file has a problem — a genuine parse

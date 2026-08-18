@@ -172,6 +172,24 @@ next `docker compose restart` (or immediately in `npm run build:content:watch`, 
 [Local development](#local-development-without-docker)) — the two approaches share one source of
 truth, so switching between them costs nothing.
 
+## Keeping content fresh
+
+This content is a **snapshot**, verified against the official exam guide and Snowflake's docs as
+of specific dates — not a live feed. If you're opening this repo a while after it was last
+touched, some notes or questions could be stale (a feature renamed, an edition boundary shifted).
+Before trusting anything for real exam prep, run:
+
+```bash
+cd pipeline
+npm run check:freshness
+```
+
+This re-fetches the specific Snowflake documentation pages the content was last verified against
+and flags any that have changed since. It's a tripwire, not a guarantee — see
+[`SnowPro_Notes_and_Questions/CONTENT_FRESHNESS.md`](SnowPro_Notes_and_Questions/CONTENT_FRESHNESS.md)
+for exactly what it covers, what it can't catch (the exam guide's own revision cadence, features
+it hasn't been told to watch), and the manual checklist for the rest.
+
 ## Adding or editing content
 
 The content pipeline (`pipeline/`) discovers files in `SnowPro_Notes_and_Questions/` by filename

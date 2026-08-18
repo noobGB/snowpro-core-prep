@@ -1,0 +1,65 @@
+{
+  "lastUpdated": "2026-08-18",
+  "pages": [
+    {
+      "label": "Editions feature matrix (Domain 1 edition ladder)",
+      "url": "https://docs.snowflake.com/en/user-guide/intro-editions",
+      "hash": "8b483de0880f9fcd"
+    },
+    {
+      "label": "Multi-cluster warehouse scaling policies (Domain 1)",
+      "url": "https://docs.snowflake.com/en/user-guide/warehouses-multicluster",
+      "hash": "f40e3d3eaadb31df"
+    },
+    {
+      "label": "Access control / RBAC role hierarchy (Domain 2)",
+      "url": "https://docs.snowflake.com/en/user-guide/security-access-control-overview",
+      "hash": "0cf43eb0ed306889"
+    },
+    {
+      "label": "Network policies (Domain 2)",
+      "url": "https://docs.snowflake.com/en/user-guide/network-policies",
+      "hash": "f5560fc4ae78948b"
+    },
+    {
+      "label": "Account replication & failover groups (Domain 2 / Domain 5)",
+      "url": "https://docs.snowflake.com/en/user-guide/account-replication-intro",
+      "hash": "5c1c3eaa8a17ec77"
+    },
+    {
+      "label": "CREATE FAILOVER GROUP reference (Domain 2 / Domain 5)",
+      "url": "https://docs.snowflake.com/en/sql-reference/sql/create-failover-group",
+      "hash": "430f5888a2935c0e"
+    },
+    {
+      "label": "Streams introduction — standard/append-only/insert-only (Domain 3)",
+      "url": "https://docs.snowflake.com/en/user-guide/streams-intro",
+      "hash": "9ed732163b0402bb"
+    },
+    {
+      "label": "Tasks introduction — serverless vs. user-managed (Domain 3)",
+      "url": "https://docs.snowflake.com/en/user-guide/tasks-intro",
+      "hash": "f6df543aa641d404"
+    },
+    {
+      "label": "Stored procedure execution rights — CALLER vs. OWNER (Domain 2)",
+      "url": "https://docs.snowflake.com/en/sql-reference/stored-procedures-rights",
+      "hash": "1c062dbed7f4e650"
+    },
+    {
+      "label": "Query Acceleration Service (Domain 4)",
+      "url": "https://docs.snowflake.com/en/user-guide/query-acceleration-service",
+      "hash": "cbf32958c6ba8f29"
+    },
+    {
+      "label": "Search Optimization Service (Domain 4)",
+      "url": "https://docs.snowflake.com/en/user-guide/search-optimization-service",
+      "hash": "7ca017852173ceea"
+    },
+    {
+      "label": "Time Travel (Domain 5)",
+      "url": "https://docs.snowflake.com/en/user-guide/data-time-travel",
+      "hash": "8ac85567edf22d3b"
+    }
+  ]
+}

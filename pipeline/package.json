@@ -8,6 +8,7 @@
     "build:content": "tsx src/index.ts",
     "build:content:watch": "tsx watch src/index.ts",
     "start": "tsx src/server.ts",
+    "check:freshness": "node scripts/check-content-freshness.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
