@@ -1,9 +1,18 @@
 /**
- * Reads/writes the same ./data/progress.json the web app's container serves via GET/PUT
- * /api/progress (pipeline/src/server.ts). docker-compose.yml bind-mounts ./data:/data (not a
- * named volume), so the host path this resolves to by default *is* the literal file the running
- * container also reads/writes — this process shares state with the web app without any HTTP call
- * between them.
+ * Reads/writes the owner's progress row in the same snowprep.sqlite database the web app's
+ * container serves via GET/PUT /api/progress (pipeline/src/db.ts + pipeline/src/server.ts).
+ * docker-compose.yml bind-mounts ./data:/data (not a named volume), so the host path this
+ * resolves to by default *is* the literal file the running container also reads/writes — this
+ * process shares state with the web app without any HTTP call between them, same as the
+ * pre-SQLite flat-file version this replaces.
+ *
+ * `mcp-server/` has NO multi-user concept of its own (see the root CLAUDE.md and the LAN
+ * multi-user plan) — it always operates on one fixed "owner" row: `SNOWPRO_OWNER_EMAIL` if set,
+ * else whichever user account was created first (`findFirstUser()` — the returning owner
+ * `pipeline/src/db.ts`'s migration creates on the very first login after this feature shipped).
+ * If neither resolves to a real account (e.g. this server is run before anyone has ever logged
+ * into the web app even once), `resolveOwner()` throws a clear, actionable error rather than
+ * silently fabricating a phantom identity nobody asked for.
  *
  * Path resolution mirrors pipeline/src/config.ts's own pattern (walk up from this file's own
  * import.meta.url to the webapp root, then default to a fixed subfolder) rather than pipeline's
@@ -12,20 +21,32 @@
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import {
+  openDb,
+  findUserByEmail,
+  findFirstUser,
+  getProgressRow,
+  writeProgressRow as dbWriteProgressRow,
+  normalizeEmail,
+  ProgressConflictError,
+  type Db,
+  type UserRow,
+} from "../../pipeline/src/db.js";
 import type { ProgressState } from "../../app/src/lib/progress.js";
+
+export { ProgressConflictError };
 
 const MCP_SERVER_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const WEBAPP_ROOT = path.dirname(MCP_SERVER_ROOT);
 const DEFAULT_DATA_DIR = path.resolve(WEBAPP_ROOT, "data");
 
 const DATA_DIR = path.resolve(process.env.SNOWPRO_DATA_DIR ?? DEFAULT_DATA_DIR);
-const PROGRESS_FILE = path.join(DATA_DIR, "progress.json");
+const DB_FILE = path.join(DATA_DIR, "snowprep.sqlite");
 
 /** Must match app/src/lib/progress.ts's defaultState() and pipeline/src/server.ts's
  *  defaultProgressState() — a third, intentional hand-copy (no npm workspace ties the three
  *  packages together; this mirrors server.ts's own shape exactly, including omitting `grades`
- *  from `flashcards`, since server.ts is this file's closest sibling — same file, same contract). */
+ *  from `flashcards`, since server.ts is this file's closest sibling — same contract). */
 export function defaultProgressState(): ProgressState {
   return {
     schemaVersion: 1,
@@ -40,110 +61,105 @@ export function defaultProgressState(): ProgressState {
   };
 }
 
+let dbSingleton: Db | undefined;
+function getDb(): Db {
+  if (!dbSingleton) dbSingleton = openDb(DB_FILE);
+  return dbSingleton;
+}
+
+let ownerSingleton: UserRow | undefined;
+
+/** Resolves the fixed "owner" account this whole module always reads/writes. Cached after first
+ *  resolution — this server is a short-lived stdio process spawned fresh per MCP host connection,
+ *  so the owner can't change mid-process (a login on a different browser tab elsewhere on the LAN
+ *  creates or updates a *different* account, never this one, since `SNOWPRO_OWNER_EMAIL`/"first
+ *  account" both name a specific fixed identity, not "whoever's currently logged in anywhere"). */
+function resolveOwner(): UserRow {
+  if (ownerSingleton) return ownerSingleton;
+  const db = getDb();
+  const ownerEmail = process.env.SNOWPRO_OWNER_EMAIL;
+  if (ownerEmail) {
+    const user = findUserByEmail(db, ownerEmail);
+    if (!user) {
+      throw new Error(
+        `SNOWPRO_OWNER_EMAIL is set to "${normalizeEmail(ownerEmail)}", but no such account exists yet in ` +
+          `${DB_FILE}. Log into the web app with that email once first (that creates the account), or unset ` +
+          `SNOWPRO_OWNER_EMAIL to fall back to whichever account was created first.`,
+      );
+    }
+    ownerSingleton = user;
+    return user;
+  }
+  const first = findFirstUser(db);
+  if (!first) {
+    throw new Error(
+      `No user accounts exist yet in ${DB_FILE}. The snowprep-quiz MCP server always operates on one fixed ` +
+        `"owner" account (see mcp-server/README.md) — log into the web app at least once first (this creates ` +
+        `the first account and, if a pre-upgrade progress.json exists, migrates it in), or set ` +
+        `SNOWPRO_OWNER_EMAIL to a specific email and log into the web app with that exact email.`,
+    );
+  }
+  ownerSingleton = first;
+  return first;
+}
+
 export function readProgress(): ProgressState {
-  if (!existsSync(PROGRESS_FILE)) return defaultProgressState();
+  const owner = resolveOwner();
+  const row = getProgressRow(getDb(), owner.id);
+  if (!row) return defaultProgressState();
   try {
-    return { ...defaultProgressState(), ...JSON.parse(readFileSync(PROGRESS_FILE, "utf8")) };
+    return { ...defaultProgressState(), ...JSON.parse(row.data) };
   } catch (err) {
-    console.error(`readProgress: unreadable ${PROGRESS_FILE}: ${err}`);
+    console.error(`readProgress: unreadable progress row for ${owner.email} in ${DB_FILE}: ${err}`);
     return defaultProgressState();
   }
 }
 
-/** mtime of progress.json right now, or null if it doesn't exist yet — this file's stand-in for a
- *  revision number, cheap to get without parsing, and precise enough (ms resolution) for a
- *  single-user local app with at most a couple of writers active at once. */
-function currentMtimeMs(): number | null {
-  try {
-    return statSync(PROGRESS_FILE).mtimeMs;
-  } catch {
-    return null;
-  }
-}
-
-/** Thrown by writeProgress() when the file changed on disk since the caller read it — i.e. the
- *  web app's PUT /api/progress route (or, in principle, another MCP process) wrote in between.
- *  progress.json has THREE independent writers that can all touch it at any time (this process
- *  writing directly, the web app's browser tab debouncing its own PUTs, and the container's
- *  server.ts handling that PUT) with no lock between them. Without this check the incident this
- *  file is built around repeats itself in a different shape: not "the write silently vanished" but
- *  "the write succeeded, then a stale writer's next autosave silently overwrote it a moment later"
- *  — still data loss, still invisible unless something refuses the stale write outright.
- *
- *  This is optimistic concurrency (a check, then an act), not a hard lock (no flock/O_EXCL) — the
- *  mtime comparison in writeProgress() and this file's own write both happen as separate, unlocked
- *  fs calls, so a second writer's own write can in principle land in the microsecond gap between
- *  them, narrowing the original multi-second-window incident down to a sub-millisecond race rather
- *  than eliminating it outright. Acceptable for this app's actual write cadence (human/LLM-paced,
- *  not concurrent high-frequency writers) — but genuinely narrowed, not closed; don't read this
- *  mechanism as a guarantee if that write pattern ever changes (e.g. multiple concurrent MCP
- *  clients). */
-export class ProgressConflictError extends Error {
-  constructor() {
-    super(
-      "progress.json changed on disk since it was last read — most likely the web app's browser tab " +
-        "wrote its own (now-stale) copy concurrently. Refusing to overwrite it blindly.",
-    );
-    this.name = "ProgressConflictError";
-  }
+/** The owner's current progress-row revision (an ISO timestamp, SQLite's stand-in for the flat
+ *  file's old mtime-based revision — see db.ts's writeProgressRow() doc comment), or `"0"` if the
+ *  owner has no progress row yet. Cheap: one indexed lookup by primary key, no JSON parsing. */
+function currentRev(): string {
+  const owner = resolveOwner();
+  return getProgressRow(getDb(), owner.id)?.updatedAt ?? "0";
 }
 
 /** Always writes the whole object — no partial merges — matching the exact contract
  *  app/src/lib/progress.ts's updateProgress() and pipeline/src/server.ts's PUT route both honor.
- *  Same atomic tmp-file + rename pattern as server.ts:120-124.
  *
- *  The mtime check just below is optimistic concurrency, not a hard lock — see
- *  ProgressConflictError's own doc-comment above for exactly what that does and doesn't guarantee.
- *
- *  `expectedMtimeMs` must be whatever currentProgressMtimeMs() (or a prior readProgress() call
- *  paired with it) returned *before* `next` was computed — pass it through updateProgress() below
- *  rather than calling this directly, so a conflict retries against fresh state instead of just
- *  failing once.
- *
- *  Also reads the file back and compares bytes before returning — the fix for a second, separate
- *  incident: a write can report success (no thrown error) while the bytes never actually land for
- *  any *other* process to see. A caller who only checks "did writeFileSync/renameSync throw" cannot
- *  detect that; only reading back what's actually on disk can. */
-export function writeProgress(next: ProgressState, expectedMtimeMs: number | null): void {
-  if (currentMtimeMs() !== expectedMtimeMs) throw new ProgressConflictError();
-
-  mkdirSync(DATA_DIR, { recursive: true });
-  const payload = JSON.stringify(next);
-  const tmp = `${PROGRESS_FILE}.tmp-${process.pid}`;
-  writeFileSync(tmp, payload, "utf8");
-  renameSync(tmp, PROGRESS_FILE);
-
-  const onDisk = readFileSync(PROGRESS_FILE, "utf8");
-  if (onDisk !== payload) {
-    throw new Error(
-      `writeProgress: wrote ${PROGRESS_FILE} but the read-back doesn't match what was written, so the ` +
-        `write did not actually persist. Nothing after this point (webapp, next session, readiness) will ` +
-        `see this attempt. Reconnect/restart the snowprep-quiz MCP server and retry — do not treat this ` +
-        `tool call as having succeeded.`,
-    );
-  }
+ *  `expectedRev` must be whatever `currentRev()` (or a prior `readProgress()` call paired with a
+ *  `currentRev()` snapshot taken at the same time) returned *before* `next` was computed — pass it
+ *  through `updateProgress()` below rather than calling this directly, so a conflict retries
+ *  against fresh state instead of just failing once. Throws `ProgressConflictError` (re-exported
+ *  from db.ts) when the row changed since `expectedRev` was captured — db.ts's `writeProgressRow()`
+ *  does the actual check-then-write, inside a real `BEGIN IMMEDIATE` transaction so the check and
+ *  the write are atomic against every other process with this same .sqlite file open (this
+ *  process, and pipeline/'s Express process), not just within this one call. */
+export function writeProgress(next: ProgressState, expectedRev: string): void {
+  const owner = resolveOwner();
+  dbWriteProgressRow(getDb(), owner.id, JSON.stringify(next), expectedRev);
 }
 
 type MutateResult<T> = { ok: true; next: ProgressState; value: T } | { ok: false; error: string };
 
 /** Read-modify-write with automatic retry on a concurrent-writer conflict (see
- *  ProgressConflictError above). `mutate` receives freshly-read state on every attempt — including
- *  retries — so it must be a pure function of that state, never of anything captured earlier; a
- *  business-rule failure (e.g. "a session is already in progress") should return `{ok:false,...}`,
- *  which is returned immediately without retrying, since retrying can't fix that. Every session.ts
- *  write goes through this instead of calling readProgress()/writeProgress() directly. */
+ *  `ProgressConflictError` above). `mutate` receives freshly-read state on every attempt —
+ *  including retries — so it must be a pure function of that state, never of anything captured
+ *  earlier; a business-rule failure (e.g. "a session is already in progress") should return
+ *  `{ok:false,...}`, which is returned immediately without retrying, since retrying can't fix
+ *  that. Every session.ts write goes through this instead of calling readProgress()/
+ *  writeProgress() directly. */
 export function updateProgress<T>(
   mutate: (state: ProgressState) => MutateResult<T>,
   maxAttempts = 5,
 ): { ok: true; value: T } | { ok: false; error: string } {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const mtimeMs = currentMtimeMs();
+    const rev = currentRev();
     const state = readProgress();
     const result = mutate(state);
     if (!result.ok) return result;
 
     try {
-      writeProgress(result.next, mtimeMs);
+      writeProgress(result.next, rev);
       return { ok: true, value: result.value };
     } catch (err) {
       if (err instanceof ProgressConflictError && attempt < maxAttempts) continue;
@@ -153,6 +169,17 @@ export function updateProgress<T>(
   return { ok: false, error: "Could not persist progress after repeated concurrent-write conflicts." };
 }
 
-export function progressFilePath(): string {
-  return PROGRESS_FILE;
+export function dbFilePath(): string {
+  return DB_FILE;
+}
+
+/** Test-only escape hatch: db.spec-style tests need a fresh owner resolution per test (a new
+ *  temp .sqlite file, a newly-created first user) rather than this module's normal
+ *  once-per-process caching, which is deliberate in production (see resolveOwner()'s own
+ *  comment) but wrong inside a test suite that creates a new database per test. Not used by
+ *  session.ts/tools.ts — production code never needs to un-cache the owner mid-process. */
+export function __resetForTests(): void {
+  dbSingleton?.close();
+  dbSingleton = undefined;
+  ownerSingleton = undefined;
 }

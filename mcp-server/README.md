@@ -4,14 +4,22 @@ An MCP (Model Context Protocol) server exposing the SnowPro Core Prep question b
 tracking as tools, so a local LLM-based agent (Claude Desktop, Claude Code, or a custom voice
 agent) can quiz you conversationally instead of requiring the web UI.
 
-Runs as a local, stdio-transport MCP server — no network exposure, no auth (there is none
-anywhere in this app), spawned directly by whatever MCP host you register it with. It reads the
-question bank straight from `SnowPro_Notes_and_Questions/` (via the same `runPipeline()` the main
-content pipeline uses — no need for the Docker container to be running) and reads/writes
-`../data/progress.json` — **the exact same file** the web app's container serves via
-`/api/progress` (that path is a Docker bind mount, not a named volume, so this process and the
-container share the literal same file on disk). Quiz sessions run here show up in the web app's
-Analytics/Dashboard, and vice versa.
+Runs as a local, stdio-transport MCP server — no network exposure, spawned directly by whatever
+MCP host you register it with. It reads the question bank straight from
+`SnowPro_Notes_and_Questions/` (via the same `runPipeline()` the main content pipeline uses — no
+need for the Docker container to be running) and reads/writes one fixed user's row in
+`../data/snowprep.sqlite` — **the exact same database file** the web app's container serves over
+`GET`/`PUT /api/progress` (that path is a Docker bind mount, not a named volume, so this process
+and the container share the literal same file on disk, no HTTP involved). Quiz sessions run here
+show up in that one account's web-app Analytics/Dashboard, and vice versa.
+
+**This server has no multi-user concept of its own** — the web app (as of the LAN multi-user
+feature) supports multiple people, each identified by email, each with their own isolated
+progress; this server always operates on one fixed "owner" account regardless of who else is
+logged into the web app elsewhere on the LAN. See `SNOWPRO_OWNER_EMAIL` below for how that account
+is chosen. There's still no password anywhere in this app (a deliberate, confirmed design choice
+for a trusted-LAN feature) — the web app's login is name+email only, and this server was never
+going to be reachable by anyone but you in the first place.
 
 ## Tools
 
@@ -31,15 +39,23 @@ Analytics/Dashboard, and vice versa.
 | `set_setup_step` | Marks one setup step done/not-done. |
 
 Deliberately excluded: JSON import/export (the web UI's Settings backup feature) — pasting a
-multi-KB JSON blob through a chat turn is an awkward conversational action, and any MCP host that
-also has filesystem access (like Claude Code) can just read/write `data/progress.json` directly
-instead of going through a dedicated tool for it.
+multi-KB JSON blob through a chat turn is an awkward conversational action, and the web UI's own
+Export/Import buttons already cover it directly for whichever account needs it.
 
 ## Environment variables
 
-- `SNOWPRO_DATA_DIR` — where `progress.json` lives. Defaults to `<repo-root>/data` (the same
+- `SNOWPRO_DATA_DIR` — where `snowprep.sqlite` lives. Defaults to `<repo-root>/data` (the same
   folder `docker-compose.yml` bind-mounts to `/data` — leave unset to share state with the
   container automatically).
+- `SNOWPRO_OWNER_EMAIL` — which web-app account this server reads/writes. If unset, it falls back
+  to whichever account was created first (the returning owner the one-time flat-file migration
+  creates on the very first login after upgrading to the multi-user feature — see
+  `pipeline/src/db.ts`'s `migrateFlatFileProgress()`). Set this explicitly if you ever log into
+  the web app with an email other than the one you want this server tied to, or if you want to be
+  resilient to a future re-migration changing which account happens to be "first." If it's set to
+  an email with no matching account yet, or if no accounts exist at all yet, this server refuses
+  to start with a clear error rather than silently inventing a phantom account — log into the web
+  app with the intended email at least once first.
 - `SNOWPRO_CONTENT_SOURCE` — the markdown source folder. Defaults to
   `<repo-root>/SnowPro_Notes_and_Questions`, same as the pipeline's own default.
 
@@ -90,8 +106,8 @@ read newline-delimited JSON responses from stdout.
 Suggested walkthrough once connected: `list_domains` → `get_readiness` → `start_quiz_session`
 (no args — confirm it picks your actual weakest domain) → `get_next_question` →
 `submit_answer` a few times → `end_quiz_session` → `get_readiness` again, confirming that domain's
-score moved. Then check `../data/progress.json` and the running web app's Analytics page to
-confirm the attempt shows up in both places.
+score moved. Then log into the running web app as the owner account (see `SNOWPRO_OWNER_EMAIL`
+above) and confirm the attempt shows up on its Analytics page too.
 
 ## Design notes (why it's built this way)
 

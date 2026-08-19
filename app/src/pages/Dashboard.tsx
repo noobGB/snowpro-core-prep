@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useContent } from "../lib/useContent";
 import { useProgress, updateProgress } from "../lib/progress";
+import { useSessionUser } from "../lib/session";
 import { overallReadiness, pickWeakestDomain } from "../lib/readiness";
 import { daysBetweenIso, defaultExamDate, isoDate, remapPlan } from "../lib/planDates";
 
@@ -45,6 +46,7 @@ const kicker: React.CSSProperties = {
 export function Dashboard() {
   const { content, error } = useContent();
   const progress = useProgress();
+  const me = useSessionUser();
   const [openWeightTip, setOpenWeightTip] = useState<string | null>(null);
 
   const today = useMemo(() => new Date(), []);
@@ -103,6 +105,7 @@ export function Dashboard() {
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, marginBottom: 24 }}>
         <div>
           <div style={kicker}>COF-C03</div>
+          {me && <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 4 }}>Welcome back, {me.name}</div>}
           <h1 style={{ margin: 0, fontSize: 32, fontWeight: 500, letterSpacing: "-0.02em", color: "var(--text-heading)", lineHeight: 1.1 }}>
             {!hasData && days <= 0
               ? "Start here"

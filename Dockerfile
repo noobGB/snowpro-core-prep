@@ -25,6 +25,13 @@ RUN npm run build
 # ---- Stage 2: pipeline/server production dependencies ----
 FROM node:24-alpine AS pipeline-deps
 WORKDIR /build/pipeline
+# better-sqlite3 (LAN multi-user identity/progress storage, pipeline/src/db.ts) is a native addon.
+# Alpine/musl prebuilt binaries for it have historically lagged behind glibc ones for some
+# platform/arch combinations, so python3/make/g++ are installed here to let npm fall back to
+# compiling it from source reliably rather than depending on a prebuild being available — this
+# stage is discarded after the build (only its node_modules gets copied into the runtime image
+# below), so these build tools never end up in the final image.
+RUN apk add --no-cache python3 make g++
 COPY pipeline/package.json pipeline/package-lock.json ./
 RUN npm ci --omit=dev
 

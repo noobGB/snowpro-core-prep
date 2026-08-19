@@ -15,6 +15,7 @@ import { useContent } from "../lib/useContent";
 import { getProgress, getStorageBackend, resetProgress, updateProgress, useProgress, type ProgressState } from "../lib/progress";
 import { isoDate } from "../lib/planDates";
 import { closeSettings, useSettingsOpen } from "../lib/settingsStore";
+import { logout, updateName, useSessionUser } from "../lib/session";
 
 const RESET_PHRASE = "RESET";
 
@@ -66,10 +67,40 @@ export function SettingsPanel() {
   const open = useSettingsOpen();
   const { settings } = useProgress();
   const { content } = useContent();
+  const me = useSessionUser();
   const [resetInput, setResetInput] = useState("");
   const [resetDone, setResetDone] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [nameInput, setNameInput] = useState(me?.name ?? "");
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameMessage, setNameMessage] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Keep the input in sync if `me` resolves/changes after this panel already mounted (e.g. the
+  // App-root boot probe finishing after the panel's own initial render).
+  useEffect(() => {
+    setNameInput(me?.name ?? "");
+  }, [me?.name]);
+
+  const saveName = async () => {
+    const trimmed = nameInput.trim();
+    if (!trimmed || trimmed === me?.name) return;
+    setNameSaving(true);
+    setNameMessage(null);
+    const result = await updateName(trimmed);
+    setNameSaving(false);
+    setNameMessage(result.ok ? "Name updated." : result.error);
+  };
+
+  const signOut = async () => {
+    setSigningOut(true);
+    await logout();
+    // A full reload, not a React state transition -- see session.ts's logout() doc comment: this
+    // is what resets progress.ts's own in-memory state so a shared machine's next person doesn't
+    // see this person's cached data for a moment before the gate screen appears.
+    window.location.reload();
+  };
 
   const exportProgress = () => {
     const blob = new Blob([JSON.stringify(getProgress(), null, 2)], { type: "application/json" });
@@ -124,6 +155,58 @@ export function SettingsPanel() {
             ✕
           </button>
         </div>
+
+        {me && (
+          <div style={{ marginBottom: 18 }}>
+            <label style={{ display: "block", fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>Profile</label>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input
+                type="text"
+                value={nameInput}
+                maxLength={100}
+                onChange={(e) => setNameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveName();
+                }}
+                style={{ flex: 1, boxSizing: "border-box", background: "var(--card)", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-body)", fontSize: 13, padding: "8px 10px", minHeight: 36 }}
+              />
+              <button
+                type="button"
+                disabled={nameSaving || !nameInput.trim() || nameInput.trim() === me.name}
+                onClick={saveName}
+                style={{
+                  background: "var(--card)",
+                  border: "1px solid var(--hairline)",
+                  borderRadius: 6,
+                  color: nameInput.trim() && nameInput.trim() !== me.name ? "var(--text-body)" : "var(--text-dim)",
+                  fontSize: 13,
+                  padding: "8px 14px",
+                  cursor: nameSaving || !nameInput.trim() || nameInput.trim() === me.name ? "not-allowed" : "pointer",
+                }}
+              >
+                Save
+              </button>
+            </div>
+            {nameMessage && <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 8 }}>{nameMessage}</div>}
+            <button
+              type="button"
+              disabled={signingOut}
+              onClick={signOut}
+              style={{
+                width: "100%",
+                background: "transparent",
+                border: "1px solid var(--hairline)",
+                borderRadius: 6,
+                color: "var(--text-muted)",
+                fontSize: 13,
+                padding: "9px 0",
+                cursor: signingOut ? "default" : "pointer",
+              }}
+            >
+              {signingOut ? "Signing out…" : "Sign out"}
+            </button>
+          </div>
+        )}
 
         <div style={{ marginBottom: 18 }}>
           <label style={{ display: "block", fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>Appearance</label>

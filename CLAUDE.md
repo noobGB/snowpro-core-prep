@@ -37,9 +37,11 @@ docker compose logs      # boot order: "/data is writable" -> pipeline summary -
 docker compose down
 ```
 
-Open `http://localhost:8080`. `docker-compose.yml` mounts `./SnowPro_Notes_and_Questions` (the
-markdown source, tracked in this repo) to `/content`, and a local `./data/` folder to `/data` for
-progress persistence (gitignored — that one's genuinely personal, your quiz history). Editing
+Open `http://localhost:8080` — a "Who's studying?" gate screen (email + name, no password) shows
+first; see "Identity & multi-user progress" below. `docker-compose.yml` mounts
+`./SnowPro_Notes_and_Questions` (the markdown source, tracked in this repo) to `/content`, and a
+local `./data/` folder to `/data` for identity + progress persistence — `data/snowprep.sqlite`, one
+row per person (gitignored — that one's genuinely personal, everyone's quiz history). Editing
 markdown + `docker compose restart` picks up content changes; editing `app/`/`pipeline/` source
 needs `docker compose build` again, since the frontend bundle and pipeline are baked into the
 image, not mounted.
@@ -187,29 +189,57 @@ nav under 900px, via `.desktop-only`/`.mobile-only` in `tokens.css`) wraps every
 `useContent()` hook every page uses) to populate its meta-count badges — those are real counts, not
 fixture data. `src/pages/NotFound.tsx` catches any unmatched route so a bad URL never renders blank.
 
+**Identity & multi-user progress.** Each person on the LAN identifies themselves by email + name,
+no password (a deliberate, confirmed choice for a trusted-LAN feature, not an oversight) — email is
+the sole identity/lookup key, `name` is display-only and freely editable in place (SettingsPanel's
+Profile section) without creating a new account. `App.tsx` calls `GET /api/me` once at boot; no
+session renders `components/LoginGate.tsx` (a "Who's studying?" card, same visual tokens as
+`SettingsPanel`) instead of the routed app. `lib/session.ts` is the client for
+`POST /api/session` / `GET /api/me` / `POST /api/logout` plus a tiny `useSessionUser()` store
+(same `useSyncExternalStore` pattern as `settingsStore.ts`) so `Dashboard.tsx`'s greeting and
+`SettingsPanel`'s Profile section can read the current user without prop-drilling through
+react-router's `<Outlet>`. **Both login and sign-out do a full `window.location.reload()`, not a
+React state transition** — deliberately, since that's what re-runs `progress.ts`'s own
+module-load-time `hydrateFromServer()` boot probe against the freshly set/cleared session cookie
+with zero changes needed to that file; see `lib/session.ts`'s own doc comments for the full
+reasoning (this was independently verified while building the feature, not just assumed from the
+plan that specified it).
+
 **Progress/persistence** (`src/lib/progress.ts`) is a `useSyncExternalStore`-backed module store,
 not React context. It tries `GET /api/progress` once on load; a 200 switches it to the container's
-HTTP backend (`PUT /api/progress`, backed by the mounted `/data` volume), and any failure (dev
-server, or the built files opened directly) falls back to `localStorage` — `getStorageBackend()`
-exposes which one is active, shown in Settings so the two can't be silently mixed. Every write
-replaces the whole `ProgressState` object (no partial merges). **Nested fields added after initial
-release need `?? {}` at their read sites** — `loadFromStorage()`'s merge with `defaultState()` is
-shallow, so old stored data has the parent key present but missing a newly-added child field, not
-the parent key absent entirely (see `flashcards.grades` for the pattern, and its own doc comment
-for why this bit a real bug once).
+HTTP backend (`PUT /api/progress`, now session-scoped — see above — backed by the mounted `/data`
+volume's `snowprep.sqlite`), and any failure (dev server, files opened directly, or simply not
+logged in yet) falls back to `localStorage` — `getStorageBackend()` exposes which one is active,
+shown in Settings so the two can't be silently mixed. Every write replaces the whole
+`ProgressState` object (no partial merges) — this shape is completely unchanged by the SQLite
+migration; only *which* row gets read/written changed, never the JSON it contains. **Nested fields
+added after initial release need `?? {}` at their read sites** — `loadFromStorage()`'s merge with
+`defaultState()` is shallow, so old stored data has the parent key present but missing a
+newly-added child field, not the parent key absent entirely (see `flashcards.grades` for the
+pattern, and its own doc comment for why this bit a real bug once).
 
-**`progress.json` has two independent writers**, not one: this HTTP route, and `mcp-server/`
-writing the exact same bind-mounted file directly (no HTTP involved). `GET /api/progress` returns
-an `ETag` (the file's mtime); `PUT` must echo it back via `If-Match`, and a mismatch — someone else
-wrote in between — gets a 409, which `progress.ts` handles by re-hydrating from the server rather
-than retrying the stale write. This isn't defensive boilerplate; a silent overwrite between the two
-writers happened once for real before this existed. If you add a third writer of this file, it
-needs to speak the same ETag protocol, not bypass it. The 409 path is reactive end to end now, not
-silent: `persist()` sets `conflictAt` and re-hydrates, `useProgressConflict()` (a second
+**A user's progress row has two independent writers**, not one: this HTTP route, and `mcp-server/`
+writing the exact same bind-mounted `snowprep.sqlite` file directly (no HTTP involved, always
+scoped to one fixed "owner" account — see the `mcp-server/` section below). `GET /api/progress`
+returns an `ETag` (the row's `updated_at` revision, `pipeline/src/db.ts`); `PUT` must echo it back
+via `If-Match`, and a mismatch — someone else wrote in between — gets a 409, which `progress.ts`
+handles by re-hydrating from the server rather than retrying the stale write. This isn't defensive
+boilerplate; a silent overwrite between the two writers happened once for real under the old
+flat-file version, before this existed. If you add a third writer of this data, it needs to speak
+the same ETag protocol, not bypass it. The 409 path is reactive end to end now, not silent:
+`persist()` sets `conflictAt` and re-hydrates, `useProgressConflict()` (a second
 `useSyncExternalStore` reader sharing the same `subscribe`/`listeners` pair `useProgress()` uses)
 re-renders on that change, and `components/ConflictBanner.tsx` — mounted once in `AppShell.tsx`, so
 it's visible on every route — turns it into a dismissible "a change didn't save" message instead of
 only a `console.warn`.
+
+**Migration from the pre-multi-user flat file.** `data/progress.json` (the single-user era's only
+storage) is imported automatically, once: on the very first login after this feature ships (i.e.
+the first time `users` is empty and someone completes `POST /api/session`), that person's account
+gets the old file's exact contents as their starting progress row, and the old file is renamed to
+`progress.json.migrated` so it's never re-imported. See `pipeline/src/db.ts`'s
+`migrateFlatFileProgress()` — it fails open on a corrupt old file (skips the import, still renames
+it aside) rather than blocking the very first login or destroying data with a bad parse.
 
 **Readiness** (`src/lib/readiness.ts`) is a cumulative points model, not an extrapolation — each
 domain owns a fixed slice of 1000 points (its exam weight), unmeasured domains contribute 0 rather
@@ -268,11 +298,25 @@ README). Full tool list, environment variables, and a manual test recipe live in
 [`mcp-server/README.md`](mcp-server/README.md) — this section is only the "how it fits with the
 rest of the repo" summary.
 
-- **Same state, two front doors.** It reads/writes `data/progress.json` directly — the identical
-  file `pipeline/src/server.ts` serves over HTTP to the container — via a Docker bind mount, not a
-  named volume, so both processes see the literal same file on disk with no sync step. See the
-  ETag/`If-Match` protocol above (Frontend app → Progress/persistence) for how the two writers
-  avoid clobbering each other.
+- **Same state, two front doors — but always ONE fixed account, not whoever's logged into the web
+  app.** It reads/writes `data/snowprep.sqlite` directly — the identical file `pipeline/src/db.ts`
+  / `pipeline/src/server.ts` serve over HTTP to the container — via a Docker bind mount, not a
+  named volume, so both processes see the literal same file on disk with no sync step. Unlike the
+  web app (which now supports multiple people, each with their own isolated progress),
+  `mcp-server/` has no multi-user concept at all: it always operates on one fixed "owner" row,
+  chosen by `SNOWPRO_OWNER_EMAIL` if set, else whichever account was created first (see
+  `mcp-server/README.md`'s environment-variables section). See the ETag/`If-Match`-equivalent
+  protocol above (Frontend app → Progress/persistence) for how the two writers avoid clobbering
+  each other's writes to that one row.
+- **Deliberately not WAL mode.** `pipeline/src/db.ts`'s `openDb()` opens `snowprep.sqlite` with
+  SQLite's default rollback journal, not `journal_mode = WAL` (otherwise the obvious default for a
+  small embedded-DB Node app) — WAL needs shared-memory (`mmap`) coordination between every
+  process with the file open, which SQLite's own docs say breaks down over a network filesystem.
+  This app's actual deployment is exactly that shape in disguise: the container opens this file
+  through Docker Desktop's bind-mount translation layer while `mcp-server/`'s stdio process opens
+  the identical file directly from the Windows host's NTFS — two different filesystem layers on
+  what SQLite needs to treat as one local disk. See `openDb()`'s own doc comment before ever
+  turning WAL back on for this database.
 - **Never reimplements scoring or readiness.** `mcp-server/src/session.ts` imports
   `app/src/lib/scoring.ts` (`questionCredit`/`scaledScore`/`byDomainBreakdown`) and
   `app/src/lib/readiness.ts` (`overallReadiness`, `pickWeakestDomain`) directly, so a quiz taken

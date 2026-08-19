@@ -14,17 +14,40 @@
 
 import express from "express";
 import path from "node:path";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolveConfig } from "./config.js";
 import { runPipeline } from "./index.js";
 import { writeOutput } from "./write/output.js";
 import { printFailure, printNotices, printSuccess } from "./report.js";
+import {
+  createSession,
+  deleteSession,
+  getProgressRow,
+  migrateFlatFileProgress,
+  openDb,
+  resolveSession,
+  upsertUserOnLogin,
+  usersCount,
+  writeProgressRow,
+  ProgressConflictError,
+  type Db,
+  type UserRow,
+} from "./db.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DATA_DIR = path.resolve(process.env.SNOWPRO_DATA_DIR ?? "/data");
 const DIST_DIR = path.resolve(process.env.SNOWPRO_DIST_DIR ?? "/app/dist");
-const PROGRESS_FILE = path.join(DATA_DIR, "progress.json");
+// The pre-upgrade single-user flat file — no longer read/written directly (see db.ts's
+// migrateFlatFileProgress()), but still checked for once, on the very first ever login after this
+// upgrade, to import whatever progress it holds rather than silently discarding it.
+const OLD_PROGRESS_FILE = path.join(DATA_DIR, "progress.json");
+const DB_FILE = path.join(DATA_DIR, "snowprep.sqlite");
 const PROBE_FILE = path.join(DATA_DIR, ".snowprep-write-probe");
+const SESSION_COOKIE = "snowprep_session";
+// 400 days is Chrome's own hard cap on Set-Cookie Max-Age (a longer value gets silently clamped
+// to this) — used here deliberately as a long-lived "remember this device" cookie, matching the
+// no-password design's whole point: logging in once shouldn't need repeating every browser restart.
+const SESSION_COOKIE_MAX_AGE_MS = 400 * 24 * 60 * 60 * 1000;
 
 /** Must match app/src/lib/progress.ts's defaultState() shape exactly — the two sides of the
  *  GET /api/progress contract have to agree byte-for-byte on what "empty" looks like. */
@@ -94,48 +117,127 @@ function bootPipeline() {
 
 verifyDataDirWritable();
 const config = bootPipeline();
+const db: Db = openDb(DB_FILE);
+console.log(`✓ Identity/progress database ready (${DB_FILE})`);
 
 const app = express();
 
-// --- Progress: GET/PUT /api/progress, backed by /data/progress.json. Always the whole object —
-//     no partial merges — matching spec §4's write contract exactly.
-//
-//     progress.json has more than one writer: this route, and the snowprep-quiz MCP server
-//     writing the same file directly (mcp-server/src/progressStore.ts — bind-mounted to the same
-//     path, no HTTP involved). Without a concurrency check, a browser tab's debounced PUT of its
-//     own (possibly stale) in-memory state can silently overwrite an attempt the MCP server just
-//     wrote a moment earlier, with no error anywhere — a real incident, not a hypothetical one.
-//     ETag/If-Match (mtimeMs as the revision) narrows that down to a sub-millisecond race instead
-//     of eliminating it: GET reports the revision it read at, PUT must echo it back, and a
-//     mismatch means someone else wrote in between. This is optimistic concurrency (a check, then
-//     an act), not a hard lock — no flock/O_EXCL — so a second writer's own write can in principle
-//     still land in the gap between this route's own mtime check and its write. Acceptable given
-//     this app's actual write cadence (human/LLM-paced, not concurrent high-frequency writers); see
-//     mcp-server/src/progressStore.ts's ProgressConflictError doc-comment for the fuller version of
-//     this same caveat, since both sides of this same protocol should describe it identically. ---
-function currentMtimeMs(): number | null {
-  try {
-    return statSync(PROGRESS_FILE).mtimeMs;
-  } catch {
-    return null;
+// --- Identity: POST /api/session, GET /api/me, POST /api/logout. No password (explicit,
+//     confirmed design decision for a trusted-LAN feature, not an oversight) — email is the sole
+//     identity key (case/whitespace-normalized, see db.ts's normalizeEmail()), name is
+//     display-only and never used for lookups. Sessions are a random token in an HTTP-only cookie
+//     (SameSite=Lax, no Secure flag — plain HTTP on a LAN). ---
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function getCookie(req: express.Request, name: string): string | undefined {
+  const header = req.headers.cookie;
+  if (!header) return undefined;
+  for (const part of header.split(";")) {
+    const idx = part.indexOf("=");
+    if (idx === -1) continue;
+    if (part.slice(0, idx).trim() === name) return decodeURIComponent(part.slice(idx + 1).trim());
   }
+  return undefined;
 }
 
-app.get("/api/progress", (_req, res) => {
-  res.set("ETag", String(currentMtimeMs() ?? 0));
-  if (!existsSync(PROGRESS_FILE)) {
-    res.json(defaultProgressState());
+function currentUser(req: express.Request): UserRow | undefined {
+  const token = getCookie(req, SESSION_COOKIE);
+  if (!token) return undefined;
+  return resolveSession(db, token);
+}
+
+/** Guards GET/PUT /api/progress — both require a valid session now, unlike the old flat-file
+ *  routes (which had no identity concept at all to check). */
+function requireSession(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const user = currentUser(req);
+  if (!user) {
+    res.status(401).json({ error: "Not logged in. POST /api/session with an email + name first." });
     return;
   }
-  try {
-    res.json(JSON.parse(readFileSync(PROGRESS_FILE, "utf8")));
-  } catch (err) {
-    console.error(`GET /api/progress: unreadable ${PROGRESS_FILE}: ${err}`);
-    res.status(500).json({ error: "progress file unreadable" });
+  (res.locals as { user: UserRow }).user = user;
+  next();
+}
+
+app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
+  const body = req.body as { email?: unknown; name?: unknown } | null;
+  const email = typeof body?.email === "string" ? body.email.trim() : "";
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  if (!EMAIL_RE.test(email) || email.length > 254) {
+    res.status(400).json({ error: "A valid email is required." });
+    return;
   }
+  if (!name || name.length > 100) {
+    res.status(400).json({ error: "A name (1-100 characters) is required." });
+    return;
+  }
+
+  // Checked BEFORE creating the account: this whole handler is synchronous (no `await` anywhere
+  // in this call chain, including every db.ts call), so nothing else can interleave between this
+  // read and upsertUserOnLogin()'s write below — Node's single-threaded event loop only picks up
+  // the next request once this handler returns. That's what makes "was the table empty right
+  // before this signup" a safe, race-free way to detect "this is the very first account ever" and
+  // gate the one-time flat-file migration on it.
+  const isFirstEverAccount = usersCount(db) === 0;
+  const user = upsertUserOnLogin(db, email, name);
+  if (isFirstEverAccount) {
+    const migrated = migrateFlatFileProgress(db, user.id, OLD_PROGRESS_FILE);
+    if (migrated) console.log(`✓ Migrated pre-upgrade progress.json into ${user.email}'s new account`);
+  }
+
+  const token = createSession(db, user.id);
+  res.cookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_COOKIE_MAX_AGE_MS,
+  });
+  res.json({ email: user.email, name: user.name });
 });
 
-app.put("/api/progress", express.json({ limit: "2mb" }), (req, res) => {
+app.get("/api/me", (req, res) => {
+  const user = currentUser(req);
+  if (!user) {
+    res.status(401).json({ error: "Not logged in." });
+    return;
+  }
+  res.json({ email: user.email, name: user.name });
+});
+
+app.post("/api/logout", (req, res) => {
+  const token = getCookie(req, SESSION_COOKIE);
+  if (token) deleteSession(db, token);
+  res.clearCookie(SESSION_COOKIE, { path: "/" });
+  res.status(204).end();
+});
+
+// --- Progress: GET/PUT /api/progress, now scoped to the logged-in user's own row in `progress`
+//     (SQLite, see db.ts) instead of a single shared /data/progress.json. Always the whole
+//     object — no partial merges — matching spec §4's write contract exactly, unchanged from the
+//     flat-file version.
+//
+//     A user's progress row still has more than one writer: this route, and the snowprep-quiz MCP
+//     server (mcp-server/src/progressStore.ts) writing the same snowprep.sqlite file directly —
+//     bind-mounted to the same path, no HTTP involved, always scoped to one fixed "owner" row (see
+//     that file's own header comment). Without a concurrency check, a browser tab's debounced PUT
+//     of its own (possibly stale) in-memory state can silently overwrite an attempt the MCP server
+//     just wrote a moment earlier, with no error anywhere — a real incident that happened once
+//     under the old flat-file version, not a hypothetical one. ETag/If-Match (the row's updated_at
+//     as the revision, see db.ts's writeProgressRow()) narrows that down the same way the old
+//     mtime-based check did: GET reports the revision it read at, PUT must echo it back, and a
+//     mismatch means someone else wrote in between. Still optimistic concurrency (a check, then an
+//     act) at the HTTP-contract level — db.ts's writeProgressRow() closes the lower-level race with
+//     a real BEGIN IMMEDIATE transaction, but two independent PUTs racing this same route can still
+//     each read a stale revision before either writes, same as before. Acceptable given this app's
+//     actual write cadence (human/LLM-paced, not concurrent high-frequency writers). ---
+app.get("/api/progress", requireSession, (_req, res) => {
+  const user = (res.locals as { user: UserRow }).user;
+  const row = getProgressRow(db, user.id);
+  res.set("ETag", row?.updatedAt ?? "0");
+  res.json(row ? JSON.parse(row.data) : defaultProgressState());
+});
+
+app.put("/api/progress", requireSession, express.json({ limit: "2mb" }), (req, res) => {
+  const user = (res.locals as { user: UserRow }).user;
   if (typeof req.body !== "object" || req.body === null) {
     res.status(400).json({ error: "body must be a JSON object" });
     return;
@@ -145,19 +247,17 @@ app.put("/api/progress", express.json({ limit: "2mb" }), (req, res) => {
     res.status(400).json({ error: "If-Match header required (send back the ETag from GET /api/progress)" });
     return;
   }
-  if (ifMatch !== String(currentMtimeMs() ?? 0)) {
-    res.status(409).json({
-      error: "progress.json was modified since you last read it (e.g. by the MCP quiz server). Re-fetch GET /api/progress and retry your change against the fresh copy.",
-    });
-    return;
-  }
   try {
-    const tmp = `${PROGRESS_FILE}.tmp-${process.pid}`;
-    writeFileSync(tmp, JSON.stringify(req.body), "utf8");
-    renameSync(tmp, PROGRESS_FILE); // atomic swap, same pattern as write/output.ts's writer
-    res.set("ETag", String(currentMtimeMs() ?? 0)).status(204).end();
+    const newRev = writeProgressRow(db, user.id, JSON.stringify(req.body), ifMatch);
+    res.set("ETag", newRev).status(204).end();
   } catch (err) {
-    console.error(`PUT /api/progress: failed writing ${PROGRESS_FILE}: ${err}`);
+    if (err instanceof ProgressConflictError) {
+      res.status(409).json({
+        error: "Your progress changed since you last read it (e.g. by the MCP quiz server). Re-fetch GET /api/progress and retry your change against the fresh copy.",
+      });
+      return;
+    }
+    console.error(`PUT /api/progress: failed writing progress for user ${user.id}: ${err}`);
     res.status(500).json({ error: "failed to persist progress" });
   }
 });
