@@ -21,6 +21,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { login, type LoginResult } from "../lib/session";
+import { PasswordInput } from "./PasswordInput";
 
 // Same pattern pipeline/src/server.ts's POST /api/session enforces server-side (its own EMAIL_RE
 // comment explains the choice) -- kept identical rather than relying on the browser's native
@@ -264,16 +265,15 @@ export function LoginGate() {
               <label style={labelStyle} htmlFor="login-password">
                 {mode === "new" ? "Set a password" : "New password"}
               </label>
-              <input
-                ref={mode === "claim" ? firstRevealedFieldRef : undefined}
+              <PasswordInput
+                inputRef={mode === "claim" ? firstRevealedFieldRef : undefined}
                 id="login-password"
-                type="password"
                 autoComplete="new-password"
                 required
                 minLength={MIN_PASSWORD_LENGTH}
                 maxLength={200}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={setPassword}
                 placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
                 style={inputStyle}
               />
@@ -282,14 +282,13 @@ export function LoginGate() {
               <label style={labelStyle} htmlFor="login-password-confirm">
                 Confirm password
               </label>
-              <input
+              <PasswordInput
                 id="login-password-confirm"
-                type="password"
                 autoComplete="new-password"
                 required
                 maxLength={200}
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={setConfirmPassword}
                 style={inputStyle}
               />
             </div>
@@ -305,15 +304,14 @@ export function LoginGate() {
             <label style={labelStyle} htmlFor="login-password-only">
               Password
             </label>
-            <input
-              ref={firstRevealedFieldRef}
+            <PasswordInput
+              inputRef={firstRevealedFieldRef}
               id="login-password-only"
-              type="password"
               autoComplete="current-password"
               required
               maxLength={200}
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={setPassword}
               style={inputStyle}
             />
             <p style={{ margin: "8px 0 22px", fontSize: 12, lineHeight: 1.4, color: "var(--text-muted)" }}>
