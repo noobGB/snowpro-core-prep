@@ -2,7 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 For a human learning the stack itself (what each technology is, why it's here) rather than this
-codebase's own structure, see [`TECH_STACK.md`](TECH_STACK.md) instead.
+codebase's own structure, see [`TECH_STACK.md`](TECH_STACK.md) instead. Before finishing any change
+that touches identity/progress/theming/the content pipeline/the MCP server/Docker/CI, check
+[`DOCS_MAP.md`](DOCS_MAP.md) for which docs (this file included) need a matching update — see the
+"Development workflow" section below for exactly when this applies.
 
 ## What this repo is
 
@@ -67,6 +70,13 @@ per unit of work, not batched — makes each change's CI run, review, and revert
 this typo") don't need their own issue — still branch + PR rather than a direct commit to `master`,
 just skip the issue for these. Issue-first is for feature/enhancement/bug-fix work, not for small,
 directly-instructed edits.
+
+**Before merging, check [`DOCS_MAP.md`](DOCS_MAP.md)** for whether the change touches a topic that
+table tracks — it maps each subsystem to exactly which doc files/sections describe it, so "did I
+update the docs" is a lookup, not a memory exercise. Skipping this is exactly how README.md and
+TECH_STACK.md ended up actively wrong (not just stale) after #37 shipped, caught and fixed a session
+later in #44. If a change introduces a genuinely new topic not already a row in that table, add one
+in the same PR.
 
 For a plan-mode feature big enough to warrant its own design doc, the finalized plan also gets copied
 to `C:\Users\gaura\Desktop\Claude\claude_plans\` (a workspace-wide convention, not specific to this

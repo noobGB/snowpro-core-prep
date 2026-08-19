@@ -392,8 +392,11 @@ useful for a human doing the same.
 
 ## Tech stack
 
-TypeScript throughout · React 19 · Vite · `react-router-dom` · `unified`/`remark`/`remark-gfm` for
-markdown parsing · Vitest · Express (two routes) · Docker.
+TypeScript throughout · Node.js · React 19 · Vite · `react-router-dom` · `unified` /
+`remark-parse` / `remark-gfm` / `remark-rehype` / `rehype-stringify` / `mdast-util-to-string` /
+`unist-util-visit` for markdown parsing · Vitest · Express · `better-sqlite3` (SQLite) · `tsx` ·
+`@modelcontextprotocol/sdk` + Zod (the MCP server) · Docker + Docker Compose · GitHub Actions +
+Dependabot · `oxlint`.
 
 New to one of these? [`TECH_STACK.md`](TECH_STACK.md) explains what each one is, the problem it
 solves, and exactly where it's used in this codebase — written for learning the stack, not just
