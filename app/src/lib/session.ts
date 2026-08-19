@@ -64,25 +64,39 @@ export async function fetchMe(): Promise<MeResult> {
   }
 }
 
-export type LoginResult = { ok: true } | { ok: false; error: string };
+export type LoginResult =
+  | { ok: true; status: "known"; name: string }
+  | { ok: true; status: "new" }
+  | { ok: false; error: string };
 
-/** LoginGate's submit handler. On success the caller must `window.location.reload()` — this
- *  function deliberately does NOT update the in-memory store or attempt to transition the SPA in
- *  place, since progress.ts's own backend/rev state was already set (or not) by its module-load-
- *  time probe against the *previous* (nonexistent) session, and only a fresh page load re-runs
- *  that probe against the cookie this call just set. */
-export async function login(email: string, name: string): Promise<LoginResult> {
+/** LoginGate's submit handler, per issue #41's "only ask for a name on a genuinely new email"
+ *  flow — `name` is optional so a returning user's first submit (email only) can complete the
+ *  login in one round trip, matching server.ts's own `POST /api/session` contract exactly:
+ *   - known email -> logs in immediately regardless of whether `name` was sent, returns
+ *     `{status: "known", name}` (the server's own stored name, for the "Welcome back" moment).
+ *   - unknown email, no `name` -> doesn't create an account yet, returns `{status: "new"}` so
+ *     LoginGate can reveal the Name field and call this again with both.
+ *   - unknown email, `name` given -> creates the account and logs in, `{status: "known", name}`.
+ *  On a `"known"` result the caller must `window.location.reload()` — this function deliberately
+ *  does NOT update the in-memory store or attempt to transition the SPA in place for that case,
+ *  since progress.ts's own backend/rev state was already set (or not) by its module-load-time
+ *  probe against the *previous* (nonexistent) session, and only a fresh page load re-runs that
+ *  probe against the cookie this call just set. A `"new"` result never sets a cookie, so there's
+ *  nothing to reload for yet. */
+export async function login(email: string, name?: string): Promise<LoginResult> {
   try {
     const res = await fetch("/api/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, name }),
+      body: JSON.stringify(name === undefined ? { email } : { email, name }),
     });
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       return { ok: false, error: body.error ?? `Login failed (${res.status}).` };
     }
-    return { ok: true };
+    const data = (await res.json()) as { status: "known" | "new"; name?: string };
+    if (data.status === "new") return { ok: true, status: "new" };
+    return { ok: true, status: "known", name: data.name! };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Network error." };
   }
@@ -90,14 +104,16 @@ export async function login(email: string, name: string): Promise<LoginResult> {
 
 /** SettingsPanel's inline name edit: re-calls POST /api/session with the SAME email + the new
  *  name, which pipeline/src/server.ts's route treats as "update this account's display name in
- *  place," never a new account (email is the only identity key). Unlike login(), this updates the
- *  in-memory store directly and does NOT reload the page — a display-name edit doesn't touch
- *  progress.ts's session-scoped state at all, so there's nothing that needs a fresh boot probe. */
+ *  place," never a new account (email is the only identity key) — always resolves `"known"` since
+ *  the account already exists by definition (only a logged-in user can reach this). Unlike a fresh
+ *  login(), this updates the in-memory store directly and does NOT reload the page — a display-name
+ *  edit doesn't touch progress.ts's session-scoped state at all, so there's nothing that needs a
+ *  fresh boot probe. */
 export async function updateName(name: string): Promise<LoginResult> {
   if (!currentUser) return { ok: false, error: "Not logged in." };
   const result = await login(currentUser.email, name);
-  if (result.ok) {
-    currentUser = { ...currentUser, name };
+  if (result.ok && result.status === "known") {
+    currentUser = { ...currentUser, name: result.name };
     emit();
   }
   return result;

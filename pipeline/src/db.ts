@@ -145,16 +145,34 @@ export function usersCount(db: Db): number {
   return row.n;
 }
 
-/** `POST /api/session`'s core: look up by email; if found, update `name` in place (a typo'd name
- *  is self-correctable without losing the account, per the plan's explicit "same email, different
- *  name = update, not a new account" rule); if not found, create the account. Always returns the
- *  resulting row. */
-export function upsertUserOnLogin(db: Db, email: string, name: string): UserRow {
+/** `POST /api/session`'s core, called two different ways per issue #41's "only ask for a name on
+ *  a genuinely new email" flow:
+ *   - `name` provided, email known -> update `name` in place if it actually changed (a typo'd name
+ *     is self-correctable without losing the account, or this is SettingsPanel's explicit name
+ *     edit), otherwise a no-op read (no write for an unchanged resubmit).
+ *   - `name` provided, email unknown -> create the account (real signup).
+ *   - `name` omitted, email known -> plain "log me back in" with nothing to change; returns the
+ *     existing row untouched, no write at all.
+ *   - `name` omitted, email unknown -> the one case this function does NOT handle; the caller
+ *     (`server.ts`'s `POST /api/session`) must check `findUserByEmail` itself first and respond
+ *     `{status: "new"}` without ever reaching this function, since there's no name to create the
+ *     account with yet. Throws if called this way anyway, rather than silently doing nothing or
+ *     fabricating a blank name — that would be a real caller bug, not a normal path. */
+export function upsertUserOnLogin(db: Db, email: string, name?: string): UserRow {
   const normalized = normalizeEmail(email);
   const existing = findUserByEmail(db, normalized);
   if (existing) {
-    db.prepare("UPDATE users SET name = ? WHERE id = ?").run(name, existing.id);
-    return { ...existing, name };
+    if (name !== undefined && name !== existing.name) {
+      db.prepare("UPDATE users SET name = ? WHERE id = ?").run(name, existing.id);
+      return { ...existing, name };
+    }
+    return existing;
+  }
+  if (name === undefined) {
+    throw new Error(
+      "upsertUserOnLogin: no account exists for this email and no name was given to create one -- " +
+        "the caller must check findUserByEmail() first and respond {status: \"new\"} instead of calling this.",
+    );
   }
   const createdAt = new Date().toISOString();
   const info = db

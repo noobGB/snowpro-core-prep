@@ -106,6 +106,28 @@ describe("upsertUserOnLogin / findUserByEmail", () => {
     expect(second.name).toBe("Alice");
     expect(findUserByEmail(db, "alice@example.com")?.name).toBe("Alice");
   });
+
+  // Issue #41: returning users shouldn't be re-asked for a name the server already has.
+  describe("email-only login (issue #41 -- name omitted)", () => {
+    it("logging in with just email for a known user returns the account unchanged, without touching the stored name", () => {
+      upsertUserOnLogin(db, "alice@example.com", "Alice");
+      const result = upsertUserOnLogin(db, "alice@example.com");
+      expect(result.name).toBe("Alice");
+      expect(usersCount(db)).toBe(1);
+    });
+
+    it("looks up the known user case-insensitively even with no name given", () => {
+      const created = upsertUserOnLogin(db, "alice@example.com", "Alice");
+      const result = upsertUserOnLogin(db, "ALICE@EXAMPLE.COM");
+      expect(result.id).toBe(created.id);
+      expect(result.name).toBe("Alice");
+    });
+
+    it("throws when called for an email with no account and no name to create one -- callers must check findUserByEmail() first", () => {
+      expect(() => upsertUserOnLogin(db, "nobody@example.com")).toThrow();
+      expect(usersCount(db)).toBe(0); // the failed attempt must not have created a blank-name account
+    });
+  });
 });
 
 describe("findFirstUser", () => {

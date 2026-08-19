@@ -22,6 +22,7 @@ import { printFailure, printNotices, printSuccess } from "./report.js";
 import {
   createSession,
   deleteSession,
+  findUserByEmail,
   getProgressRow,
   migrateFlatFileProgress,
   openDb,
@@ -151,7 +152,7 @@ function currentUser(req: express.Request): UserRow | undefined {
 function requireSession(req: express.Request, res: express.Response, next: express.NextFunction): void {
   const user = currentUser(req);
   if (!user) {
-    res.status(401).json({ error: "Not logged in. POST /api/session with an email + name first." });
+    res.status(401).json({ error: "Not logged in. POST /api/session with an email first." });
     return;
   }
   (res.locals as { user: UserRow }).user = user;
@@ -161,13 +162,26 @@ function requireSession(req: express.Request, res: express.Response, next: expre
 app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
   const body = req.body as { email?: unknown; name?: unknown } | null;
   const email = typeof body?.email === "string" ? body.email.trim() : "";
-  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  const rawName = typeof body?.name === "string" ? body.name.trim() : "";
+  // Absent/blank name means "just log me back in" (issue #41: don't re-ask for a name the server
+  // already has) — distinct from an empty string, which would otherwise mean "erase the name."
+  const name = rawName.length > 0 ? rawName : undefined;
   if (!EMAIL_RE.test(email) || email.length > 254) {
     res.status(400).json({ error: "A valid email is required." });
     return;
   }
-  if (!name || name.length > 100) {
-    res.status(400).json({ error: "A name (1-100 characters) is required." });
+  if (name !== undefined && name.length > 100) {
+    res.status(400).json({ error: "Name must be 100 characters or fewer." });
+    return;
+  }
+
+  // Look up BEFORE deciding anything: a genuinely new email with no name yet can't be logged in
+  // or created — the client needs to collect a name first (LoginGate.tsx's reveal-on-new flow) —
+  // so this responds {status: "new"} and returns without touching the database at all, rather than
+  // upsertUserOnLogin() fabricating a blank-name account or throwing.
+  const existing = findUserByEmail(db, email);
+  if (!existing && name === undefined) {
+    res.json({ status: "new" });
     return;
   }
 
@@ -176,8 +190,10 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
   // read and upsertUserOnLogin()'s write below — Node's single-threaded event loop only picks up
   // the next request once this handler returns. That's what makes "was the table empty right
   // before this signup" a safe, race-free way to detect "this is the very first account ever" and
-  // gate the one-time flat-file migration on it.
-  const isFirstEverAccount = usersCount(db) === 0;
+  // gate the one-time flat-file migration on it. Still correct under the new email-only login
+  // path: this branch is unreachable when `!existing`, since that case either returned above
+  // (`name === undefined`) or has a real `name` to create with (the `else` a caller must supply).
+  const isFirstEverAccount = !existing && usersCount(db) === 0;
   const user = upsertUserOnLogin(db, email, name);
   if (isFirstEverAccount) {
     const migrated = migrateFlatFileProgress(db, user.id, OLD_PROGRESS_FILE);
@@ -191,7 +207,7 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
     path: "/",
     maxAge: SESSION_COOKIE_MAX_AGE_MS,
   });
-  res.json({ email: user.email, name: user.name });
+  res.json({ status: "known", email: user.email, name: user.name });
 });
 
 app.get("/api/me", (req, res) => {
