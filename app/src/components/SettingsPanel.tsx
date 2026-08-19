@@ -16,6 +16,7 @@ import { getProgress, getStorageBackend, resetProgress, updateProgress, useProgr
 import { isoDate } from "../lib/planDates";
 import { closeSettings, useSettingsOpen } from "../lib/settingsStore";
 import { changePassword, logout, setInitialPassword, updateName, useSessionUser } from "../lib/session";
+import { PasswordInput } from "./PasswordInput";
 
 const RESET_PHRASE = "RESET";
 // Mirrors LoginGate.tsx's own copy of this constant and pipeline/src/passwords.ts's
@@ -268,29 +269,26 @@ export function SettingsPanel() {
                     </p>
                   )}
                   {me.hasPassword && (
-                    <input
-                      type="password"
+                    <PasswordInput
                       autoComplete="current-password"
                       placeholder="Current password"
                       value={currentPasswordInput}
-                      onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                      onChange={setCurrentPasswordInput}
                       style={{ width: "100%", boxSizing: "border-box", background: "var(--card)", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-body)", fontSize: 13, padding: "8px 10px", minHeight: 36, marginBottom: 8 }}
                     />
                   )}
-                  <input
-                    type="password"
+                  <PasswordInput
                     autoComplete="new-password"
                     placeholder={`New password (at least ${MIN_PASSWORD_LENGTH} characters)`}
                     value={newPasswordInput}
-                    onChange={(e) => setNewPasswordInput(e.target.value)}
+                    onChange={setNewPasswordInput}
                     style={{ width: "100%", boxSizing: "border-box", background: "var(--card)", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-body)", fontSize: 13, padding: "8px 10px", minHeight: 36, marginBottom: 8 }}
                   />
-                  <input
-                    type="password"
+                  <PasswordInput
                     autoComplete="new-password"
                     placeholder="Confirm new password"
                     value={confirmPasswordInput}
-                    onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                    onChange={setConfirmPasswordInput}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") savePassword();
                     }}
