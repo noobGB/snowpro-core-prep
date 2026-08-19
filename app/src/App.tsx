@@ -1,10 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { CommandPalette } from "./components/CommandPalette";
+import { LoginGate } from "./components/LoginGate";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { applyTheme } from "./lib/theme";
 import { useProgress } from "./lib/progress";
+import { fetchMe } from "./lib/session";
 import { Analytics } from "./pages/Analytics";
 import { Dashboard } from "./pages/Dashboard";
 import { Flashcards } from "./pages/Flashcards";
@@ -27,15 +29,40 @@ function ShellLayout() {
   );
 }
 
+type AuthState = "loading" | "gate" | "ready";
+
 export default function App() {
   const { settings } = useProgress();
+  // "loading" until GET /api/me resolves once, at boot. "gate" only when the server genuinely
+  // requires a session and this browser doesn't have one yet -- fetchMe() reports authRequired:
+  // false (not "gate") for a server that has no /api/me route at all (vite dev without the
+  // container, or the built files opened as plain static files), so the app renders exactly as it
+  // did before this feature existed in that case, no login screen. See lib/session.ts's own doc
+  // comment for the full reasoning.
+  const [authState, setAuthState] = useState<AuthState>("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchMe().then((result) => {
+      if (cancelled) return;
+      setAuthState(result.authRequired && !result.user ? "gate" : "ready");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Root-level, not AppShell-scoped: CommandPalette/SettingsPanel are siblings of the routed tree
   // here, not descendants of AppShell's div, and Runner's /session/:setId route bypasses AppShell
-  // entirely. document.documentElement is the only place an attribute reaches all of them.
+  // entirely. document.documentElement is the only place an attribute reaches all of them. Called
+  // unconditionally (before the authState early returns below) to keep this hook's call order
+  // stable across renders, per the rules of hooks.
   useEffect(() => {
     applyTheme(settings.theme);
   }, [settings.theme]);
+
+  if (authState === "loading") return null; // brief -- a same-origin fetch, not worth a spinner
+  if (authState === "gate") return <LoginGate />;
 
   return (
     <>
