@@ -27,6 +27,10 @@ export interface UserRow {
   email: string;
   name: string;
   createdAt: string;
+  /** `null` for a legacy pre-password account (issue #37) that hasn't claimed a password yet --
+   *  see `setPasswordIfUnset()`/`setPassword()` and server.ts's three-state `POST /api/session`
+   *  flow. Never populated by `upsertUserOnLogin()` except at account-creation time. */
+  passwordHash: string | null;
 }
 
 export interface ProgressRow {
@@ -105,7 +109,21 @@ export function openDb(filePath: string): Db {
       updated_at TEXT NOT NULL
     );
   `);
+  addPasswordHashColumnIfMissing(db);
   return db;
+}
+
+/** Issue #46: adds `users.password_hash` (nullable -- legacy accounts start unset) on top of the
+ *  `CREATE TABLE IF NOT EXISTS` shape above, which never runs again once the table already exists.
+ *  SQLite has no `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, so idempotency is checked explicitly
+ *  via `PRAGMA table_info` rather than wrapping the ALTER in a try/catch -- swallowing the
+ *  exception would also swallow a real failure (disk full, a locked file) indistinguishably from
+ *  "column already exists." A real migrations-versioning table is premature for this one
+ *  additive, nullable column on a single deployment target; revisit if a second ALTER shows up. */
+function addPasswordHashColumnIfMissing(db: Db): void {
+  const columns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+  if (columns.some((c) => c.name === "password_hash")) return;
+  db.exec("ALTER TABLE users ADD COLUMN password_hash TEXT");
 }
 
 /** Email is the ONLY identity lookup key (per the plan's explicit decision) — normalized by
@@ -118,26 +136,24 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+const USER_COLUMNS = "id, email, name, created_at AS createdAt, password_hash AS passwordHash";
+
 export function findUserByEmail(db: Db, email: string): UserRow | undefined {
   const row = db
-    .prepare("SELECT id, email, name, created_at AS createdAt FROM users WHERE email = ?")
+    .prepare(`SELECT ${USER_COLUMNS} FROM users WHERE email = ?`)
     .get(normalizeEmail(email)) as UserRow | undefined;
   return row;
 }
 
 export function findUserById(db: Db, id: number): UserRow | undefined {
-  return db.prepare("SELECT id, email, name, created_at AS createdAt FROM users WHERE id = ?").get(id) as
-    | UserRow
-    | undefined;
+  return db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).get(id) as UserRow | undefined;
 }
 
 /** The account the migration below treats as the returning owner, and the fallback
  *  `mcp-server/` uses when `SNOWPRO_OWNER_EMAIL` isn't set: whichever user row was created first
  *  (lowest id — `id` is `AUTOINCREMENT`, so this is exactly creation order). */
 export function findFirstUser(db: Db): UserRow | undefined {
-  return db.prepare("SELECT id, email, name, created_at AS createdAt FROM users ORDER BY id ASC LIMIT 1").get() as
-    | UserRow
-    | undefined;
+  return db.prepare(`SELECT ${USER_COLUMNS} FROM users ORDER BY id ASC LIMIT 1`).get() as UserRow | undefined;
 }
 
 export function usersCount(db: Db): number {
@@ -157,8 +173,14 @@ export function usersCount(db: Db): number {
  *     (`server.ts`'s `POST /api/session`) must check `findUserByEmail` itself first and respond
  *     `{status: "new"}` without ever reaching this function, since there's no name to create the
  *     account with yet. Throws if called this way anyway, rather than silently doing nothing or
- *     fabricating a blank name — that would be a real caller bug, not a normal path. */
-export function upsertUserOnLogin(db: Db, email: string, name?: string): UserRow {
+ *     fabricating a blank name — that would be a real caller bug, not a normal path.
+ *
+ *  `passwordHash` (issue #46) is only ever consulted on the creation branch -- a brand new
+ *  account gets its password set at creation time, alongside the name, in the same INSERT. It's
+ *  never used to touch an *existing* account's password; that's `setPasswordIfUnset()`/
+ *  `setPassword()`'s job below, kept separate so this function's existing "update name in place"
+ *  contract for known users stays exactly as issue #41 left it. */
+export function upsertUserOnLogin(db: Db, email: string, name?: string, passwordHash?: string): UserRow {
   const normalized = normalizeEmail(email);
   const existing = findUserByEmail(db, normalized);
   if (existing) {
@@ -176,9 +198,44 @@ export function upsertUserOnLogin(db: Db, email: string, name?: string): UserRow
   }
   const createdAt = new Date().toISOString();
   const info = db
-    .prepare("INSERT INTO users (email, name, created_at) VALUES (?, ?, ?)")
-    .run(normalized, name, createdAt);
-  return { id: Number(info.lastInsertRowid), email: normalized, name, createdAt };
+    .prepare("INSERT INTO users (email, name, created_at, password_hash) VALUES (?, ?, ?, ?)")
+    .run(normalized, name, createdAt, passwordHash ?? null);
+  return { id: Number(info.lastInsertRowid), email: normalized, name, createdAt, passwordHash: passwordHash ?? null };
+}
+
+/** Issue #46's atomic account-claiming step: sets `password_hash` for a legacy account that
+ *  doesn't have one yet, guarded by `AND password_hash IS NULL` so the UPDATE itself -- not a
+ *  preceding SELECT -- is the race guard. Two concurrent claims against the same legacy email can
+ *  both run this statement, but SQLite serializes writes to the same row, so only the first to
+ *  actually commit sees `changes === 1`; the second sees `changes === 0` because by the time its
+ *  UPDATE runs, `password_hash IS NULL` is no longer true. Returns whether *this* call won the
+ *  race -- the caller (`server.ts`) must treat `false` as "someone else claimed it first, try
+ *  logging in with their password" rather than silently proceeding. */
+export function setPasswordIfUnset(db: Db, userId: number, passwordHash: string): boolean {
+  const info = db
+    .prepare("UPDATE users SET password_hash = ? WHERE id = ? AND password_hash IS NULL")
+    .run(passwordHash, userId);
+  return info.changes === 1;
+}
+
+/** An authenticated password change (or the Settings "set a password" path for an already
+ *  logged-in legacy account, which needs no *current* password since a live session already
+ *  proves ownership) -- unlike `setPasswordIfUnset()`, this always overwrites, since the caller
+ *  already holds a valid session for this exact user. Also deletes every OTHER session for this
+ *  user (`keepToken` survives), so a password change actually locks out anyone using a stale
+ *  session elsewhere rather than leaving it valid indefinitely -- this matters more than usual
+ *  here because sessions have no expiry column and this app's cookies are issued with a 400-day
+ *  max-age. */
+export function setPassword(db: Db, userId: number, passwordHash: string, keepToken?: string): void {
+  const run = db.transaction((uid: number, hash: string, keep: string | undefined) => {
+    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, uid);
+    if (keep) {
+      db.prepare("DELETE FROM sessions WHERE user_id = ? AND token != ?").run(uid, keep);
+    } else {
+      db.prepare("DELETE FROM sessions WHERE user_id = ?").run(uid);
+    }
+  });
+  run(userId, passwordHash, keepToken);
 }
 
 /** Session tokens: 32 random bytes (256 bits), hex-encoded — plenty to be unguessable, and a plain
@@ -199,7 +256,8 @@ export function createSession(db: Db, userId: number): string {
 export function resolveSession(db: Db, token: string): UserRow | undefined {
   const row = db
     .prepare(
-      `SELECT users.id AS id, users.email AS email, users.name AS name, users.created_at AS createdAt
+      `SELECT users.id AS id, users.email AS email, users.name AS name, users.created_at AS createdAt,
+              users.password_hash AS passwordHash
        FROM sessions JOIN users ON users.id = sessions.user_id
        WHERE sessions.token = ?`,
     )

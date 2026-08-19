@@ -24,6 +24,8 @@ import {
   openDb,
   ProgressConflictError,
   resolveSession,
+  setPassword,
+  setPasswordIfUnset,
   upsertUserOnLogin,
   usersCount,
   writeProgressRow,
@@ -158,6 +160,12 @@ describe("sessions", () => {
     const token = createSession(db, user.id);
     deleteSession(db, token);
     expect(resolveSession(db, token)).toBeUndefined();
+  });
+
+  it("resolveSession includes passwordHash (issue #46 regression: the JOIN query must select it explicitly, not just the base user columns)", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice", "scrypt$16384$8$1$salt$hash");
+    const token = createSession(db, user.id);
+    expect(resolveSession(db, token)?.passwordHash).toBe("scrypt$16384$8$1$salt$hash");
   });
 
   it("two different logins for the same user get two independent tokens", () => {
@@ -301,5 +309,109 @@ describe("findUserById", () => {
 
   it("returns undefined for an unknown id", () => {
     expect(findUserById(db, 999999)).toBeUndefined();
+  });
+});
+
+// Issue #46: password login.
+describe("password_hash column", () => {
+  it("a user created without a password hash has passwordHash null (legacy/pre-#46 shape)", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+    expect(user.passwordHash).toBeNull();
+    expect(findUserByEmail(db, "alice@example.com")?.passwordHash).toBeNull();
+  });
+
+  it("a user created WITH a password hash (new-account signup) has it set immediately", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice", "scrypt$16384$8$1$deadbeef$c0ffee");
+    expect(user.passwordHash).toBe("scrypt$16384$8$1$deadbeef$c0ffee");
+    expect(findUserByEmail(db, "alice@example.com")?.passwordHash).toBe("scrypt$16384$8$1$deadbeef$c0ffee");
+  });
+
+  it("re-opening an existing pre-#46 database file (no password_hash column yet) gets the column added, existing rows read back as null", () => {
+    // Simulate a database that predates issue #46: open it once, insert a user with the OLD
+    // (name-only) shape directly, close it -- then re-open via openDb() again, which is exactly
+    // what happens on a real container restart after this feature ships, and confirm the ALTER
+    // TABLE migration ran and didn't corrupt the pre-existing row.
+    db.prepare("INSERT INTO users (email, name, created_at) VALUES (?, ?, ?)").run(
+      "legacy@example.com",
+      "Legacy User",
+      new Date().toISOString(),
+    );
+    db.close();
+    db = openDb(dbFile); // re-open the SAME file -- openDb() must be idempotent on a second call too
+    expect(findUserByEmail(db, "legacy@example.com")).toMatchObject({ name: "Legacy User", passwordHash: null });
+  });
+});
+
+describe("setPasswordIfUnset (the legacy account-claiming flow)", () => {
+  it("claims a legacy account's password when none is set yet", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+    const claimed = setPasswordIfUnset(db, user.id, "scrypt$16384$8$1$salt$hash");
+    expect(claimed).toBe(true);
+    expect(findUserById(db, user.id)?.passwordHash).toBe("scrypt$16384$8$1$salt$hash");
+  });
+
+  it("refuses to overwrite an already-claimed password (returns false, leaves the original hash)", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+    expect(setPasswordIfUnset(db, user.id, "scrypt$16384$8$1$first$hash")).toBe(true);
+    const secondAttempt = setPasswordIfUnset(db, user.id, "scrypt$16384$8$1$second$hash");
+    expect(secondAttempt).toBe(false);
+    expect(findUserById(db, user.id)?.passwordHash).toBe("scrypt$16384$8$1$first$hash"); // unchanged
+  });
+
+  it("the race guard is the UPDATE itself: only one of two 'simultaneous' claims against the same legacy row wins", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+    // better-sqlite3 is synchronous, so these two calls can't literally interleave at the JS
+    // level -- but the assertion that matters is the one setPasswordIfUnset's own contract makes:
+    // exactly one caller sees `true`, and the row ends up holding exactly that caller's hash, not
+    // a hybrid or a silently-overwritten value.
+    const results = [
+      setPasswordIfUnset(db, user.id, "scrypt$16384$8$1$attempt-a$hash"),
+      setPasswordIfUnset(db, user.id, "scrypt$16384$8$1$attempt-b$hash"),
+    ];
+    expect(results).toEqual([true, false]);
+    expect(findUserById(db, user.id)?.passwordHash).toBe("scrypt$16384$8$1$attempt-a$hash");
+  });
+});
+
+describe("setPassword (authenticated change, invalidates other sessions)", () => {
+  it("overwrites the password unconditionally, even if one was already set", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice", "scrypt$16384$8$1$old$hash");
+    setPassword(db, user.id, "scrypt$16384$8$1$new$hash");
+    expect(findUserById(db, user.id)?.passwordHash).toBe("scrypt$16384$8$1$new$hash");
+  });
+
+  it("deletes every OTHER session for this user but keeps the one passed as keepToken", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+    const keep = createSession(db, user.id);
+    const other1 = createSession(db, user.id);
+    const other2 = createSession(db, user.id);
+
+    setPassword(db, user.id, "scrypt$16384$8$1$new$hash", keep);
+
+    expect(resolveSession(db, keep)).toMatchObject({ id: user.id });
+    expect(resolveSession(db, other1)).toBeUndefined();
+    expect(resolveSession(db, other2)).toBeUndefined();
+  });
+
+  it("with no keepToken, deletes ALL sessions for this user (the login-gate claim path, which has no prior session)", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+    const t1 = createSession(db, user.id);
+    const t2 = createSession(db, user.id);
+
+    setPassword(db, user.id, "scrypt$16384$8$1$new$hash");
+
+    expect(resolveSession(db, t1)).toBeUndefined();
+    expect(resolveSession(db, t2)).toBeUndefined();
+  });
+
+  it("never touches another user's sessions or password", () => {
+    const alice = upsertUserOnLogin(db, "alice@example.com", "Alice", "scrypt$16384$8$1$a$hash");
+    const bob = upsertUserOnLogin(db, "bob@example.com", "Bob", "scrypt$16384$8$1$b$hash");
+    const bobToken = createSession(db, bob.id);
+
+    setPassword(db, alice.id, "scrypt$16384$8$1$a2$hash");
+
+    expect(findUserById(db, bob.id)?.passwordHash).toBe("scrypt$16384$8$1$b$hash");
+    expect(resolveSession(db, bobToken)).toMatchObject({ id: bob.id });
   });
 });

@@ -17,9 +17,10 @@ show up in that one account's web-app Analytics/Dashboard, and vice versa.
 feature) supports multiple people, each identified by email, each with their own isolated
 progress; this server always operates on one fixed "owner" account regardless of who else is
 logged into the web app elsewhere on the LAN. See `SNOWPRO_OWNER_EMAIL` below for how that account
-is chosen. There's still no password anywhere in this app (a deliberate, confirmed design choice
-for a trusted-LAN feature) — the web app's login is name+email only, and this server was never
-going to be reachable by anyone but you in the first place.
+is chosen. The web app's login is email+password (issue #46) — this server itself has no concept of
+that at all, since it reads/writes the owner's SQLite row directly and was never going to be
+reachable by anyone but you in the first place; it needs no changes when the owner sets or changes
+their password.
 
 ## Tools
 

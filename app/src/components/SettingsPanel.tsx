@@ -15,9 +15,12 @@ import { useContent } from "../lib/useContent";
 import { getProgress, getStorageBackend, resetProgress, updateProgress, useProgress, type ProgressState } from "../lib/progress";
 import { isoDate } from "../lib/planDates";
 import { closeSettings, useSettingsOpen } from "../lib/settingsStore";
-import { logout, updateName, useSessionUser } from "../lib/session";
+import { changePassword, logout, setInitialPassword, updateName, useSessionUser } from "../lib/session";
 
 const RESET_PHRASE = "RESET";
+// Mirrors LoginGate.tsx's own copy of this constant and pipeline/src/passwords.ts's
+// MIN_PASSWORD_LENGTH -- client-side is just an early check, the server re-validates regardless.
+const MIN_PASSWORD_LENGTH = 8;
 
 /** A loose but real check — enough to reject an unrelated JSON file without hand-writing a full
  *  schema validator for what's still just a local backup/restore feature. */
@@ -75,6 +78,12 @@ export function SettingsPanel() {
   const [nameSaving, setNameSaving] = useState(false);
   const [nameMessage, setNameMessage] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
+  const [currentPasswordInput, setCurrentPasswordInput] = useState("");
+  const [newPasswordInput, setNewPasswordInput] = useState("");
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwMessage, setPwMessage] = useState<string | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   // Keep the input in sync if `me` resolves/changes after this panel already mounted (e.g. the
@@ -91,6 +100,36 @@ export function SettingsPanel() {
     const result = await updateName(trimmed);
     setNameSaving(false);
     setNameMessage(result.ok ? "Name updated." : result.error);
+  };
+
+  // Issue #46: "Set a password" for a legacy pre-#46 account (me.hasPassword false, no current
+  // password needed -- the live session already proves ownership) or "Change password" for one
+  // that already has it (requires the current password, so a moment of unattended device access
+  // can't silently take it over).
+  const savePassword = async () => {
+    setPwMessage(null);
+    if (newPasswordInput.length < MIN_PASSWORD_LENGTH) {
+      setPwMessage(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+      return;
+    }
+    if (newPasswordInput !== confirmPasswordInput) {
+      setPwMessage("Passwords don't match.");
+      return;
+    }
+    setPwSaving(true);
+    const result = me?.hasPassword
+      ? await changePassword(currentPasswordInput, newPasswordInput)
+      : await setInitialPassword(newPasswordInput);
+    setPwSaving(false);
+    if (result.ok) {
+      setPwMessage(me?.hasPassword ? "Password changed." : "Password set — this account is now protected.");
+      setCurrentPasswordInput("");
+      setNewPasswordInput("");
+      setConfirmPasswordInput("");
+      setPwOpen(false);
+    } else {
+      setPwMessage(result.error);
+    }
   };
 
   const signOut = async () => {
@@ -205,6 +244,85 @@ export function SettingsPanel() {
             >
               {signingOut ? "Signing out…" : "Sign out"}
             </button>
+
+            <div style={{ borderTop: "1px solid var(--hairline)", marginTop: 14, paddingTop: 14 }}>
+              {!pwOpen && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPwOpen(true);
+                    setPwMessage(null);
+                  }}
+                  style={{ width: "100%", background: "transparent", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-muted)", fontSize: 13, padding: "9px 0", cursor: "pointer" }}
+                >
+                  {me.hasPassword ? "Change password" : "Set a password"}
+                </button>
+              )}
+              {pwOpen && (
+                <>
+                  {!me.hasPassword && (
+                    <p style={{ margin: "0 0 10px", fontSize: 12, lineHeight: 1.5, color: "var(--text-muted)" }}>
+                      This account doesn&rsquo;t have a password yet — set one to keep others on
+                      this network from opening it. There&rsquo;s no self-service reset in this
+                      app; if you forget it, ask the app operator.
+                    </p>
+                  )}
+                  {me.hasPassword && (
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      placeholder="Current password"
+                      value={currentPasswordInput}
+                      onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                      style={{ width: "100%", boxSizing: "border-box", background: "var(--card)", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-body)", fontSize: 13, padding: "8px 10px", minHeight: 36, marginBottom: 8 }}
+                    />
+                  )}
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder={`New password (at least ${MIN_PASSWORD_LENGTH} characters)`}
+                    value={newPasswordInput}
+                    onChange={(e) => setNewPasswordInput(e.target.value)}
+                    style={{ width: "100%", boxSizing: "border-box", background: "var(--card)", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-body)", fontSize: 13, padding: "8px 10px", minHeight: 36, marginBottom: 8 }}
+                  />
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Confirm new password"
+                    value={confirmPasswordInput}
+                    onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") savePassword();
+                    }}
+                    style={{ width: "100%", boxSizing: "border-box", background: "var(--card)", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-body)", fontSize: 13, padding: "8px 10px", minHeight: 36, marginBottom: 8 }}
+                  />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      disabled={pwSaving}
+                      onClick={savePassword}
+                      style={{ flex: 1, background: "var(--card)", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-body)", fontSize: 13, padding: "8px 0", cursor: pwSaving ? "default" : "pointer" }}
+                    >
+                      {pwSaving ? "Saving…" : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPwOpen(false);
+                        setPwMessage(null);
+                        setCurrentPasswordInput("");
+                        setNewPasswordInput("");
+                        setConfirmPasswordInput("");
+                      }}
+                      style={{ flex: 1, background: "transparent", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-muted)", fontSize: 13, padding: "8px 0", cursor: "pointer" }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              )}
+              {pwMessage && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 8 }}>{pwMessage}</div>}
+            </div>
           </div>
         )}
 

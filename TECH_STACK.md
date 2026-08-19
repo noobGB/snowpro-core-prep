@@ -137,11 +137,15 @@ column (`data TEXT`), not normalized into relational columns — see `CLAUDE.md`
 section for why "no partial merges" is a deliberate rule, not a missing feature; SQLite here is
 about per-user *rows*, not about normalizing what's *inside* each row.
 
-**No password, session-cookie auth** — `pipeline/src/db.ts`'s `sessions` table plus an HTTP-only
-cookie is the entire auth system: no bcrypt/argon2, no password reset flow, no OAuth. A deliberate
-choice for what this actually is (a trusted-LAN feature — home, study group, small office), not a
-missing feature waiting to be finished. Email is the sole identity key; a name is asked once, on a
-genuinely new email, for display purposes only.
+**Password + session-cookie auth, no OAuth** — `pipeline/src/db.ts`'s `sessions` table plus an
+HTTP-only cookie handles sessions; `pipeline/src/passwords.ts` handles passwords via `node:crypto`'s
+built-in `scrypt` (self-describing `scrypt$N$r$p$salt$hash` format), not bcrypt/argon2 — this app's
+threat model (a trusted LAN, not internet-facing) doesn't warrant a new native/WASM dependency for
+argon2's stronger offline-cracking resistance. No password reset flow either: no SMTP exists in this
+app, so recovery is the operator manually clearing an account's `password_hash`, documented in-app
+rather than built as a self-service flow. Email is the sole identity key; a name (and, since issue
+#46, a password) is asked once, on a genuinely new email, for display purposes only in the name's
+case.
 
 **`tsx`** — runs TypeScript files directly (`tsx src/server.ts`) without a separate "compile to
 JS first" step. Used for both the CLI (`npm run build:content`) and, notably, as the **actual

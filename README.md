@@ -67,7 +67,7 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
 - **Resources** — official links plus per-domain study resources, with a standing caution against
   "exam dump" sites.
 - **Multi-user (LAN)** — anyone on the same local network can open the app and get their own
-  private progress, identified by email (no password). See [Multi-user](#multi-user-lan) below.
+  private progress, identified by email + password. See [Multi-user](#multi-user-lan) below.
 - **Setup** — a checkable walkthrough for hands-on practice against a real Snowflake account
   (CLI install, key-pair auth, a least-privilege sandbox role), split into **Setup Steps** (the
   actions to actually perform, in order) and **Known Issues & Fixes** (what went wrong along the
@@ -110,26 +110,34 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
 *Readiness weighted by real exam domain weights, plus pacing against the actual time budget.*
 
 ![Login](.github/screenshot-login.png)
-*Email only — no password. Name is asked once, on your first-ever login; every login after that
-recognizes you from just the email.*
+*Email + password. Name and a password are only asked once, on your first-ever login; every login
+after that just needs the email and password.*
 
 ## Multi-user (LAN)
 
 Anyone on the same local network as the machine running this app (find its LAN IP, e.g.
 `192.168.1.x`, and open `http://<that IP>:8080`) gets their own completely separate progress —
-attempts, flashcard grades, plan checklist, everything — keyed to their email. No password: this is
-built for a trusted network (home, study group, small office), not the public internet.
+attempts, flashcard grades, plan checklist, everything — keyed to their email, and protected by
+their own password so nobody else on the network can open it. This is built for a trusted network
+(home, study group, small office), not the public internet — see the [Development
+workflow/Identity](CLAUDE.md) notes for the exact threat model and why a password-claim step exists
+for accounts created before passwords did.
 
-- **First-ever login** for an email asks for a name too (just for greetings/the Profile section —
-  never used to identify the account). **Every login after that** only asks for the email; the app
-  already knows who you are.
+- **First-ever login** for an email asks for a name and a password together (name is just for
+  greetings/the Profile section — never used to identify the account). **Every login after that**
+  asks for email, then password.
 - Progress lives in one shared SQLite database on the host machine (`data/snowprep.sqlite`), one
   row per person — nobody can read or write anyone else's data.
+- **No self-service password reset** — there's no email delivery in this app. If you forget your
+  password, ask whoever runs the server to reset it for you (they clear it directly in the
+  database, which lets you claim a fresh one on your next login, the same way the account was
+  created in the first place).
 - The [MCP server](#option-c--mcp-server-conversational-quizzing-any-mcp-host) (Claude Code/Desktop
   integration) is single-user by design: it
   always operates on the account of whoever ran it first (or a specific one via
   `SNOWPRO_OWNER_EMAIL`), regardless of who else is logged in over the web on the LAN.
-- Change your display name or sign out any time from **Settings → Profile**.
+- Change your display name, set/change your password, or sign out any time from
+  **Settings → Profile**.
 
 ## Start preparing in minutes
 

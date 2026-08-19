@@ -1,9 +1,9 @@
 /**
  * Client for the identity/session HTTP routes (POST /api/session, GET /api/me, POST /api/logout,
- * pipeline/src/server.ts) plus a tiny external store — same useSyncExternalStore pattern as
- * settingsStore.ts/paletteStore.ts — holding the current session's {email, name} once resolved,
- * so Dashboard's greeting and SettingsPanel's Profile section can read it without prop-drilling
- * through react-router's <Outlet>.
+ * POST /api/account/password[-setup], pipeline/src/server.ts) plus a tiny external store — same
+ * useSyncExternalStore pattern as settingsStore.ts/paletteStore.ts — holding the current session's
+ * {email, name} once resolved, so Dashboard's greeting and SettingsPanel's Profile section can
+ * read it without prop-drilling through react-router's <Outlet>.
  *
  * Mirrors progress.ts's own boot-probe shape: GET /api/me returning anything other than 401 (a
  * real "not logged in" from a server that has this route at all) means "no auth system here" —
@@ -16,6 +16,13 @@
  * own hydrateFromServer() probe) end up correctly synced to the new session's cookie with zero
  * changes to that file, rather than needing a second, parallel "re-hydrate" entry point bolted on
  * for this feature alone.
+ *
+ * Issue #46 (password login): `login()` now carries three possible non-terminal states alongside
+ * the terminal `"known"` — `"new"` (unchanged from issue #41: unknown email, needs a name; now
+ * also needs a password since new accounts require one from creation), `"needs_password_setup"`
+ * (a legacy pre-#46 account claiming its first password), and `"needs_password"` (a normal
+ * password-protected account). See server.ts's `POST /api/session` doc comment for the full
+ * state-machine description this mirrors.
  */
 
 import { useSyncExternalStore } from "react";
@@ -23,6 +30,10 @@ import { useSyncExternalStore } from "react";
 export interface SessionUser {
   email: string;
   name: string;
+  /** Issue #46: `false` for a legacy pre-#46 account that hasn't claimed a password yet --
+   *  SettingsPanel uses this to decide between offering "Set a password" (this account, via
+   *  `setInitialPassword()`) or "Change password" (`changePassword()`). */
+  hasPassword: boolean;
 }
 
 let currentUser: SessionUser | null = null;
@@ -67,56 +78,131 @@ export async function fetchMe(): Promise<MeResult> {
 export type LoginResult =
   | { ok: true; status: "known"; name: string }
   | { ok: true; status: "new" }
+  | { ok: true; status: "needs_password_setup" }
+  | { ok: true; status: "needs_password" }
   | { ok: false; error: string };
 
-/** LoginGate's submit handler, per issue #41's "only ask for a name on a genuinely new email"
- *  flow — `name` is optional so a returning user's first submit (email only) can complete the
- *  login in one round trip, matching server.ts's own `POST /api/session` contract exactly:
- *   - known email -> logs in immediately regardless of whether `name` was sent, returns
- *     `{status: "known", name}` (the server's own stored name, for the "Welcome back" moment).
- *   - unknown email, no `name` -> doesn't create an account yet, returns `{status: "new"}` so
- *     LoginGate can reveal the Name field and call this again with both.
- *   - unknown email, `name` given -> creates the account and logs in, `{status: "known", name}`.
+export interface LoginOptions {
+  /** New-account display name — sent together with `password` on a genuinely new email. */
+  name?: string;
+  /** Password for a normal login against an account that already has one, OR (sent alongside
+   *  `name`) the password for a brand-new account being created right now. */
+  password?: string;
+  /** The password being claimed for a legacy (pre-issue-#46) account that has none set yet. */
+  newPassword?: string;
+}
+
+/** LoginGate's submit handler, per issue #46's three-state flow — `opts` is optional so a
+ *  returning user's very first submit (email only) can determine which state applies in one round
+ *  trip, matching server.ts's own `POST /api/session` contract exactly:
+ *   - known email, password already set, no `password` sent -> `{status: "needs_password"}`,
+ *     LoginGate reveals a Password field and resubmits with `{password}`.
+ *   - known email, password already set, `password` sent -> `{status: "known", name}` on success,
+ *     or `ok: false` on a wrong password / lockout.
+ *   - known email, no password claimed yet, no `newPassword` sent -> `{status:
+ *     "needs_password_setup"}`, LoginGate reveals a "set a password" field and resubmits with
+ *     `{newPassword}`.
+ *   - known email, no password claimed yet, `newPassword` sent -> claims it atomically and logs
+ *     in, `{status: "known", name}` (or, vanishingly rarely, `{status: "needs_password"}` if
+ *     someone else's claim won the race first).
+ *   - unknown email, no `name`/`password` sent -> `{status: "new"}`, LoginGate reveals Name + a
+ *     new-account Password field together.
+ *   - unknown email, `name` + `password` sent -> creates the account, `{status: "known", name}`.
+ *     (Deliberately `password`, not `newPassword`, for this one case -- server.ts's `!existing`
+ *     branch checks `password`, matching "this is the password for the account being created
+ *     right now" rather than "a password being claimed for something that already exists.")
  *  On a `"known"` result the caller must `window.location.reload()` — this function deliberately
  *  does NOT update the in-memory store or attempt to transition the SPA in place for that case,
  *  since progress.ts's own backend/rev state was already set (or not) by its module-load-time
  *  probe against the *previous* (nonexistent) session, and only a fresh page load re-runs that
- *  probe against the cookie this call just set. A `"new"` result never sets a cookie, so there's
+ *  probe against the cookie this call just set. Every other status never sets a cookie, so there's
  *  nothing to reload for yet. */
-export async function login(email: string, name?: string): Promise<LoginResult> {
+export async function login(email: string, opts: LoginOptions = {}): Promise<LoginResult> {
   try {
     const res = await fetch("/api/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(name === undefined ? { email } : { email, name }),
+      body: JSON.stringify({ email, ...opts }),
     });
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       return { ok: false, error: body.error ?? `Login failed (${res.status}).` };
     }
-    const data = (await res.json()) as { status: "known" | "new"; name?: string };
-    if (data.status === "new") return { ok: true, status: "new" };
-    return { ok: true, status: "known", name: data.name! };
+    const data = (await res.json()) as {
+      status: "known" | "new" | "needs_password_setup" | "needs_password";
+      name?: string;
+    };
+    if (data.status === "known") return { ok: true, status: "known", name: data.name! };
+    return { ok: true, status: data.status };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Network error." };
   }
 }
 
 /** SettingsPanel's inline name edit: re-calls POST /api/session with the SAME email + the new
- *  name, which pipeline/src/server.ts's route treats as "update this account's display name in
- *  place," never a new account (email is the only identity key) — always resolves `"known"` since
- *  the account already exists by definition (only a logged-in user can reach this). Unlike a fresh
- *  login(), this updates the in-memory store directly and does NOT reload the page — a display-name
- *  edit doesn't touch progress.ts's session-scoped state at all, so there's nothing that needs a
- *  fresh boot probe. */
+ *  name (no password fields) — server.ts's route recognizes this as an already-authenticated
+ *  session updating its own display name and never asks for a password. Unlike a fresh login(),
+ *  this updates the in-memory store directly and does NOT reload the page — a display-name edit
+ *  doesn't touch progress.ts's session-scoped state at all, so there's nothing that needs a fresh
+ *  boot probe. */
 export async function updateName(name: string): Promise<LoginResult> {
   if (!currentUser) return { ok: false, error: "Not logged in." };
-  const result = await login(currentUser.email, name);
+  const result = await login(currentUser.email, { name });
   if (result.ok && result.status === "known") {
     currentUser = { ...currentUser, name: result.name };
     emit();
   }
   return result;
+}
+
+export type PasswordActionResult = { ok: true } | { ok: false; error: string };
+
+/** SettingsPanel's "Set a password" action for an already-logged-in legacy (pre-issue-#46)
+ *  account — the preferred claim path over the login-gate fallback (see server.ts's
+ *  POST /api/account/password-setup: the caller's own live session already proves ownership, so
+ *  no current password is needed, only the new one). */
+export async function setInitialPassword(newPassword: string): Promise<PasswordActionResult> {
+  try {
+    const res = await fetch("/api/account/password-setup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ newPassword }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      return { ok: false, error: body.error ?? `Failed (${res.status}).` };
+    }
+    // Flip the in-memory flag immediately -- no reload needed, unlike login()/logout(): this
+    // action doesn't touch progress.ts's session-scoped state at all, only whether SettingsPanel
+    // should now offer "Change password" instead of "Set a password".
+    if (currentUser) {
+      currentUser = { ...currentUser, hasPassword: true };
+      emit();
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error." };
+  }
+}
+
+/** SettingsPanel's "Change password" action — requires the current password even though a
+ *  session is already live, so a moment of unattended device access can't silently take over the
+ *  account's password. */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<PasswordActionResult> {
+  try {
+    const res = await fetch("/api/account/password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      return { ok: false, error: body.error ?? `Failed (${res.status}).` };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error." };
+  }
 }
 
 /** SettingsPanel's "Sign out": clears the server-side session, then the caller must
