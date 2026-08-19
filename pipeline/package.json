@@ -9,6 +9,7 @@
     "build:content:watch": "tsx watch src/index.ts",
     "start": "tsx src/server.ts",
     "check:freshness": "node scripts/check-content-freshness.mjs",
+    "admin:users": "node scripts/admin-users.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

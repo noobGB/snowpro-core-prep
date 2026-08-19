@@ -132,6 +132,9 @@ for accounts created before passwords did.
   password, ask whoever runs the server to reset it for you (they clear it directly in the
   database, which lets you claim a fresh one on your next login, the same way the account was
   created in the first place).
+- **Running the server**: no admin panel exists on purpose (see [CLAUDE.md](CLAUDE.md)), but
+  `pipeline/scripts/admin-users.mjs` (`npm run admin:users -- list|remove <email>|reset-all`) lists
+  or removes accounts directly against the database — useful for clearing out test accounts.
 - The [MCP server](#option-c--mcp-server-conversational-quizzing-any-mcp-host) (Claude Code/Desktop
   integration) is single-user by design: it
   always operates on the account of whoever ran it first (or a specific one via

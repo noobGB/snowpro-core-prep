@@ -277,6 +277,14 @@ operator manually clearing that one account's `password_hash` back to `NULL` (sa
 re-triggered) via direct DB access; this is documented in-product (LoginGate/SettingsPanel copy),
 not built as recovery codes.
 
+**Admin CLI, not an admin UI** (`pipeline/scripts/admin-users.mjs`, `npm run admin:users --
+list|remove <email>|reset-all`, run from `pipeline/`) — listing/removing accounts or wiping the
+database entirely. No web-based admin route exists or is planned: that would need its own auth
+story and expands attack surface for a capability only the operator (filesystem access to the host)
+will ever use — same reasoning as the password-recovery path above. `remove`/`reset-all` default to
+a dry run; `remove` needs `--yes`, `reset-all` needs both `--yes` and `--i-am-sure` (deliberately
+harder to fat-finger, since there's no undo and the script takes no backup).
+
 **Progress/persistence** (`src/lib/progress.ts`) is a `useSyncExternalStore`-backed module store,
 not React context. It tries `GET /api/progress` once on load; a 200 switches it to the container's
 HTTP backend (`PUT /api/progress`, now session-scoped — see above — backed by the mounted `/data`
