@@ -52,16 +52,21 @@ no `/api/progress` route exists (i.e., outside the container), so both paths wor
 
 ## Development workflow
 
-**Every change — including self-directed ones with no external requester — gets a GitHub issue
-before a branch.** The pattern, used consistently across this repo's history (8 issues closed in one
-session on 2026-08-18, each its own branch/PR/CI-gate/merge) and re-affirmed after one real lapse
-(the LAN multi-user feature, #37, was planned and built before #38 was filed for it — corrected
-retroactively, not repeated): file the issue first (even a same-day, self-authored one — the point is
-a paper trail that survives the session, not process for its own sake), branch off `master`
-(`fix/issue-<N>-<slug>` or `feat/issue-<N>-<slug>`), build, self-review (in-session — see the CI/CD
-section's note on why automatic per-PR Claude review was removed), push, open a PR with
+**Every feature/enhancement/bug fix — including self-directed ones with no external requester —
+gets a GitHub issue before a branch.** The pattern, used consistently across this repo's history
+(8 issues closed in one session on 2026-08-18, each its own branch/PR/CI-gate/merge) and re-affirmed
+after one real lapse (the LAN multi-user feature, #37, was planned and built before #38 was filed for
+it — corrected retroactively, not repeated): file the issue first (even a same-day, self-authored one
+— the point is a paper trail that survives the session, not process for its own sake), branch off
+`master` (`fix/issue-<N>-<slug>` or `feat/issue-<N>-<slug>`), build, self-review (in-session — see the
+CI/CD section's note on why automatic per-PR Claude review was removed), push, open a PR with
 `Closes #<N>` in the body, watch CI green (`gh pr checks --watch`), then merge. One issue/branch/PR
 per unit of work, not batched — makes each change's CI run, review, and revert surface independently.
+
+**Confirmed exception**: small edits and commits (a same-turn doc tweak, "remove this option," "fix
+this typo") don't need their own issue — still branch + PR rather than a direct commit to `master`,
+just skip the issue for these. Issue-first is for feature/enhancement/bug-fix work, not for small,
+directly-instructed edits.
 
 For a plan-mode feature big enough to warrant its own design doc, the finalized plan also gets copied
 to `C:\Users\gaura\Desktop\Claude\claude_plans\` (a workspace-wide convention, not specific to this
