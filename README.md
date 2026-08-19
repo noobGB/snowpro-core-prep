@@ -4,8 +4,9 @@
 
 A local, offline-first study app for the Snowflake **SnowPro Core (COF-C03)** certification —
 turns a folder of markdown notes into a full study tool: domain notes, practice questions, timed
-mock exams, flashcards, a day-by-day plan, and analytics. No account, no cloud service, no
-telemetry — your content and your progress both stay on your machine.
+mock exams, flashcards, a day-by-day plan, and analytics. No cloud service, no telemetry — your
+content and everyone's progress stay on your machine (or your local network — see
+[Multi-user](#multi-user-lan)).
 
 > **This is an independent, unofficial personal project — not affiliated with, endorsed by, or
 > sponsored by Snowflake Inc.** "Snowflake" and "SnowPro" are trademarks of Snowflake Inc.; they're
@@ -65,6 +66,8 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
   against the real exam's time budget.
 - **Resources** — official links plus per-domain study resources, with a standing caution against
   "exam dump" sites.
+- **Multi-user (LAN)** — anyone on the same local network can open the app and get their own
+  private progress, identified by email (no password). See [Multi-user](#multi-user-lan) below.
 - **Setup** — a checkable walkthrough for hands-on practice against a real Snowflake account
   (CLI install, key-pair auth, a least-privilege sandbox role), split into **Setup Steps** (the
   actions to actually perform, in order) and **Known Issues & Fixes** (what went wrong along the
@@ -77,9 +80,12 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
   web app's Analytics and vice versa. See [`mcp-server/README.md`](mcp-server/README.md).
 - **⌘K/Ctrl+K search** — one command palette across pages, notes, and questions.
 - **Responsive** — a sidebar on desktop, a bottom-tab nav + "More" sheet under 900px wide.
-- **Fully offline** — progress persists to a local file (via Docker) or `localStorage` (without
-  it); nothing ever leaves your machine.
-- **Settings** (gear icon, bottom of the sidebar) — three things live here:
+- **Fully offline** — progress persists to a local SQLite database (via Docker, one row per
+  logged-in person) or `localStorage` (without it); nothing ever leaves your machine or network.
+- **Settings** (gear icon, bottom of the sidebar) — four things live here:
+  - **Profile** — your display name (editable any time, doesn't affect your login — email is the
+    only real identity key) and **Sign out**, so a shared machine can hand off between people.
+  - **Appearance** — Light/Dark theme, applied instantly, remembered per person.
   - **Backup** — Export downloads your entire progress (attempts, exam date, flashcard grades,
     checklists) as one JSON file; Import loads one back. Useful for moving between browsers/
     devices, or as a safety net before clearing site data. Import replaces your current progress
@@ -87,7 +93,6 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
   - **Reset all progress** — type `RESET` into the field to enable the button, then confirm.
     Wipes every attempt, flashcard grade, and checklist back to a blank slate. **There is no
     undo** — Export first if there's any chance you'll want this data back.
-  - **Light mode** — present in the UI but not implemented yet (dark theme only for now).
 
 ![Practice runner](.github/screenshot-runner.png)
 *One question per screen, arrow-key navigation, flag-for-review, and a jump palette.*
@@ -103,6 +108,28 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
 
 ![Analytics](.github/screenshot-analytics.png)
 *Readiness weighted by real exam domain weights, plus pacing against the actual time budget.*
+
+![Login](.github/screenshot-login.png)
+*Email only — no password. Name is asked once, on your first-ever login; every login after that
+recognizes you from just the email.*
+
+## Multi-user (LAN)
+
+Anyone on the same local network as the machine running this app (find its LAN IP, e.g.
+`192.168.1.x`, and open `http://<that IP>:8080`) gets their own completely separate progress —
+attempts, flashcard grades, plan checklist, everything — keyed to their email. No password: this is
+built for a trusted network (home, study group, small office), not the public internet.
+
+- **First-ever login** for an email asks for a name too (just for greetings/the Profile section —
+  never used to identify the account). **Every login after that** only asks for the email; the app
+  already knows who you are.
+- Progress lives in one shared SQLite database on the host machine (`data/snowprep.sqlite`), one
+  row per person — nobody can read or write anyone else's data.
+- The [MCP server](#option-c--mcp-server-conversational-quizzing-any-mcp-host) (Claude Code/Desktop
+  integration) is single-user by design: it
+  always operates on the account of whoever ran it first (or a specific one via
+  `SNOWPRO_OWNER_EMAIL`), regardless of who else is logged in over the web on the LAN.
+- Change your display name or sign out any time from **Settings → Profile**.
 
 ## Start preparing in minutes
 
@@ -205,7 +232,8 @@ claude mcp add snowprep-quiz -- npx tsx mcp-server/src/index.ts   # registers it
 
 See [`mcp-server/README.md`](mcp-server/README.md) for the full tool list, Claude Desktop setup,
 and environment variables. Sessions started here appear in the web app's Analytics/Dashboard
-immediately — it shares `data/progress.json` with the container, not a separate store.
+immediately — it shares `data/snowprep.sqlite` with the container, not a separate store, always
+against one fixed "owner" account (see [Multi-user](#multi-user-lan) above).
 
 ## Keeping content fresh
 
@@ -344,16 +372,18 @@ cd app && npx tsc --noEmit           # typecheck
 - **`pipeline/`** — a Node/TypeScript content pipeline. Parses `SnowPro_Notes_and_Questions/` into
   `content.json` (+ per-domain notes JSON + a search index), validates cross-references, and fails
   loudly with a grouped error report rather than serving partial/broken content.
-- **`app/`** — a Vite + React 19 + TypeScript SPA. No backend framework — progress persistence is
-  two small HTTP routes (`pipeline/src/server.ts`) backed by a mounted volume, with an automatic
-  `localStorage` fallback when that backend isn't present.
+- **`app/`** — a Vite + React 19 + TypeScript SPA. No backend framework — identity (login/session)
+  and progress persistence are a small set of HTTP routes (`pipeline/src/server.ts`) backed by a
+  mounted SQLite database, with an automatic `localStorage` fallback when that backend isn't
+  present.
 - **`Dockerfile`** — a three-stage build (frontend, pipeline production deps, runtime) that runs
   the content pipeline at container boot, before the server binds — so a bad markdown file is
   caught at start-up, not on first page load.
 - **`mcp-server/`** — a standalone MCP server (not part of the Docker image) exposing quiz
   sessions and progress as tools for an MCP host. Imports `app/`'s and `pipeline/`'s scoring and
   content logic directly rather than reimplementing it, and reads/writes the same
-  `data/progress.json` the container does, so it's a second front door onto identical state, not a
+  `data/snowprep.sqlite` the container does (always against one fixed "owner" account, see
+  [Multi-user](#multi-user-lan) above), so it's a second front door onto identical state, not a
   parallel system.
 
 See [`CLAUDE.md`](CLAUDE.md) for the full architecture writeup (parser internals, the progress

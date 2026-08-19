@@ -212,21 +212,29 @@ nav under 900px, via `.desktop-only`/`.mobile-only` in `tokens.css`) wraps every
 `useContent()` hook every page uses) to populate its meta-count badges — those are real counts, not
 fixture data. `src/pages/NotFound.tsx` catches any unmatched route so a bad URL never renders blank.
 
-**Identity & multi-user progress.** Each person on the LAN identifies themselves by email + name,
-no password (a deliberate, confirmed choice for a trusted-LAN feature, not an oversight) — email is
-the sole identity/lookup key, `name` is display-only and freely editable in place (SettingsPanel's
-Profile section) without creating a new account. `App.tsx` calls `GET /api/me` once at boot; no
-session renders `components/LoginGate.tsx` (a "Who's studying?" card, same visual tokens as
-`SettingsPanel`) instead of the routed app. `lib/session.ts` is the client for
+**Identity & multi-user progress.** Each person on the LAN identifies themselves by email, no
+password (a deliberate, confirmed choice for a trusted-LAN feature, not an oversight) — email is
+the sole identity/lookup key. **Name is only asked once, on a genuinely new email** (issue #41 —
+originally always asked, corrected after live feedback that re-asking a returning user for a name
+the server already had was bad UX): `POST /api/session` first tries email alone; a known email logs
+in immediately (`{status:"known", name}`, using the stored name), an unknown email with no name
+yet responds `{status:"new"}` without creating an account, and `LoginGate.tsx` reveals the Name
+field in place only for that case. `name` stays display-only and freely editable in place after the
+fact (SettingsPanel's Profile section) without creating a new account. `App.tsx` calls `GET /api/me`
+once at boot; no session renders `components/LoginGate.tsx` (a "Who's studying?" card, same visual
+tokens as `SettingsPanel`) instead of the routed app. `lib/session.ts` is the client for
 `POST /api/session` / `GET /api/me` / `POST /api/logout` plus a tiny `useSessionUser()` store
 (same `useSyncExternalStore` pattern as `settingsStore.ts`) so `Dashboard.tsx`'s greeting and
 `SettingsPanel`'s Profile section can read the current user without prop-drilling through
-react-router's `<Outlet>`. **Both login and sign-out do a full `window.location.reload()`, not a
-React state transition** — deliberately, since that's what re-runs `progress.ts`'s own
-module-load-time `hydrateFromServer()` boot probe against the freshly set/cleared session cookie
-with zero changes needed to that file; see `lib/session.ts`'s own doc comments for the full
-reasoning (this was independently verified while building the feature, not just assumed from the
-plan that specified it).
+react-router's `<Outlet>`. A known-email login shows a brief "Welcome back, {name}" before
+completing — not just a nicety: on a shared, passwordless LAN device, browser autofill on the email
+field could silently select a similar-but-wrong saved address, and this is the first real feedback
+moment in the flow that would catch it. **Both login and sign-out do a full
+`window.location.reload()`, not a React state transition** — deliberately, since that's what
+re-runs `progress.ts`'s own module-load-time `hydrateFromServer()` boot probe against the freshly
+set/cleared session cookie with zero changes needed to that file; see `lib/session.ts`'s own doc
+comments for the full reasoning (this was independently verified while building the feature, not
+just assumed from the plan that specified it).
 
 **Progress/persistence** (`src/lib/progress.ts`) is a `useSyncExternalStore`-backed module store,
 not React context. It tries `GET /api/progress` once on load; a 200 switches it to the container's

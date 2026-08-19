@@ -116,14 +116,32 @@ runner is full-screen on purpose, "nothing competes with the questions."
 
 ## 5. Backend — Express, deliberately minimal
 
-**Express** — a small HTTP server framework. Most apps using Express have dozens of routes;
-`pipeline/src/server.ts` has exactly **two** application routes (`GET`/`PUT /api/progress`) plus
-static file serving and the SPA-fallback catch-all mentioned above. Express was chosen *because*
-the job is this small — anything heavier (NestJS, a full REST framework with its own conventions)
-would be solving problems this app doesn't have. Worth noticing what's *not* here: no database, no
-ORM, no auth system — progress is one JSON file, read and overwritten wholesale on every save, by
-design (see `CLAUDE.md`'s progress-adapter section for why "no partial merges" is a deliberate
-rule, not a missing feature).
+**Express** — a small HTTP server framework. `pipeline/src/server.ts` has a handful of application
+routes (`POST /api/session`, `GET /api/me`, `POST /api/logout`, `GET`/`PUT /api/progress`) plus
+static file serving and the SPA-fallback catch-all mentioned above — still small enough that
+Express was chosen *because* the job is this small, rather than reaching for something heavier
+(NestJS, a full REST framework with its own conventions) that would be solving problems this app
+doesn't have.
+
+**`better-sqlite3`** — a synchronous SQLite driver, the one real database in the stack
+(`pipeline/src/db.ts`). Added for LAN multi-user support: progress used to be a single JSON file
+(one person, no identity), and became one row per person in a `progress` table once "anyone on the
+LAN gets their own progress" became a requirement — a real database, not a folder of per-user JSON
+files, because a second process (the `mcp-server/` stdio server, see §6) also writes this same
+file directly and needs a real transactional check-then-write, not a hopeful file-lock convention.
+**Synchronous**, deliberately: this app's actual write cadence is human/LLM-paced, not
+high-throughput, so there's no async I/O benefit worth the complexity of promise-wrapping every
+query — `better-sqlite3`'s synchronous API reads like plain function calls (`db.prepare(...).run()`)
+with none of that overhead. Every write still replaces the whole `ProgressState` JSON blob in one
+column (`data TEXT`), not normalized into relational columns — see `CLAUDE.md`'s progress-adapter
+section for why "no partial merges" is a deliberate rule, not a missing feature; SQLite here is
+about per-user *rows*, not about normalizing what's *inside* each row.
+
+**No password, session-cookie auth** — `pipeline/src/db.ts`'s `sessions` table plus an HTTP-only
+cookie is the entire auth system: no bcrypt/argon2, no password reset flow, no OAuth. A deliberate
+choice for what this actually is (a trusted-LAN feature — home, study group, small office), not a
+missing feature waiting to be finished. Email is the sole identity key; a name is asked once, on a
+genuinely new email, for display purposes only.
 
 **`tsx`** — runs TypeScript files directly (`tsx src/server.ts`) without a separate "compile to
 JS first" step. Used for both the CLI (`npm run build:content`) and, notably, as the **actual
@@ -171,9 +189,10 @@ test tooling, only what's needed to run.
 your real machine to mount inside the container. This app mounts two: `SnowPro_Notes_and_Questions/`
 to `/content` (the pipeline only ever reads from here — nothing in the app writes back to it, though
 the mount itself isn't filesystem-enforced read-only), and a local `data/` folder to `/data`, where
-the server's two progress routes read/write `progress.json`. Mounting instead of copying means editing a markdown file on your real machine
-and running `docker compose restart` picks up the change — no rebuild needed, since the pipeline
-re-reads `/content` fresh at every container boot.
+the server's identity/progress routes read/write `snowprep.sqlite`. Mounting instead of copying
+means editing a markdown file on your real machine and running `docker compose restart` picks up
+the change — no rebuild needed, since the pipeline re-reads `/content` fresh at every container
+boot.
 
 ## 8. Dev tooling
 
