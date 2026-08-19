@@ -25,8 +25,11 @@ import {
   findUserByEmail,
   getProgressRow,
   migrateFlatFileProgress,
+  normalizeEmail,
   openDb,
   resolveSession,
+  setPassword,
+  setPasswordIfUnset,
   upsertUserOnLogin,
   usersCount,
   writeProgressRow,
@@ -34,6 +37,7 @@ import {
   type Db,
   type UserRow,
 } from "./db.js";
+import { hashPassword, verifyPassword, MIN_PASSWORD_LENGTH } from "./passwords.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DATA_DIR = path.resolve(process.env.SNOWPRO_DATA_DIR ?? "/data");
@@ -123,11 +127,14 @@ console.log(`✓ Identity/progress database ready (${DB_FILE})`);
 
 const app = express();
 
-// --- Identity: POST /api/session, GET /api/me, POST /api/logout. No password (explicit,
-//     confirmed design decision for a trusted-LAN feature, not an oversight) — email is the sole
-//     identity key (case/whitespace-normalized, see db.ts's normalizeEmail()), name is
-//     display-only and never used for lookups. Sessions are a random token in an HTTP-only cookie
-//     (SameSite=Lax, no Secure flag — plain HTTP on a LAN). ---
+// --- Identity: POST /api/session, GET /api/me, POST /api/logout, POST /api/account/password[-setup].
+//     Email is the sole identity/lookup key (case/whitespace-normalized, see db.ts's
+//     normalizeEmail()), name is display-only and never used for lookups. Password is required for
+//     every account as of issue #46 (a legacy pre-#46 account claims one via the
+//     "needs_password_setup" state below) — no self-service reset exists (no SMTP in this app);
+//     recovery is the operator manually clearing that one account's password_hash back to NULL.
+//     Sessions are a random token in an HTTP-only cookie (SameSite=Lax, no Secure flag — plain
+//     HTTP on a LAN). ---
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function getCookie(req: express.Request, name: string): string | undefined {
@@ -159,13 +166,60 @@ function requireSession(req: express.Request, res: express.Response, next: expre
   next();
 }
 
+function issueSessionCookie(res: express.Response, token: string): void {
+  res.cookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: SESSION_COOKIE_MAX_AGE_MS,
+  });
+}
+
+// --- Issue #46 brute-force guard: a lightweight in-memory lockout on repeated wrong-password
+//     attempts, keyed by normalized email rather than IP -- LAN clients behind the same router/
+//     NAT don't reliably differ by source IP, so an IP-keyed limiter would either lock out an
+//     entire household together or not distinguish them at all. In-memory (not persisted) is fine
+//     at this app's scale: a container restart clearing lockouts is an acceptable reset, not a
+//     security hole, for a trusted-LAN threat model. ---
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOGIN_LOCKOUT_BASE_MS = 30_000;
+const loginAttempts = new Map<string, { failures: number; lockedUntil: number }>();
+
+/** Remaining lockout in whole seconds if `email` is currently locked out, or `undefined` if a
+ *  login attempt can proceed right now. */
+function checkRateLimit(email: string): number | undefined {
+  const entry = loginAttempts.get(normalizeEmail(email));
+  if (!entry || entry.lockedUntil <= Date.now()) return undefined;
+  return Math.ceil((entry.lockedUntil - Date.now()) / 1000);
+}
+
+function recordFailedAttempt(email: string): void {
+  const key = normalizeEmail(email);
+  const entry = loginAttempts.get(key) ?? { failures: 0, lockedUntil: 0 };
+  entry.failures += 1;
+  if (entry.failures >= MAX_LOGIN_ATTEMPTS) {
+    const extraFailures = entry.failures - MAX_LOGIN_ATTEMPTS;
+    entry.lockedUntil = Date.now() + LOGIN_LOCKOUT_BASE_MS * 2 ** extraFailures;
+  }
+  loginAttempts.set(key, entry);
+}
+
+function recordSuccessfulAttempt(email: string): void {
+  loginAttempts.delete(normalizeEmail(email));
+}
+
 app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
-  const body = req.body as { email?: unknown; name?: unknown } | null;
+  const body = req.body as
+    | { email?: unknown; name?: unknown; password?: unknown; newPassword?: unknown }
+    | null;
   const email = typeof body?.email === "string" ? body.email.trim() : "";
   const rawName = typeof body?.name === "string" ? body.name.trim() : "";
   // Absent/blank name means "just log me back in" (issue #41: don't re-ask for a name the server
   // already has) — distinct from an empty string, which would otherwise mean "erase the name."
   const name = rawName.length > 0 ? rawName : undefined;
+  const password = typeof body?.password === "string" ? body.password : undefined;
+  const newPassword = typeof body?.newPassword === "string" ? body.newPassword : undefined;
+
   if (!EMAIL_RE.test(email) || email.length > 254) {
     res.status(400).json({ error: "A valid email is required." });
     return;
@@ -174,40 +228,138 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
     res.status(400).json({ error: "Name must be 100 characters or fewer." });
     return;
   }
-
-  // Look up BEFORE deciding anything: a genuinely new email with no name yet can't be logged in
-  // or created — the client needs to collect a name first (LoginGate.tsx's reveal-on-new flow) —
-  // so this responds {status: "new"} and returns without touching the database at all, rather than
-  // upsertUserOnLogin() fabricating a blank-name account or throwing.
-  const existing = findUserByEmail(db, email);
-  if (!existing && name === undefined) {
-    res.json({ status: "new" });
+  if ((password !== undefined && password.length > 200) || (newPassword !== undefined && newPassword.length > 200)) {
+    res.status(400).json({ error: "Password must be 200 characters or fewer." });
     return;
   }
 
-  // Checked BEFORE creating the account: this whole handler is synchronous (no `await` anywhere
-  // in this call chain, including every db.ts call), so nothing else can interleave between this
-  // read and upsertUserOnLogin()'s write below — Node's single-threaded event loop only picks up
-  // the next request once this handler returns. That's what makes "was the table empty right
-  // before this signup" a safe, race-free way to detect "this is the very first account ever" and
-  // gate the one-time flat-file migration on it. Still correct under the new email-only login
-  // path: this branch is unreachable when `!existing`, since that case either returned above
-  // (`name === undefined`) or has a real `name` to create with (the `else` a caller must supply).
-  const isFirstEverAccount = !existing && usersCount(db) === 0;
-  const user = upsertUserOnLogin(db, email, name);
-  if (isFirstEverAccount) {
-    const migrated = migrateFlatFileProgress(db, user.id, OLD_PROGRESS_FILE);
-    if (migrated) console.log(`✓ Migrated pre-upgrade progress.json into ${user.email}'s new account`);
+  const existing = findUserByEmail(db, email);
+
+  // Issue #41's display-name edit (SettingsPanel's inline Name field), kept working unchanged
+  // under issue #46: an already-authenticated session updating its OWN account's name never needs
+  // a password — the live session cookie already proves ownership just as well as a password
+  // would. Must be checked before every password branch below, or the existing "edit name" action
+  // would start demanding a password it was never designed to collect.
+  const sessionUser = currentUser(req);
+  if (
+    existing &&
+    name !== undefined &&
+    password === undefined &&
+    newPassword === undefined &&
+    sessionUser?.id === existing.id
+  ) {
+    const updated = upsertUserOnLogin(db, email, name);
+    res.json({ status: "known", email: updated.email, name: updated.name });
+    return;
   }
 
-  const token = createSession(db, user.id);
-  res.cookie(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_COOKIE_MAX_AGE_MS,
-  });
-  res.json({ status: "known", email: user.email, name: user.name });
+  if (!existing) {
+    // Issue #46: a brand new account needs a name AND a password together, in the same submit —
+    // there's no legacy-migration issue for an account that doesn't exist yet, so no exemption.
+    // Checked BEFORE creating the account: this whole handler is synchronous (no `await` anywhere
+    // in this call chain, including every db.ts call), so nothing else can interleave between
+    // this read and upsertUserOnLogin()'s write below — Node's single-threaded event loop only
+    // picks up the next request once this handler returns.
+    if (name === undefined || password === undefined) {
+      res.json({ status: "new" });
+      return;
+    }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
+      return;
+    }
+    const isFirstEverAccount = usersCount(db) === 0;
+    const user = upsertUserOnLogin(db, email, name, hashPassword(password));
+    if (isFirstEverAccount) {
+      const migrated = migrateFlatFileProgress(db, user.id, OLD_PROGRESS_FILE);
+      if (migrated) console.log(`✓ Migrated pre-upgrade progress.json into ${user.email}'s new account`);
+    }
+    issueSessionCookie(res, createSession(db, user.id));
+    res.json({ status: "known", email: user.email, name: user.name });
+    return;
+  }
+
+  // A legacy (pre-issue-#46) account that hasn't claimed a password yet. See db.ts's
+  // setPasswordIfUnset() for why the claim itself, not a preceding check, is the race guard —
+  // whoever's UPDATE actually commits first wins, which is the same trust level this app already
+  // had (whoever knows the email had full access), just closing the door going forward.
+  if (existing.passwordHash === null) {
+    if (newPassword === undefined) {
+      res.json({ status: "needs_password_setup" });
+      return;
+    }
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
+      return;
+    }
+    const claimed = setPasswordIfUnset(db, existing.id, hashPassword(newPassword));
+    if (!claimed) {
+      // Someone else's claim committed first (vanishingly rare, but must not be silently
+      // overridden) — this submitter must log in with whatever password just got set instead.
+      res.json({ status: "needs_password" });
+      return;
+    }
+    issueSessionCookie(res, createSession(db, existing.id));
+    res.json({ status: "known", email: existing.email, name: existing.name });
+    return;
+  }
+
+  // Normal password-required login.
+  if (password === undefined) {
+    res.json({ status: "needs_password" });
+    return;
+  }
+  const lockedForSeconds = checkRateLimit(email);
+  if (lockedForSeconds !== undefined) {
+    res.status(429).json({ error: `Too many attempts. Try again in ${lockedForSeconds}s.` });
+    return;
+  }
+  if (!verifyPassword(password, existing.passwordHash)) {
+    recordFailedAttempt(email);
+    res.status(401).json({ error: "That password doesn't match this email." });
+    return;
+  }
+  recordSuccessfulAttempt(email);
+  issueSessionCookie(res, createSession(db, existing.id));
+  res.json({ status: "known", email: existing.email, name: existing.name });
+});
+
+// --- Issue #46: account-authenticated password management. Both require a valid session (the
+//     Settings-page "Set a password" / "Change password" actions), distinct from the login-time
+//     claim flow above, which is deliberately the LESS-preferred path (see the plan/CLAUDE.md's
+//     "Identity & multi-user progress" section) since it re-opens the email-only trust window
+//     instead of relying on an already-established session. ---
+app.post("/api/account/password-setup", requireSession, express.json({ limit: "10kb" }), (req, res) => {
+  const user = (res.locals as { user: UserRow }).user;
+  if (user.passwordHash !== null) {
+    res.status(409).json({ error: "This account already has a password — use change password instead." });
+    return;
+  }
+  const body = req.body as { newPassword?: unknown } | null;
+  const newPassword = typeof body?.newPassword === "string" ? body.newPassword : "";
+  if (newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > 200) {
+    res.status(400).json({ error: `Password must be ${MIN_PASSWORD_LENGTH}-200 characters.` });
+    return;
+  }
+  setPassword(db, user.id, hashPassword(newPassword), getCookie(req, SESSION_COOKIE));
+  res.status(204).end();
+});
+
+app.post("/api/account/password", requireSession, express.json({ limit: "10kb" }), (req, res) => {
+  const user = (res.locals as { user: UserRow }).user;
+  const body = req.body as { currentPassword?: unknown; newPassword?: unknown } | null;
+  const currentPassword = typeof body?.currentPassword === "string" ? body.currentPassword : "";
+  const newPassword = typeof body?.newPassword === "string" ? body.newPassword : "";
+  if (user.passwordHash === null || !verifyPassword(currentPassword, user.passwordHash)) {
+    res.status(401).json({ error: "Current password is incorrect." });
+    return;
+  }
+  if (newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > 200) {
+    res.status(400).json({ error: `Password must be ${MIN_PASSWORD_LENGTH}-200 characters.` });
+    return;
+  }
+  setPassword(db, user.id, hashPassword(newPassword), getCookie(req, SESSION_COOKIE));
+  res.status(204).end();
 });
 
 app.get("/api/me", (req, res) => {
@@ -216,7 +368,9 @@ app.get("/api/me", (req, res) => {
     res.status(401).json({ error: "Not logged in." });
     return;
   }
-  res.json({ email: user.email, name: user.name });
+  // hasPassword (issue #46) tells SettingsPanel whether to offer "Set a password" (a legacy
+  // account still on the claim path) or "Change password" (already protected).
+  res.json({ email: user.email, name: user.name, hasPassword: user.passwordHash !== null });
 });
 
 app.post("/api/logout", (req, res) => {

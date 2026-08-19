@@ -40,8 +40,8 @@ docker compose logs      # boot order: "/data is writable" -> pipeline summary -
 docker compose down
 ```
 
-Open `http://localhost:8080` — a "Who's studying?" gate screen (email + name, no password) shows
-first; see "Identity & multi-user progress" below. `docker-compose.yml` mounts
+Open `http://localhost:8080` — a "Who's studying?" gate screen (email + password, name on first
+signup only) shows first; see "Identity & multi-user progress" below. `docker-compose.yml` mounts
 `./SnowPro_Notes_and_Questions` (the markdown source, tracked in this repo) to `/content`, and a
 local `./data/` folder to `/data` for identity + progress persistence — `data/snowprep.sqlite`, one
 row per person (gitignored — that one's genuinely personal, everyone's quiz history). Editing
@@ -222,15 +222,21 @@ nav under 900px, via `.desktop-only`/`.mobile-only` in `tokens.css`) wraps every
 `useContent()` hook every page uses) to populate its meta-count badges — those are real counts, not
 fixture data. `src/pages/NotFound.tsx` catches any unmatched route so a bad URL never renders blank.
 
-**Identity & multi-user progress.** Each person on the LAN identifies themselves by email, no
-password (a deliberate, confirmed choice for a trusted-LAN feature, not an oversight) — email is
-the sole identity/lookup key. **Name is only asked once, on a genuinely new email** (issue #41 —
-originally always asked, corrected after live feedback that re-asking a returning user for a name
-the server already had was bad UX): `POST /api/session` first tries email alone; a known email logs
-in immediately (`{status:"known", name}`, using the stored name), an unknown email with no name
-yet responds `{status:"new"}` without creating an account, and `LoginGate.tsx` reveals the Name
-field in place only for that case. `name` stays display-only and freely editable in place after the
-fact (SettingsPanel's Profile section) without creating a new account. `App.tsx` calls `GET /api/me`
+**Identity & multi-user progress.** Each person on the LAN identifies themselves by email + a
+required password (issue #46 — the app was passwordless from issue #37 through #45; without a
+password, anyone who knew another LAN user's email could log in as them and see their progress).
+Email is still the sole identity/lookup key; password never participates in lookup, only
+verification. **Name is only asked once, on a genuinely new email** (issue #41 — originally always
+asked, corrected after live feedback that re-asking a returning user for a name the server already
+had was bad UX): `POST /api/session` first tries email alone; a known email with a password already
+set responds `{status:"needs_password"}` (client reveals a Password field), an unknown email
+responds `{status:"new"}` (client reveals Name + a new-account Password field together, no account
+created yet), and a known email with no password claimed yet (a legacy pre-#46 account) responds
+`{status:"needs_password_setup"}` (see "Password login" below). `POST /api/session` never creates
+or logs in on the first, information-gathering submit; only a resubmit with the right fields for
+that state does. `name` stays display-only and freely editable in
+place after the fact (SettingsPanel's Profile section, works with no password re-entry since a live
+session already proves ownership) without creating a new account. `App.tsx` calls `GET /api/me`
 once at boot; no session renders `components/LoginGate.tsx` (a "Who's studying?" card, same visual
 tokens as `SettingsPanel`) instead of the routed app. `lib/session.ts` is the client for
 `POST /api/session` / `GET /api/me` / `POST /api/logout` plus a tiny `useSessionUser()` store
@@ -245,6 +251,31 @@ re-runs `progress.ts`'s own module-load-time `hydrateFromServer()` boot probe ag
 set/cleared session cookie with zero changes needed to that file; see `lib/session.ts`'s own doc
 comments for the full reasoning (this was independently verified while building the feature, not
 just assumed from the plan that specified it).
+
+**Password login (issue #46).** Hashed with `node:crypto`'s built-in `scrypt`
+(`pipeline/src/passwords.ts` — self-describing `scrypt$N$r$p$salt$hash` format, `timingSafeEqual`
+comparison), not argon2/bcrypt: this app's threat model is a trusted LAN with no internet exposure
+by design, not an offline GPU-cracking attacker, so a new native/WASM dependency wasn't worth it.
+`users.password_hash` is nullable and added via a `PRAGMA table_info`-guarded `ALTER TABLE` in
+`db.ts`'s `openDb()` (idempotent on every boot, matching the rest of that function). **The
+passwordless-to-password migration has no out-of-band identity proof** (no SMTP in this app) —
+whoever claims a legacy account's password first gets it, which is the *same* trust level the app
+already had (anyone who knew the email had full access), just closing the door going forward.
+`db.ts`'s `setPasswordIfUnset()` makes the atomic `UPDATE ... WHERE password_hash IS NULL` itself
+the race guard, not a preceding check. The **preferred** claim path is proactive, from an
+already-live session (one that predates this feature, since cookies are 400-day) via
+SettingsPanel's "Set a password" → `POST /api/account/password-setup` (no current password needed,
+the session already proves ownership) — the login-gate `needs_password_setup` fallback above is
+for a device with no live session, unavoidable without SMTP. Setting or changing a password
+(`setPassword()`) deletes every *other* session for that user, which matters more than usual here
+since sessions never expire on their own. A lightweight in-memory `Map`-based lockout in
+`server.ts` (keyed by email, not IP — LAN clients share a router) locks out repeated wrong-password
+guesses. Password requirements are NIST 800-63B-style (length only, `MIN_PASSWORD_LENGTH = 8`, no
+composition/rotation rules) — no breach-list check, since that defends against an internet-facing
+threat this app doesn't have. **There is no self-service password reset** — recovery is the app
+operator manually clearing that one account's `password_hash` back to `NULL` (same claim flow,
+re-triggered) via direct DB access; this is documented in-product (LoginGate/SettingsPanel copy),
+not built as recovery codes.
 
 **Progress/persistence** (`src/lib/progress.ts`) is a `useSyncExternalStore`-backed module store,
 not React context. It tries `GET /api/progress` once on load; a 200 switches it to the container's
