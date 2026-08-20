@@ -53,6 +53,15 @@ For local dev without Docker, run the pipeline and the Vite dev server directly 
 subsection's commands below) — `app/`'s dev server falls back to `localStorage` for progress when
 no `/api/progress` route exists (i.e., outside the container), so both paths work without config.
 
+**Windows convenience launcher.** [`Launch-SnowPro.ps1`](Launch-SnowPro.ps1) wraps the two `docker
+compose` commands above (start Docker Desktop if needed → `up -d` → wait for `localhost:8080` to
+respond → open the browser) — optional, documented for end users in README.md's Option A, not part
+of the app itself. It self-locates via its own file path (`$PSScriptRoot`, falling back to the
+running process's path when compiled), so it only works kept in this same folder alongside
+`docker-compose.yml`. Deliberately not committed as a compiled `.exe` — see the README section for
+the one-line `ps2exe` build command instead, so nobody has to trust an unsigned binary from git
+history.
+
 ## Development workflow
 
 **Every feature/enhancement/bug fix — including self-directed ones with no external requester —

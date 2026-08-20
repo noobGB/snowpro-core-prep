@@ -45,3 +45,7 @@ Thumbs.db
 
 # Personal marketing drafts (LinkedIn/social posts) — not app content, not for the public repo
 marketing/
+
+# Windows launcher build output (see Launch-SnowPro.ps1 / README's "Windows one-click launcher") —
+# an unsigned local build artifact, not committed; build it yourself with ps2exe.
+*.exe

@@ -24,6 +24,7 @@ to the rule it describes.
 | **Quiz runner, scoring, readiness** | `app/src/pages/Runner.tsx`, `app/src/lib/scoring.ts`, `app/src/lib/readiness.ts` | CLAUDE.md's Readiness paragraphs under `## Frontend app (app/)`; README.md's `## Features` (Practice/Mock exams/Analytics bullets) |
 | **MCP server** | `mcp-server/src/*` | `mcp-server/README.md` (all sections — it's the primary doc); CLAUDE.md `## MCP server (mcp-server/)`; TECH_STACK.md `## 6. The MCP server`; README.md `### Option C — MCP server` |
 | **Docker / Compose / deployment shape** | `Dockerfile`, `docker-compose.yml` | CLAUDE.md `## Running it`; TECH_STACK.md `## 7. Containerization`; README.md's install instructions (`### Option A`) |
+| **Windows one-click launcher** | `Launch-SnowPro.ps1` | README.md's "Windows one-click launcher" callout under `### Option A`; CLAUDE.md `## Running it` |
 | **CI/CD** (`.github/workflows/*`, Dependabot) | `.github/workflows/*.yml`, `.github/dependabot.yml` | CLAUDE.md `## CI/CD (.github/)`; TECH_STACK.md `## 9. CI/CD` |
 | **Development workflow itself** (issue-first, branch/PR/CI-gate/merge) | N/A — process, not code | CLAUDE.md `## Development workflow` |
 | **Any visible UI change** | whatever page/component changed | README.md's screenshot block (`.github/screenshot-*.png` + the `![...]` line above each) — a screenshot showing stale UI is exactly the kind of doc debt this file exists to prevent, same as stale prose |

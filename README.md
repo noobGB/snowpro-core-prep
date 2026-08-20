@@ -160,6 +160,20 @@ docker compose build
 docker compose up -d
 ```
 
+> **Windows one-click launcher (optional).** [`Launch-SnowPro.ps1`](Launch-SnowPro.ps1) wraps the
+> two commands above: it starts Docker Desktop if it isn't already running, brings the container
+> up, waits for the app to respond, then opens it in your default browser. Compile it into a
+> double-clickable `.exe` once:
+> ```powershell
+> Install-PackageProvider NuGet -Scope CurrentUser -Force   # one-time, no admin needed
+> Install-Module ps2exe -Scope CurrentUser -Force -AllowClobber
+> Invoke-ps2exe -inputFile ".\Launch-SnowPro.ps1" -outputFile ".\SnowPro Study App.exe" -title "SnowPro Study App" -noConsole:$false
+> ```
+> Keep the resulting `.exe` in this same folder (it locates the project by its own file path), then
+> double-click it — or right-click → **Send to → Desktop (create shortcut)** — any time you want to
+> open the app. It's unsigned, so Windows SmartScreen may warn on first run; that's expected for a
+> personal-project executable you built yourself — click **More info → Run anyway**.
+
 Open **http://localhost:8080** and:
 
 1. **Dashboard's Exam card** → set your real exam date in the date field. The countdown and the
