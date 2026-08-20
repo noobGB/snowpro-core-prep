@@ -42,3 +42,6 @@ Thumbs.db
 # Local env overrides
 .env
 .env.local
+
+# Personal marketing drafts (LinkedIn/social posts) — not app content, not for the public repo
+marketing/
