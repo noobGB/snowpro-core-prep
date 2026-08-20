@@ -394,6 +394,8 @@ cd app && npx tsc --noEmit           # typecheck
 
 ## Architecture
 
+![SnowPro Study Platform architecture — animated system diagram](docs/architecture-flow.gif)
+
 - **`pipeline/`** — a Node/TypeScript content pipeline. Parses `SnowPro_Notes_and_Questions/` into
   `content.json` (+ per-domain notes JSON + a search index), validates cross-references, and fails
   loudly with a grouped error report rather than serving partial/broken content.
@@ -410,6 +412,11 @@ cd app && npx tsc --noEmit           # typecheck
   `data/snowprep.sqlite` the container does (always against one fixed "owner" account, see
   [Multi-user](#multi-user-lan) above), so it's a second front door onto identical state, not a
   parallel system.
+
+Open [`docs/architecture.drawio`](docs/architecture.drawio) in [draw.io](https://app.diagrams.net/)
+to edit the diagram, or see the static [`docs/architecture.drawio.png`](docs/architecture.drawio.png)
+/ flowing [`docs/architecture-flow.svg`](docs/architecture-flow.svg) if your viewer doesn't animate
+GIFs.
 
 See [`CLAUDE.md`](CLAUDE.md) for the full architecture writeup (parser internals, the progress
 storage adapter, known gotchas) — written for AI coding agents working in this repo, but equally

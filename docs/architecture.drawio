@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="26.0.0">
+  <diagram name="System Architecture">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="2" value="SnowPro Study Platform — System Architecture" style="text;html=1;fontSize=20;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="200" y="20" width="1180" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Browser -->
+        <mxCell id="3" value="Browser&#xa;React 19 SPA (react-router-dom)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="560" y="120" width="220" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Docker container boundary -->
+        <mxCell id="4" value="Docker Container — single image (3-stage build) • serves :8080" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;dashed=1;verticalAlign=top;fontStyle=1;fontSize=13;html=1;" vertex="1" parent="1">
+          <mxGeometry x="200" y="260" width="880" height="320" as="geometry" />
+        </mxCell>
+
+        <mxCell id="5" value="Express Server&#xa;pipeline/src/server.ts&#xa;&#xa;static frontend + SPA fallback&#xa;/api/session · /api/me · /api/logout&#xa;/api/progress (GET/PUT, ETag)&#xa;/api/account/password-setup" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=center;verticalAlign=middle;" vertex="1" parent="4">
+          <mxGeometry x="60" y="60" width="320" height="200" as="geometry" />
+        </mxCell>
+
+        <mxCell id="6" value="Content Pipeline&#xa;runPipeline() at boot&#xa;&#xa;markdown → content.json&#xa;+ notes/*.json + search-index.json&#xa;(regenerated every boot, ephemeral)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=center;verticalAlign=middle;" vertex="1" parent="4">
+          <mxGeometry x="500" y="60" width="320" height="200" as="geometry" />
+        </mxCell>
+
+        <!-- Internal edge: pipeline output feeds the server -->
+        <mxCell id="7" value="content.json / notes / search-index" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#d79b00;dashed=1;" edge="1" parent="4" source="6" target="5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Browser -> Express -->
+        <mxCell id="8" value="HTTP :8080" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#6c8ebf;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="3" target="5">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" y="-25" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- SQLite icon + caption -->
+        <mxCell id="9" value="" style="shape=image;html=1;imageAspect=0;aspect=fixed;verticalLabelPosition=bottom;verticalAlign=top;image=https://cdn.simpleicons.org/sqlite" vertex="1" parent="1">
+          <mxGeometry x="380" y="640" width="60" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="10" value="data/snowprep.sqlite&#xa;bind-mounted • one row per user&#xa;ETag/If-Match on writes" style="text;html=1;fontSize=11;align=left;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="460" y="655" width="210" height="45" as="geometry" />
+        </mxCell>
+
+        <!-- Markdown source -->
+        <mxCell id="11" value="SnowPro_Notes_and_Questions/&#xa;host folder (git-tracked)&#xa;markdown source" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="780" y="640" width="260" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- markdown -> content pipeline (bind mount, read) -->
+        <mxCell id="12" value="bind mount&#xa;/content (read)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#82b366;" edge="1" parent="1" source="11" target="6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- express <-> sqlite (bind mount, read/write) -->
+        <mxCell id="13" value="bind mount ↔ /data&#xa;read/write (better-sqlite3)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#82b366;startArrow=none;endArrow=block;startFill=0;endFill=1;" edge="1" parent="1" source="5" target="9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- MCP Host -->
+        <mxCell id="14" value="MCP Host&#xa;Claude Desktop / Claude Code /&#xa;voice agent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="320" width="220" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- mcp-server -->
+        <mxCell id="15" value="mcp-server/&#xa;stdio JSON-RPC server&#xa;(separate process, not in Docker)&#xa;fixed &quot;owner&quot; account only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="640" width="220" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- MCP Host <-> mcp-server -->
+        <mxCell id="16" value="stdio&#xa;(JSON-RPC)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#9673a6;" edge="1" parent="1" source="14" target="15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- mcp-server -> sqlite (direct file write, bypasses HTTP) -->
+        <mxCell id="17" value="direct file R/W (same bind-mounted file)&#xa;bypasses HTTP — ETag-equivalent guard&#xa;vs. the Express writer" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;fontSize=10;fontColor=#9673a6;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#9673a6;dashed=1;" edge="1" parent="1" source="15" target="9">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1270" y="780" />
+              <mxPoint x="410" y="780" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="18" value="Legend" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;verticalAlign=top;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="200" y="860" width="230" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="19" value="" style="rounded=0;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="18">
+          <mxGeometry x="10" y="30" width="30" height="16" as="geometry" />
+        </mxCell>
+        <mxCell id="20" value="Client" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="18">
+          <mxGeometry x="50" y="28" width="160" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="21" value="" style="rounded=0;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="18">
+          <mxGeometry x="10" y="54" width="30" height="16" as="geometry" />
+        </mxCell>
+        <mxCell id="22" value="Server process (in container)" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="18">
+          <mxGeometry x="50" y="52" width="170" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="23" value="" style="rounded=0;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="18">
+          <mxGeometry x="10" y="78" width="30" height="16" as="geometry" />
+        </mxCell>
+        <mxCell id="24" value="Data / host volume" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="18">
+          <mxGeometry x="50" y="76" width="160" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="25" value="" style="rounded=0;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="18">
+          <mxGeometry x="10" y="102" width="30" height="16" as="geometry" />
+        </mxCell>
+        <mxCell id="26" value="MCP integration" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;" vertex="1" parent="18">
+          <mxGeometry x="50" y="100" width="160" height="20" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
