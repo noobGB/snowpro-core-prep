@@ -132,9 +132,14 @@ for accounts created before passwords did.
   set up (`SNOWPRO_SMTP_*`, see `.env.example`), you'll get a reset link valid for 1 hour. If the
   operator hasn't configured email, they can still clear your password directly in the database as
   a fallback (the same way the account was created in the first place).
-- **Running the server**: no admin panel exists on purpose (see [CLAUDE.md](CLAUDE.md)), but
-  `pipeline/scripts/admin-users.mjs` (`npm run admin:users -- list|remove <email>|reset-all`) lists
-  or removes accounts directly against the database — useful for clearing out test accounts.
+- **Admin**: the first-ever account on a fresh install becomes an admin automatically and gets an
+  extra **Admin** page (Sidebar) listing every user — add a new one (they're emailed a temporary
+  password and set their own on first login), remove one, or promote/demote between admin and
+  regular user. There's always at least one admin; the last one can't be removed or demoted.
+- **Operator CLI**: `pipeline/scripts/admin-users.mjs` (`npm run admin:users --
+  list|remove <email>|promote <email>|demote <email>|reset-all`) works directly against the
+  database via filesystem access, no login needed — the fallback if the only admin account is ever
+  unreachable.
 - The [MCP server](#option-c--mcp-server-conversational-quizzing-any-mcp-host) (Claude Code/Desktop
   integration) is single-user by design: it
   always operates on the account of whoever ran it first (or a specific one via

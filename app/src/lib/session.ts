@@ -34,6 +34,10 @@ export interface SessionUser {
    *  SettingsPanel uses this to decide between offering "Set a password" (this account, via
    *  `setInitialPassword()`) or "Change password" (`changePassword()`). */
   hasPassword: boolean;
+  /** Issue #62: `"admin"` unlocks the `/admin` page — `Sidebar.tsx` only shows that nav link when
+   *  this is `"admin"`. Purely a UX convenience; the real enforcement is server-side
+   *  (`requireAdmin` in `pipeline/src/server.ts`). */
+  role: "user" | "admin";
 }
 
 let currentUser: SessionUser | null = null;
@@ -80,15 +84,21 @@ export type LoginResult =
   | { ok: true; status: "new" }
   | { ok: true; status: "needs_password_setup" }
   | { ok: true; status: "needs_password" }
+  | { ok: true; status: "must_change_password" }
   | { ok: false; error: string };
 
 export interface LoginOptions {
   /** New-account display name — sent together with `password` on a genuinely new email. */
   name?: string;
   /** Password for a normal login against an account that already has one, OR (sent alongside
-   *  `name`) the password for a brand-new account being created right now. */
+   *  `name`) the password for a brand-new account being created right now, OR (issue #62, sent
+   *  alongside `newPassword`) the TEMPORARY password being verified for an admin-provisioned
+   *  account completing its forced first-login change. */
   password?: string;
-  /** The password being claimed for a legacy (pre-issue-#46) account that has none set yet. */
+  /** The password being claimed for a legacy (pre-issue-#46) account that has none set yet, OR
+   *  (issue #62, sent alongside `password` as the temp password) the real password replacing an
+   *  admin-provisioned account's temporary one. Same wire field, reused for both flows — both are
+   *  "here is the new password," the only difference is what (if anything) had to be proven first. */
   newPassword?: string;
 }
 
@@ -129,7 +139,7 @@ export async function login(email: string, opts: LoginOptions = {}): Promise<Log
       return { ok: false, error: body.error ?? `Login failed (${res.status}).` };
     }
     const data = (await res.json()) as {
-      status: "known" | "new" | "needs_password_setup" | "needs_password";
+      status: "known" | "new" | "needs_password_setup" | "needs_password" | "must_change_password";
       name?: string;
     };
     if (data.status === "known") return { ok: true, status: "known", name: data.name! };

@@ -8,6 +8,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { applyTheme } from "./lib/theme";
 import { useProgress } from "./lib/progress";
 import { fetchMe } from "./lib/session";
+import { Admin } from "./pages/Admin";
 import { Analytics } from "./pages/Analytics";
 import { Dashboard } from "./pages/Dashboard";
 import { Flashcards } from "./pages/Flashcards";
@@ -88,6 +89,7 @@ export default function App() {
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/resources" element={<Resources />} />
           <Route path="/setup" element={<Setup />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

@@ -1,18 +1,26 @@
 #!/usr/bin/env node
 /**
- * Operator-only CLI for the multi-user identity database (issue #37/#46) -- there is no admin UI
- * in the app itself, deliberately: a web-based admin surface would need its own auth story and
- * meaningfully expands this app's attack surface for a capability only the operator (whoever has
- * filesystem access to the host machine) will ever use. This script instead runs directly against
- * `data/snowprep.sqlite`, the same trust model the password-recovery design already leans on
- * (CLAUDE.md's "Identity & multi-user progress" section: recovery is the operator clearing
- * `password_hash` via direct DB access).
+ * Operator-only CLI for the multi-user identity database (issue #37/#46/#62). This script runs
+ * directly against `data/snowprep.sqlite`, the same trust model the password-recovery design
+ * already leans on (CLAUDE.md's "Identity & multi-user progress" section: recovery is the operator
+ * clearing `password_hash` via direct DB access).
+ *
+ * Issue #62 added a real web-based admin UI (`/admin`, `requireAdmin`-gated) for day-to-day user
+ * management -- listing/adding/removing accounts and changing roles no longer needs filesystem
+ * access. This script remains as the operator-level escape hatch below that: it works even with no
+ * live session and no admin account at all (e.g. recovering from a database where the earliest
+ * account -- the one `db.ts`'s migration auto-promotes -- was since deleted), the same reasoning
+ * that already justified `remove`/`reset-all` existing here instead of only in the web app.
  *
  * Usage (run from `pipeline/`):
  *   npm run admin:users -- list
  *   npm run admin:users -- remove <email>              # dry run: shows what WOULD be deleted
  *   npm run admin:users -- remove <email> --yes         # actually deletes that account + their
  *                                                        # sessions + their progress row
+ *   npm run admin:users -- promote <email>              # makes <email> an admin
+ *   npm run admin:users -- demote <email>               # dry run: shows the demotion (blocked if
+ *                                                        # <email> is the last admin)
+ *   npm run admin:users -- demote <email> --yes         # actually demotes <email> to a regular user
  *   npm run admin:users -- reset-all                    # dry run: shows the full user count
  *   npm run admin:users -- reset-all --yes --i-am-sure  # actually deletes EVERY user/session/
  *                                                        # progress row -- both flags required,
@@ -42,8 +50,9 @@ function openDb() {
 function listUsers(db) {
   const users = db
     .prepare(
-      `SELECT users.id, users.email, users.name, users.created_at AS createdAt,
+      `SELECT users.id, users.email, users.name, users.created_at AS createdAt, users.role,
               users.password_hash IS NOT NULL AS hasPassword,
+              users.must_change_password AS mustChangePassword,
               (SELECT COUNT(*) FROM sessions WHERE sessions.user_id = users.id) AS sessionCount,
               progress.updated_at AS progressUpdatedAt
        FROM users LEFT JOIN progress ON progress.user_id = users.id
@@ -58,8 +67,8 @@ function listUsers(db) {
   console.log(`${users.length} user(s):\n`);
   for (const u of users) {
     console.log(
-      `#${u.id}  ${u.email}  "${u.name}"  ` +
-        `${u.hasPassword ? "password set" : "NO PASSWORD (legacy, unclaimed)"}  ` +
+      `#${u.id}  ${u.email}  "${u.name}"  [${u.role}]  ` +
+        `${!u.hasPassword ? "NO PASSWORD (legacy, unclaimed)" : u.mustChangePassword ? "temp password (pending first login)" : "password set"}  ` +
         `${u.sessionCount} active session(s)  ` +
         `progress: ${u.progressUpdatedAt ?? "none yet"}  ` +
         `created: ${u.createdAt}`,
@@ -67,11 +76,56 @@ function listUsers(db) {
   }
 }
 
-function removeUser(db, email, actuallyDelete) {
+function findUserByEmail(db, email) {
   const normalized = email.trim().toLowerCase();
-  const user = db.prepare("SELECT id, email, name FROM users WHERE email = ?").get(normalized);
+  return db.prepare("SELECT id, email, name, role FROM users WHERE email = ?").get(normalized);
+}
+
+function countAdmins(db) {
+  return db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get().n;
+}
+
+function promoteUser(db, email) {
+  const user = findUserByEmail(db, email);
   if (!user) {
-    console.error(`No account found for "${normalized}".`);
+    console.error(`No account found for "${email.trim().toLowerCase()}".`);
+    process.exit(1);
+  }
+  if (user.role === "admin") {
+    console.log(`#${user.id} (${user.email}) is already an admin.`);
+    return;
+  }
+  db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(user.id);
+  console.log(`#${user.id} (${user.email}) is now an admin.`);
+}
+
+function demoteUser(db, email, actuallyDemote) {
+  const user = findUserByEmail(db, email);
+  if (!user) {
+    console.error(`No account found for "${email.trim().toLowerCase()}".`);
+    process.exit(1);
+  }
+  if (user.role !== "admin") {
+    console.log(`#${user.id} (${user.email}) is already a regular user.`);
+    return;
+  }
+  if (countAdmins(db) <= 1) {
+    console.error(`Refusing: #${user.id} (${user.email}) is the last remaining admin.`);
+    process.exit(1);
+  }
+  if (!actuallyDemote) {
+    console.log(`DRY RUN -- would demote #${user.id} (${user.email}) to a regular user.`);
+    console.log("Re-run with --yes to actually demote.");
+    return;
+  }
+  db.prepare("UPDATE users SET role = 'user' WHERE id = ?").run(user.id);
+  console.log(`#${user.id} (${user.email}) is now a regular user.`);
+}
+
+function removeUser(db, email, actuallyDelete) {
+  const user = findUserByEmail(db, email);
+  if (!user) {
+    console.error(`No account found for "${email.trim().toLowerCase()}".`);
     process.exit(1);
   }
   const sessionCount = db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?").get(user.id).n;
@@ -122,6 +176,8 @@ function usage() {
     "Usage:\n" +
       "  npm run admin:users -- list\n" +
       "  npm run admin:users -- remove <email> [--yes]\n" +
+      "  npm run admin:users -- promote <email>\n" +
+      "  npm run admin:users -- demote <email> [--yes]\n" +
       "  npm run admin:users -- reset-all [--yes --i-am-sure]",
   );
 }
@@ -143,6 +199,24 @@ try {
         process.exit(1);
       }
       removeUser(db, email, flags.has("--yes"));
+      break;
+    }
+    case "promote": {
+      const email = positional[0];
+      if (!email) {
+        console.error("Usage: npm run admin:users -- promote <email>");
+        process.exit(1);
+      }
+      promoteUser(db, email);
+      break;
+    }
+    case "demote": {
+      const email = positional[0];
+      if (!email) {
+        console.error("Usage: npm run admin:users -- demote <email> [--yes]");
+        process.exit(1);
+      }
+      demoteUser(db, email, flags.has("--yes"));
       break;
     }
     case "reset-all":

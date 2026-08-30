@@ -12,15 +12,21 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import Database from "better-sqlite3";
 import {
+  completeMustChangePassword,
   completePasswordReset,
+  countAdmins,
   createPasswordResetToken,
   createSession,
+  createUserByAdmin,
   deleteSession,
+  deleteUser,
   findFirstUser,
   findUserByEmail,
   findUserById,
   getProgressRow,
+  listAllUsers,
   migrateFlatFileProgress,
   normalizeEmail,
   openDb,
@@ -28,6 +34,7 @@ import {
   resolveSession,
   setPassword,
   setPasswordIfUnset,
+  setUserRole,
   upsertUserOnLogin,
   usersCount,
   writeProgressRow,
@@ -483,5 +490,195 @@ describe("createPasswordResetToken / completePasswordReset", () => {
 
     expect(findUserById(db, bob.id)?.passwordHash).toBe("scrypt$16384$8$1$b$hash");
     expect(resolveSession(db, bobToken)).toMatchObject({ id: bob.id });
+  });
+
+  it("also clears must_change_password, same as setPassword()/setPasswordIfUnset()", () => {
+    const admin = createUserByAdmin(db, "alice@example.com", "Alice", "scrypt$16384$8$1$temp$hash")!;
+    const token = createPasswordResetToken(db, admin.id, 60 * 60 * 1000);
+    completePasswordReset(db, token, "scrypt$16384$8$1$new$hash");
+    expect(findUserById(db, admin.id)?.mustChangePassword).toBe(false);
+  });
+});
+
+// Issue #62: admin user management.
+describe("role bootstrap", () => {
+  it("the very first account ever created on a fresh database becomes admin when the caller says so", () => {
+    // Mirrors server.ts's POST /api/session: the caller (not upsertUserOnLogin itself) decides
+    // "admin" based on usersCount(db) === 0 BEFORE creating the account.
+    const user = upsertUserOnLogin(db, "first@example.com", "First", "scrypt$16384$8$1$a$hash", "admin");
+    expect(user.role).toBe("admin");
+  });
+
+  it("upsertUserOnLogin defaults new accounts to role \"user\" when no role is passed", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice", "scrypt$16384$8$1$a$hash");
+    expect(user.role).toBe("user");
+  });
+
+  it("re-opening a database that predates the role column promotes the earliest existing account", () => {
+    // The shared `db`/`dbFile` from beforeEach already went through openDb() once, which already
+    // added `role` -- inserting raw rows into THAT file wouldn't exercise the migration at all
+    // (addRoleColumnIfMissing() would see the column already exists and skip straight past the
+    // promotion logic). To genuinely simulate a pre-#62 database, build a SEPARATE raw file with
+    // the post-#59/pre-#62 schema (has password_hash, no role/must_change_password) by hand, using
+    // better-sqlite3 directly, and only THEN call db.ts's real openDb() on it for the first time.
+    const legacyDbFile = path.join(tmpDir, "legacy.sqlite");
+    const legacyDb = new Database(legacyDbFile);
+    legacyDb.exec(`
+      CREATE TABLE users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        password_hash TEXT
+      );
+      CREATE TABLE sessions (
+        token TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE progress (
+        user_id INTEGER PRIMARY KEY REFERENCES users(id),
+        data TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    legacyDb
+      .prepare("INSERT INTO users (email, name, created_at, password_hash) VALUES (?, ?, ?, ?)")
+      .run("earliest@example.com", "Earliest", new Date().toISOString(), "scrypt$16384$8$1$a$hash");
+    legacyDb
+      .prepare("INSERT INTO users (email, name, created_at, password_hash) VALUES (?, ?, ?, ?)")
+      .run("later@example.com", "Later", new Date().toISOString(), "scrypt$16384$8$1$b$hash");
+    legacyDb.close();
+
+    const migratedDb = openDb(legacyDbFile); // the real migration path -- first time this file sees openDb()
+    try {
+      expect(findUserByEmail(migratedDb, "earliest@example.com")?.role).toBe("admin");
+      expect(findUserByEmail(migratedDb, "later@example.com")?.role).toBe("user");
+    } finally {
+      migratedDb.close();
+    }
+  });
+
+  it("does NOT re-promote the earliest account if an admin already exists (idempotent across restarts)", () => {
+    const earliest = upsertUserOnLogin(db, "earliest@example.com", "Earliest", "scrypt$16384$8$1$a$hash");
+    upsertUserOnLogin(db, "later@example.com", "Later", "scrypt$16384$8$1$b$hash", "admin");
+    setUserRole(db, earliest.id, "user"); // demoted deliberately
+
+    db.close();
+    db = openDb(dbFile); // re-running the (already-applied) migration must be a no-op
+
+    expect(findUserByEmail(db, "earliest@example.com")?.role).toBe("user");
+    expect(findUserByEmail(db, "later@example.com")?.role).toBe("admin");
+  });
+});
+
+describe("listAllUsers", () => {
+  it("returns every user with role/hasPassword/mustChangePassword/sessionCount", () => {
+    const admin = upsertUserOnLogin(db, "admin@example.com", "Admin", "scrypt$16384$8$1$a$hash", "admin");
+    createSession(db, admin.id);
+    createUserByAdmin(db, "temp@example.com", "Temp", "scrypt$16384$8$1$t$hash");
+
+    const rows = listAllUsers(db);
+    expect(rows).toHaveLength(2);
+
+    const adminRow = rows.find((r) => r.email === "admin@example.com")!;
+    expect(adminRow).toMatchObject({ role: "admin", hasPassword: true, mustChangePassword: false, sessionCount: 1 });
+
+    const tempRow = rows.find((r) => r.email === "temp@example.com")!;
+    expect(tempRow).toMatchObject({ role: "user", hasPassword: true, mustChangePassword: true, sessionCount: 0 });
+  });
+
+  it("returns an empty array when no users exist", () => {
+    expect(listAllUsers(db)).toEqual([]);
+  });
+});
+
+describe("createUserByAdmin", () => {
+  it("creates a user with role \"user\" and mustChangePassword true", () => {
+    const user = createUserByAdmin(db, "new@example.com", "New Person", "scrypt$16384$8$1$t$hash");
+    expect(user).toMatchObject({ email: "new@example.com", name: "New Person", role: "user", mustChangePassword: true });
+    expect(findUserByEmail(db, "new@example.com")).toMatchObject({ role: "user", mustChangePassword: true });
+  });
+
+  it("returns null (does not overwrite) when the email already has an account", () => {
+    upsertUserOnLogin(db, "existing@example.com", "Existing", "scrypt$16384$8$1$orig$hash");
+    const result = createUserByAdmin(db, "Existing@Example.com", "Someone Else", "scrypt$16384$8$1$new$hash");
+    expect(result).toBeNull();
+    expect(findUserByEmail(db, "existing@example.com")).toMatchObject({ name: "Existing", passwordHash: "scrypt$16384$8$1$orig$hash" });
+  });
+});
+
+describe("deleteUser", () => {
+  it("deletes the user, their sessions, and their progress row", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+    const token = createSession(db, user.id);
+    writeProgressRow(db, user.id, "{}", "0");
+
+    deleteUser(db, user.id);
+
+    expect(findUserById(db, user.id)).toBeUndefined();
+    expect(resolveSession(db, token)).toBeUndefined();
+    expect(getProgressRow(db, user.id)).toBeUndefined();
+  });
+
+  it("never touches another user's account", () => {
+    const alice = upsertUserOnLogin(db, "alice@example.com", "Alice");
+    const bob = upsertUserOnLogin(db, "bob@example.com", "Bob");
+    deleteUser(db, alice.id);
+    expect(findUserById(db, bob.id)).toMatchObject({ email: "bob@example.com" });
+  });
+});
+
+describe("setUserRole / countAdmins", () => {
+  it("changes a user's role", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+    setUserRole(db, user.id, "admin");
+    expect(findUserById(db, user.id)?.role).toBe("admin");
+    setUserRole(db, user.id, "user");
+    expect(findUserById(db, user.id)?.role).toBe("user");
+  });
+
+  it("countAdmins counts only role=admin rows", () => {
+    upsertUserOnLogin(db, "a@example.com", "A", "scrypt$16384$8$1$a$hash", "admin");
+    upsertUserOnLogin(db, "b@example.com", "B", "scrypt$16384$8$1$b$hash", "admin");
+    upsertUserOnLogin(db, "c@example.com", "C", "scrypt$16384$8$1$c$hash");
+    expect(countAdmins(db)).toBe(2);
+  });
+});
+
+describe("completeMustChangePassword", () => {
+  it("succeeds for a pending account and clears the flag", () => {
+    const user = createUserByAdmin(db, "alice@example.com", "Alice", "scrypt$16384$8$1$temp$hash")!;
+    const succeeded = completeMustChangePassword(db, user.id, "scrypt$16384$8$1$new$hash");
+    expect(succeeded).toBe(true);
+    expect(findUserById(db, user.id)).toMatchObject({ passwordHash: "scrypt$16384$8$1$new$hash", mustChangePassword: false });
+  });
+
+  it("fails for an account that was never pending (the guard is the WHERE clause, not a preceding check)", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice", "scrypt$16384$8$1$a$hash");
+    const succeeded = completeMustChangePassword(db, user.id, "scrypt$16384$8$1$new$hash");
+    expect(succeeded).toBe(false);
+    expect(findUserById(db, user.id)?.passwordHash).toBe("scrypt$16384$8$1$a$hash"); // unchanged
+  });
+
+  it("can't be replayed -- a second call against the same already-completed account fails", () => {
+    const user = createUserByAdmin(db, "alice@example.com", "Alice", "scrypt$16384$8$1$temp$hash")!;
+    expect(completeMustChangePassword(db, user.id, "scrypt$16384$8$1$first$hash")).toBe(true);
+    expect(completeMustChangePassword(db, user.id, "scrypt$16384$8$1$second$hash")).toBe(false);
+    expect(findUserById(db, user.id)?.passwordHash).toBe("scrypt$16384$8$1$first$hash");
+  });
+});
+
+describe("setPassword / setPasswordIfUnset also clear must_change_password", () => {
+  it("setPassword clears it", () => {
+    const user = createUserByAdmin(db, "alice@example.com", "Alice", "scrypt$16384$8$1$temp$hash")!;
+    setPassword(db, user.id, "scrypt$16384$8$1$new$hash");
+    expect(findUserById(db, user.id)?.mustChangePassword).toBe(false);
+  });
+
+  it("setPasswordIfUnset clears it (defensive -- the two flags shouldn't normally coexist, but must never conflict if they do)", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice"); // passwordHash null, legacy claim path
+    setPasswordIfUnset(db, user.id, "scrypt$16384$8$1$claimed$hash");
+    expect(findUserById(db, user.id)?.mustChangePassword).toBe(false);
   });
 });

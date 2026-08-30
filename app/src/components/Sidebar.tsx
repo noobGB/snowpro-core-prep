@@ -16,6 +16,7 @@ import { useContent } from "../lib/useContent";
 import { closePalette, openPalette } from "../lib/paletteStore";
 import { closeSettings, openSettings } from "../lib/settingsStore";
 import { modKeyLabel } from "../lib/platform";
+import { useSessionUser } from "../lib/session";
 
 interface NavItem {
   label: string;
@@ -25,6 +26,7 @@ interface NavItem {
 
 export function Sidebar() {
   const { content } = useContent();
+  const sessionUser = useSessionUser();
 
   const domainAuthoredCount =
     content?.questions.filter((q) => /Practice_Questions/i.test(q.sourceFile)).length ?? null;
@@ -41,6 +43,10 @@ export function Sidebar() {
     { label: "Resources", to: "/resources", meta: "" },
     { label: "Setup", to: "/setup", meta: "" },
   ];
+  // Issue #62: only shown once the session store actually knows this account is an admin — real
+  // enforcement is server-side (requireAdmin), this is purely about not showing a link that would
+  // just 403 for everyone else.
+  if (sessionUser?.role === "admin") items.push({ label: "Admin", to: "/admin", meta: "" });
 
   return (
     <aside

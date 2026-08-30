@@ -123,3 +123,35 @@ describe("sendPasswordResetEmail", () => {
     expect(createTransportMock).toHaveBeenCalledWith(expect.objectContaining({ secure: true }));
   });
 });
+
+// Issue #62: admin-provisioned accounts.
+describe("sendAdminCreatedAccountEmail", () => {
+  it("throws a clear error when SMTP isn't configured, without ever calling nodemailer", async () => {
+    const { sendAdminCreatedAccountEmail } = await importMailer();
+    await expect(sendAdminCreatedAccountEmail("alice@example.com", "Alice", "tempPass123")).rejects.toThrow(
+      /not configured/i,
+    );
+    expect(createTransportMock).not.toHaveBeenCalled();
+  });
+
+  it("sends the temp password (not a link) in both the text and HTML bodies", async () => {
+    process.env.SNOWPRO_SMTP_HOST = "smtp-relay.brevo.com";
+    process.env.SNOWPRO_SMTP_USER = "user@example.com";
+    process.env.SNOWPRO_SMTP_PASS = "generated-key";
+    process.env.SNOWPRO_SMTP_FROM = "noreply@example.com";
+    const { sendAdminCreatedAccountEmail } = await importMailer();
+
+    await sendAdminCreatedAccountEmail("alice@example.com", "Alice", "correct-horse-battery-9x2");
+
+    expect(sendMailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: "noreply@example.com",
+        to: "alice@example.com",
+        text: expect.stringContaining("correct-horse-battery-9x2"),
+        html: expect.stringContaining("correct-horse-battery-9x2"),
+      }),
+    );
+    // Also greets the recipient by name, unlike the reset email (which has no name to greet with).
+    expect(sendMailMock).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining("Alice") }));
+  });
+});

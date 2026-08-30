@@ -22,6 +22,8 @@ import { randomBytes } from "node:crypto";
 
 export type Db = InstanceType<typeof Database>;
 
+export type UserRole = "user" | "admin";
+
 export interface UserRow {
   id: number;
   email: string;
@@ -31,6 +33,16 @@ export interface UserRow {
    *  see `setPasswordIfUnset()`/`setPassword()` and server.ts's three-state `POST /api/session`
    *  flow. Never populated by `upsertUserOnLogin()` except at account-creation time. */
   passwordHash: string | null;
+  /** Issue #62: "admin" unlocks the `/admin` page and `/api/admin/*` routes (`requireAdmin`
+   *  middleware in server.ts). Defaults to "user"; see `addRoleColumnIfMissing()` for how the
+   *  very first account (fresh OR pre-existing database) ends up "admin". */
+  role: UserRole;
+  /** Issue #62: `true` for an admin-provisioned account that hasn't set its own password yet --
+   *  the account has a real (temporary) `passwordHash` already, unlike the legacy `null` case
+   *  above, but `POST /api/session` still forces a change before issuing a session. Cleared by
+   *  `completeMustChangePassword()`, and also by `setPassword()`/`setPasswordIfUnset()`/
+   *  `completePasswordReset()` — any path that sets a real password satisfies this. */
+  mustChangePassword: boolean;
 }
 
 export interface ProgressRow {
@@ -117,6 +129,8 @@ export function openDb(filePath: string): Db {
     );
   `);
   addPasswordHashColumnIfMissing(db);
+  addRoleColumnIfMissing(db);
+  addMustChangePasswordColumnIfMissing(db);
   return db;
 }
 
@@ -133,6 +147,29 @@ function addPasswordHashColumnIfMissing(db: Db): void {
   db.exec("ALTER TABLE users ADD COLUMN password_hash TEXT");
 }
 
+/** Issue #62: adds `users.role` (`TEXT NOT NULL DEFAULT 'user'`) the same idempotent
+ *  `PRAGMA table_info`-guarded way as `addPasswordHashColumnIfMissing()` above — plus, in that
+ *  same one-time pass, bootstraps an admin for a database that predates this column entirely: if
+ *  no row is already `'admin'` and at least one user exists, the lowest-`id` (earliest-created,
+ *  same convention `findFirstUser()` uses) user is promoted. This is what makes the *live*
+ *  database (which already has real accounts from before issue #62) end up with an admin without
+ *  a manual step, using the same rule `POST /api/session`'s `isFirstEverAccount` check applies to
+ *  a brand-new database going forward. Guarded so it only ever runs this backfill once — a second
+ *  admin promoted later (or the original demoted) must never be silently overridden back. */
+function addRoleColumnIfMissing(db: Db): void {
+  const columns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+  if (columns.some((c) => c.name === "role")) return;
+  db.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+  const earliest = db.prepare("SELECT id FROM users ORDER BY id ASC LIMIT 1").get() as { id: number } | undefined;
+  if (earliest) db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(earliest.id);
+}
+
+function addMustChangePasswordColumnIfMissing(db: Db): void {
+  const columns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+  if (columns.some((c) => c.name === "must_change_password")) return;
+  db.exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0");
+}
+
 /** Email is the ONLY identity lookup key (per the plan's explicit decision) — normalized by
  *  trimming and lowercasing before every insert/lookup, so "Person@Example.com" and
  *  "person@example.com" are always the same account. Lowercasing in JS rather than relying on
@@ -143,24 +180,39 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-const USER_COLUMNS = "id, email, name, created_at AS createdAt, password_hash AS passwordHash";
+const USER_COLUMNS =
+  "id, email, name, created_at AS createdAt, password_hash AS passwordHash, role, " +
+  "must_change_password AS mustChangePassword";
+
+/** better-sqlite3 returns `INTEGER` columns as raw JS numbers, not booleans — every query that
+ *  selects `must_change_password AS mustChangePassword` via `USER_COLUMNS` (or the equivalent
+ *  hand-written column list in `resolveSession()`) needs this to actually produce a `boolean` for
+ *  `UserRow.mustChangePassword`, not a `0 | 1` silently mistyped as one. */
+type RawUserRow = Omit<UserRow, "mustChangePassword"> & { mustChangePassword: number };
+function toUserRow(row: RawUserRow): UserRow {
+  return { ...row, mustChangePassword: row.mustChangePassword !== 0 };
+}
 
 export function findUserByEmail(db: Db, email: string): UserRow | undefined {
   const row = db
     .prepare(`SELECT ${USER_COLUMNS} FROM users WHERE email = ?`)
-    .get(normalizeEmail(email)) as UserRow | undefined;
-  return row;
+    .get(normalizeEmail(email)) as RawUserRow | undefined;
+  return row && toUserRow(row);
 }
 
 export function findUserById(db: Db, id: number): UserRow | undefined {
-  return db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).get(id) as UserRow | undefined;
+  const row = db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).get(id) as RawUserRow | undefined;
+  return row && toUserRow(row);
 }
 
 /** The account the migration below treats as the returning owner, and the fallback
  *  `mcp-server/` uses when `SNOWPRO_OWNER_EMAIL` isn't set: whichever user row was created first
  *  (lowest id — `id` is `AUTOINCREMENT`, so this is exactly creation order). */
 export function findFirstUser(db: Db): UserRow | undefined {
-  return db.prepare(`SELECT ${USER_COLUMNS} FROM users ORDER BY id ASC LIMIT 1`).get() as UserRow | undefined;
+  const row = db.prepare(`SELECT ${USER_COLUMNS} FROM users ORDER BY id ASC LIMIT 1`).get() as
+    | RawUserRow
+    | undefined;
+  return row && toUserRow(row);
 }
 
 export function usersCount(db: Db): number {
@@ -186,8 +238,18 @@ export function usersCount(db: Db): number {
  *  account gets its password set at creation time, alongside the name, in the same INSERT. It's
  *  never used to touch an *existing* account's password; that's `setPasswordIfUnset()`/
  *  `setPassword()`'s job below, kept separate so this function's existing "update name in place"
- *  contract for known users stays exactly as issue #41 left it. */
-export function upsertUserOnLogin(db: Db, email: string, name?: string, passwordHash?: string): UserRow {
+ *  contract for known users stays exactly as issue #41 left it.
+ *
+ *  `role` (issue #62) is likewise only consulted on creation -- `server.ts`'s `POST /api/session`
+ *  passes `"admin"` on the one call that creates the very first account on a fresh database
+ *  (`isFirstEverAccount`); every other caller omits it and gets the `"user"` default. */
+export function upsertUserOnLogin(
+  db: Db,
+  email: string,
+  name?: string,
+  passwordHash?: string,
+  role: UserRole = "user",
+): UserRow {
   const normalized = normalizeEmail(email);
   const existing = findUserByEmail(db, normalized);
   if (existing) {
@@ -205,9 +267,17 @@ export function upsertUserOnLogin(db: Db, email: string, name?: string, password
   }
   const createdAt = new Date().toISOString();
   const info = db
-    .prepare("INSERT INTO users (email, name, created_at, password_hash) VALUES (?, ?, ?, ?)")
-    .run(normalized, name, createdAt, passwordHash ?? null);
-  return { id: Number(info.lastInsertRowid), email: normalized, name, createdAt, passwordHash: passwordHash ?? null };
+    .prepare("INSERT INTO users (email, name, created_at, password_hash, role) VALUES (?, ?, ?, ?, ?)")
+    .run(normalized, name, createdAt, passwordHash ?? null, role);
+  return {
+    id: Number(info.lastInsertRowid),
+    email: normalized,
+    name,
+    createdAt,
+    passwordHash: passwordHash ?? null,
+    role,
+    mustChangePassword: false,
+  };
 }
 
 /** Issue #46's atomic account-claiming step: sets `password_hash` for a legacy account that
@@ -220,7 +290,9 @@ export function upsertUserOnLogin(db: Db, email: string, name?: string, password
  *  logging in with their password" rather than silently proceeding. */
 export function setPasswordIfUnset(db: Db, userId: number, passwordHash: string): boolean {
   const info = db
-    .prepare("UPDATE users SET password_hash = ? WHERE id = ? AND password_hash IS NULL")
+    .prepare(
+      "UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ? AND password_hash IS NULL",
+    )
     .run(passwordHash, userId);
   return info.changes === 1;
 }
@@ -235,7 +307,7 @@ export function setPasswordIfUnset(db: Db, userId: number, passwordHash: string)
  *  max-age. */
 export function setPassword(db: Db, userId: number, passwordHash: string, keepToken?: string): void {
   const run = db.transaction((uid: number, hash: string, keep: string | undefined) => {
-    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, uid);
+    db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?").run(hash, uid);
     if (keep) {
       db.prepare("DELETE FROM sessions WHERE user_id = ? AND token != ?").run(uid, keep);
     } else {
@@ -264,12 +336,13 @@ export function resolveSession(db: Db, token: string): UserRow | undefined {
   const row = db
     .prepare(
       `SELECT users.id AS id, users.email AS email, users.name AS name, users.created_at AS createdAt,
-              users.password_hash AS passwordHash
+              users.password_hash AS passwordHash, users.role AS role,
+              users.must_change_password AS mustChangePassword
        FROM sessions JOIN users ON users.id = sessions.user_id
        WHERE sessions.token = ?`,
     )
-    .get(token) as UserRow | undefined;
-  return row;
+    .get(token) as RawUserRow | undefined;
+  return row && toUserRow(row);
 }
 
 export function deleteSession(db: Db, token: string): void {
@@ -308,12 +381,113 @@ export function completePasswordReset(db: Db, token: string, newPasswordHash: st
       .prepare("SELECT user_id AS userId, expires_at AS expiresAt FROM password_resets WHERE token = ?")
       .get(tok) as { userId: number; expiresAt: string } | undefined;
     if (!row || new Date(row.expiresAt).getTime() <= Date.now()) return false;
-    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, row.userId);
+    db.prepare("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?").run(hash, row.userId);
     db.prepare("DELETE FROM sessions WHERE user_id = ?").run(row.userId);
     db.prepare("DELETE FROM password_resets WHERE token = ?").run(tok);
     return true;
   });
   return run(token, newPasswordHash);
+}
+
+// --- Issue #62: admin user management. ---
+
+export interface AdminUserRow {
+  id: number;
+  email: string;
+  name: string;
+  createdAt: string;
+  role: UserRole;
+  hasPassword: boolean;
+  mustChangePassword: boolean;
+  sessionCount: number;
+}
+
+/** Backs `GET /api/admin/users` — same shape as `admin-users.mjs`'s own `list` query (id, email,
+ *  name, role, createdAt, hasPassword, mustChangePassword, live session count), returned as data
+ *  instead of printed, for the `/admin` page's table. No pagination -- this app targets a small
+ *  LAN/group, matching the CLI's own unpaginated style. */
+export function listAllUsers(db: Db): AdminUserRow[] {
+  const rows = db
+    .prepare(
+      `SELECT users.id AS id, users.email AS email, users.name AS name,
+              users.created_at AS createdAt, users.role AS role,
+              users.password_hash IS NOT NULL AS hasPassword,
+              users.must_change_password AS mustChangePassword,
+              (SELECT COUNT(*) FROM sessions WHERE sessions.user_id = users.id) AS sessionCount
+       FROM users
+       ORDER BY users.id`,
+    )
+    .all() as Array<Omit<AdminUserRow, "hasPassword" | "mustChangePassword"> & { hasPassword: number; mustChangePassword: number }>;
+  return rows.map((r) => ({ ...r, hasPassword: r.hasPassword !== 0, mustChangePassword: r.mustChangePassword !== 0 }));
+}
+
+/** Admin-provisioning a new account (issue #62) — deliberately separate from
+ *  `upsertUserOnLogin()`, whose "update the existing row in place" semantics are wrong here: this
+ *  is "create a new identity," not "log in," so an already-taken email must fail, not silently
+ *  update someone else's account. Returns `null` for that case rather than throwing -- a normal,
+ *  expected outcome the caller (the `POST /api/admin/users` route) reports back to the admin as a
+ *  400, not a 500. Always `role: "user"` and `must_change_password: 1` -- promoting to admin is a
+ *  separate, explicit `setUserRole()` call, never bundled into creation. */
+export function createUserByAdmin(db: Db, email: string, name: string, passwordHash: string): UserRow | null {
+  const normalized = normalizeEmail(email);
+  if (findUserByEmail(db, normalized)) return null;
+  const createdAt = new Date().toISOString();
+  const info = db
+    .prepare(
+      `INSERT INTO users (email, name, created_at, password_hash, role, must_change_password)
+       VALUES (?, ?, ?, ?, 'user', 1)`,
+    )
+    .run(normalized, name, createdAt, passwordHash);
+  return {
+    id: Number(info.lastInsertRowid),
+    email: normalized,
+    name,
+    createdAt,
+    passwordHash,
+    role: "user",
+    mustChangePassword: true,
+  };
+}
+
+/** Admin-removing an account (issue #62) — same transaction shape as `admin-users.mjs`'s own
+ *  `removeUser()` (sessions, then progress, then the user row), but as a reusable function for the
+ *  new `DELETE /api/admin/users/:id` web route. Deliberately NOT shared code with the CLI script:
+ *  that script's own header comment explains it's meant to work via direct DB access independent
+ *  of the running app, and importing from here would break that independence. The route itself is
+ *  responsible for the self-delete and last-admin guards -- this function unconditionally deletes
+ *  whatever id it's given. */
+export function deleteUser(db: Db, userId: number): void {
+  const run = db.transaction((uid: number) => {
+    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(uid);
+    db.prepare("DELETE FROM progress WHERE user_id = ?").run(uid);
+    db.prepare("DELETE FROM users WHERE id = ?").run(uid);
+  });
+  run(userId);
+}
+
+export function setUserRole(db: Db, userId: number, role: UserRole): void {
+  db.prepare("UPDATE users SET role = ? WHERE id = ?").run(role, userId);
+}
+
+export function countAdmins(db: Db): number {
+  const row = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get() as { n: number };
+  return row.n;
+}
+
+/** Completes an admin-provisioned account's forced first-login password change (issue #62) --
+ *  same atomic "the UPDATE itself is the guard" idiom as `setPasswordIfUnset()`: only succeeds
+ *  `WHERE must_change_password = 1`, so a token/request that's already been consumed (or a normal
+ *  account that was never in this state) can't be replayed. Returns whether this call won. Unlike
+ *  `setPassword()`, there's no live session's other tokens to preserve here -- this only ever runs
+ *  from `POST /api/session`'s pre-login state, before any session for this account has ever been
+ *  issued. */
+export function completeMustChangePassword(db: Db, userId: number, newPasswordHash: string): boolean {
+  const info = db
+    .prepare(
+      "UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ? AND must_change_password = 1",
+    )
+    .run(newPasswordHash, userId);
+  return info.changes === 1;
 }
 
 export function getProgressRow(db: Db, userId: number): ProgressRow | undefined {
