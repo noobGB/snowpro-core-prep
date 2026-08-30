@@ -30,8 +30,9 @@ session happening well after the repo's last commit**, run `cd pipeline && npm r
 
 ## Running it
 
-The normal path is Docker — one container serves the built frontend plus a small API, backed by
-two host-mounted volumes:
+The normal path is Docker — two containers (`snowprep` serving the built frontend plus a small
+API, and `caddy` terminating TLS in front of it — see "HTTPS via Caddy" below), backed by
+host-mounted volumes:
 
 ```
 docker compose build
@@ -40,7 +41,7 @@ docker compose logs      # boot order: "/data is writable" -> pipeline summary -
 docker compose down
 ```
 
-Open `http://localhost:8080` — a "Who's studying?" gate screen (email + password, name on first
+Open `https://localhost` — a "Who's studying?" gate screen (email + password, name on first
 signup only) shows first; see "Identity & multi-user progress" below. Copy `.env.example` to
 `.env` (gitignored) and fill in `SNOWPRO_SMTP_*` to enable forgot-password email (issue #59) —
 Compose picks up a sibling `.env` automatically; without it, everything else works, "Forgot
@@ -73,11 +74,42 @@ Compose not in the picture at all. If a recipient's device can't resolve the pla
 responder also answers to `<computername>.local` — no extra setup needed for that either, it's
 already listening.
 
+**HTTPS via Caddy (issue #64).** The `caddy` service (`caddy:2-alpine`, matching this repo's
+existing major-version-pin convention for `node:24-alpine`) is the only container with a host port
+publish (`80`, `443`) — `snowprep` lost its own `8080:8080` publish and is now reachable only from
+`caddy` over the internal Docker network (`reverse_proxy snowprep:8080` in `Caddyfile`). `tls
+internal` is Caddy's built-in local-CA mode: it generates its own root CA and a leaf cert entirely
+inside the container, for whatever `Host` header actually shows up (a LAN IP, `SNOWPRO_HOST_NAME`,
+`localhost`) — no cert files, no ACME account, nothing to renew. That CA/cert pair persists in the
+`caddy_data` named volume, so a container restart doesn't regenerate it (and re-trigger every
+browser's trust-exception prompt). `:80` only exists to `redir` to `:443`, never to serve the app —
+old plain-HTTP bookmarks/emailed links still land somewhere useful instead of erroring out.
+**There is no way to make this warning-free for other LAN users without owning a real domain**
+(public CAs categorically refuse to issue certs for private/LAN addresses) — every visiting device
+sees a one-time "connection isn't private" browser interstitial on first visit, documented as
+expected in README.md, not something to file a bug about.
+
+`server.ts` needed two changes for this to actually work correctly rather than just "not crash":
+`app.set("trust proxy", 1)` (Express doesn't know it's behind a TLS-terminating proxy otherwise),
+and the session cookie's `Secure` flag switched from hardcoded `false` to dynamic `req.secure` —
+`true` behind Caddy, `false` for local dev run directly with no proxy in front (a hardcoded `true`
+would silently break login in that no-Docker dev path, since browsers refuse to send a `Secure`
+cookie back over plain HTTP). `publicOrigin()` (see the `SNOWPRO_HOST_NAME` paragraph above) also
+now derives its scheme from `req.protocol` (correctly "https" behind Caddy, thanks to `trust
+proxy`) instead of a hardcoded `http://`, and its `SNOWPRO_HOST_NAME` branch dropped the explicit
+`:8080` — that env var is only ever populated by Compose, where Caddy always answers on the
+*standard* port for its scheme (443/80, both implied, never written in a URL), not this app's own
+internal port.
+
 **Windows convenience launcher.** [`Launch-SnowPro.ps1`](Launch-SnowPro.ps1) wraps the two `docker
-compose` commands above (start Docker Desktop if needed → `up -d` → wait for `localhost:8080` to
+compose` commands above (start Docker Desktop if needed → `up -d` → wait for `https://localhost` to
 respond → open the browser) — optional, documented for end users in README.md's Option A, not part
-of the app itself. It self-locates via its own file path (`$PSScriptRoot`, falling back to the
-running process's path when compiled), so it only works kept in this same folder alongside
+of the app itself. Issue #64: since that URL now serves a self-signed cert, the script installs a
+process-scoped `ICertificatePolicy` override before its readiness check (Windows PowerShell 5.1 —
+what this script targets — has no `-SkipCertificateCheck`; that's a PowerShell 7+-only parameter),
+so `Invoke-WebRequest` doesn't throw a trust error and misreport a genuinely-up app as unreachable.
+It self-locates via its own file path (`$PSScriptRoot`, falling back to the running process's path
+when compiled), so it only works kept in this same folder alongside
 `docker-compose.yml`. Deliberately not committed as a compiled `.exe` — see the README section for
 the one-line `ps2exe` build command instead, so nobody has to trust an unsigned binary from git
 history.

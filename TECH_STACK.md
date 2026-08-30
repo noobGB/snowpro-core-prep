@@ -206,6 +206,16 @@ means editing a markdown file on your real machine and running `docker compose r
 the change — no rebuild needed, since the pipeline re-reads `/content` fresh at every container
 boot.
 
+**Caddy (issue #64)** — a second Compose service, `caddy:2-alpine`, sitting in front of `snowprep`
+as a reverse proxy purely for TLS termination; the app container itself no longer publishes a host
+port at all. Chosen over hand-rolling `https.createServer()`/cert-loading inside the Node app
+because Caddy's "automatic HTTPS" is genuinely zero-config for this exact case — `tls internal` in
+`Caddyfile` generates and persists its own local CA + certs with no ACME account, no cert files to
+manage, no renewal logic to write. The trade-off that decision doesn't remove: no locally-generated
+cert can be publicly trusted without owning a real domain, so every visiting browser still sees a
+one-time self-signed-cert warning — a limitation of the *category* (LAN app, no domain), not
+something a different reverse proxy would avoid.
+
 ## 8. Dev tooling
 
 **`oxlint`** — a linter (flags likely-bugs and style issues: unused variables, suspicious
@@ -225,11 +235,13 @@ regression is caught before it's merged rather than the next time someone happen
 test`. Three independent jobs here, one per package (`pipeline/`, `app/`, `mcp-server/`), because
 they aren't an npm workspace — each needs its own dependency install.
 
-**Docker smoke test** — `docker compose build` + boot + a real `curl` against `localhost:8080`
-inside CI. This isn't a deploy step (nothing here is deployed anywhere) — it's the closest thing
-this project has to an integration test, since the container-boot path (`verifyDataDirWritable()`
-then `runPipeline()` then bind the port, per `pipeline/src/server.ts`) is the one code path none
-of the unit tests exercise end-to-end.
+**Docker smoke test** — `docker compose build` + boot both services + a real `curl -k` against
+`https://localhost` inside CI (issue #64: `-k` because Caddy's self-signed local cert is expected
+there too, not a CI-only workaround), plus a check that plain `http://localhost` actually redirects.
+This isn't a deploy step (nothing here is deployed anywhere) — it's the closest thing this project
+has to an integration test, since the container-boot path (`verifyDataDirWritable()` then
+`runPipeline()` then bind the port, per `pipeline/src/server.ts`) *and* the Caddy→app proxy hop are
+two code paths none of the unit tests exercise end-to-end.
 
 **Claude Code GitHub Action** (`anthropics/claude-code-action`) — a mention-driven assistant
 (`@claude` in a PR/issue comment) that can review, diagnose a CI failure, or make a fix on request,

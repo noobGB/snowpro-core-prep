@@ -4,8 +4,10 @@ services:
       context: .
       dockerfile: Dockerfile
     image: snowprep-core-prep:latest
-    ports:
-      - "8080:8080"
+    # No host port publish (issue #64) -- only reachable via the caddy service below now, over the
+    # internal Docker network (service name "snowprep", its own :8080 never exposed to the LAN
+    # directly). This is what actually makes HTTPS the only way in, not just an option alongside
+    # plain HTTP.
     volumes:
       - ./SnowPro_Notes_and_Questions:/content
       - ./data:/data
@@ -31,3 +33,23 @@ services:
       # config needed. Empty/unset on non-Windows hosts, where the request-based fallback applies.
       SNOWPRO_HOST_NAME: ${COMPUTERNAME:-}
     restart: unless-stopped
+
+  # Issue #64: TLS termination. `tls internal` (Caddyfile) auto-generates a local CA + cert with
+  # no cert files or ACME account to manage -- caddy_data persists that CA across restarts so it
+  # isn't regenerated (and every browser's trust exception re-triggered) on every `up`.
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - snowprep
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

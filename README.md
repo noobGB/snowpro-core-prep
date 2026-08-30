@@ -116,7 +116,8 @@ after that just needs the email and password.*
 ## Multi-user (LAN)
 
 Anyone on the same local network as the machine running this app (find its LAN IP, e.g.
-`192.168.1.x`, and open `http://<that IP>:8080`) gets their own completely separate progress —
+`192.168.1.x`, or its computer name — see `SNOWPRO_HOST_NAME` in `.env.example` — and open
+`https://<that address>`) gets their own completely separate progress —
 attempts, flashcard grades, plan checklist, everything — keyed to their email, and protected by
 their own password so nobody else on the network can open it. This is built for a trusted network
 (home, study group, small office), not the public internet — see the [Development
@@ -179,7 +180,12 @@ docker compose up -d
 > open the app. It's unsigned, so Windows SmartScreen may warn on first run; that's expected for a
 > personal-project executable you built yourself — click **More info → Run anyway**.
 
-Open **http://localhost:8080** and:
+Open **https://localhost** (or `https://` + your machine's name/IP from another device on the
+LAN). Your browser will show a one-time "connection isn't private" warning the first visit —
+expected, not a bug: this app generates its own local TLS certificate ([Caddy](Caddyfile)'s `tls
+internal`), and there's no way to get a certificate publicly-trusted CAs will vouch for without
+owning a real domain, which a purely local app doesn't have. Click **Advanced → Proceed** (wording
+varies by browser); your browser remembers that choice afterward. Then:
 
 1. **Dashboard's Exam card** → set your real exam date in the date field. The countdown and the
    study plan both remap against it immediately.
@@ -411,6 +417,11 @@ cd app && npx tsc --noEmit           # typecheck
 - **`Dockerfile`** — a three-stage build (frontend, pipeline production deps, runtime) that runs
   the content pipeline at container boot, before the server binds — so a bad markdown file is
   caught at start-up, not on first page load.
+- **`Caddyfile`** — a `caddy:2-alpine` reverse proxy is the only container with a host port publish
+  (`443`/`80`); the app itself is reachable only from Caddy over the internal Docker network. Its
+  built-in `tls internal` mode generates and persists a local CA/cert with no cert files or ACME
+  account to manage — the trade-off is a one-time browser warning for every visiting device, since
+  no locally-generated cert can be publicly trusted without owning a real domain.
 - **`mcp-server/`** — a standalone MCP server (not part of the Docker image) exposing quiz
   sessions and progress as tools for an MCP host. Imports `app/`'s and `pipeline/`'s scoring and
   content logic directly rather than reimplementing it, and reads/writes the same
