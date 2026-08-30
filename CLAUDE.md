@@ -57,20 +57,21 @@ For local dev without Docker, run the pipeline and the Vite dev server directly 
 subsection's commands below) — `app/`'s dev server falls back to `localStorage` for progress when
 no `/api/progress` route exists (i.e., outside the container), so both paths work without config.
 
-**A stable hostname for the login link email (issue #62).** `POST /api/admin/users`'s welcome email
-builds its login link from whatever host the admin's own browser used to reach the app
-(`req.get("host")`, same as #59's reset link) — there's no fixed `PUBLIC_URL` config to keep in
-sync, deliberately (see that route's own comment). That means the link is only as stable as the
-address the admin was actually on: a bare LAN IP (`192.168.1.x`) can change on a router/DHCP lease
-renewal or a host reboot, silently breaking every previously-sent link. Fix it at the OS level, not
-in this app — give the host machine a real name once, then always reach it by that name instead of
-its IP: Windows Settings → System → About → **Rename this PC** (or `Rename-Computer` in an elevated
-PowerShell), then reboot. Windows 10/11 answers both its NetBIOS name (`http://<PCNAME>:8080`, other
-Windows machines on the same LAN/workgroup) and, natively since Windows 10's mDNS responder,
-`http://<pcname>.local:8080` (phones, Macs, Linux — anything that speaks mDNS, as long as the
-network doesn't block multicast, e.g. some routers' "AP/client isolation" on guest networks). Once
-the admin reaches the app through that stable name instead of a raw IP, every link this app emails
-inherits it automatically — no code or env-var change needed on this app's side.
+**Stable emailed links via `SNOWPRO_HOST_NAME` (issue #62).** Both #59's reset link and #62's
+admin-added-user login link are built by `server.ts`'s `publicOrigin()`, which prefers
+`SNOWPRO_HOST_NAME` over the incoming request's own `Host` header. `docker-compose.yml` sets it
+from `${COMPUTERNAME}` — a Windows machine always has that in its shell environment already, so
+Compose picks it up with **zero manual config**: no renaming the PC, no `.env` entry, no code
+change. This matters because the request's `Host` header alone reflects whatever the *admin*
+happened to be on at that exact moment, not a guaranteed-reachable address for the *recipient*: a
+bare LAN IP (`192.168.1.x`) can change on the next DHCP renewal or host reboot, and `localhost`
+means nothing to anyone but the admin's own machine — both would otherwise get baked into an email
+that outlives the moment it was sent. Falls back to the request's `Host` header (this app's
+original behavior, pre-`SNOWPRO_HOST_NAME`) when the env var is empty — non-Windows hosts, or
+Compose not in the picture at all. If a recipient's device can't resolve the plain computer name
+(more likely from a phone/Mac than another Windows machine), Windows 10/11's built-in mDNS
+responder also answers to `<computername>.local` — no extra setup needed for that either, it's
+already listening.
 
 **Windows convenience launcher.** [`Launch-SnowPro.ps1`](Launch-SnowPro.ps1) wraps the two `docker
 compose` commands above (start Docker Desktop if needed → `up -d` → wait for `localhost:8080` to
@@ -305,8 +306,9 @@ breach-list check, since that defends against an internet-facing threat this app
 a known account's password field is revealed) → `POST /api/password-reset/request` → if the email
 has an account, `db.ts`'s `createPasswordResetToken()` mints a random token (`password_resets`
 table, 1-hour `expires_at`, any prior token for that user deleted first) and `mailer.ts` emails a
-`/reset-password?token=...` link built from the request's own `req.protocol`/`req.get("host")` (no
-fixed public-URL config, since the LAN address can vary). The response body is identical whether or
+`/reset-password?token=...` link built by `publicOrigin()` (see `## Running it`'s
+`SNOWPRO_HOST_NAME` paragraph — falls back to the request's own `req.protocol`/`req.get("host")`
+when that env var isn't set, since the LAN address can vary). The response body is identical whether or
 not the account exists — enumeration-safe — and is sent *before* the (fire-and-forget) email send
 resolves, not after, so response latency itself can't leak account existence either. `mailer.ts`
 wraps `nodemailer` against generic `SNOWPRO_SMTP_*` env vars (see `.env.example`; initial setup
@@ -344,10 +346,9 @@ temporary password (`passwords.ts`'s `generateTemporaryPassword()`), stores it h
 `must_change_password = 1`, and emails it directly via `mailer.ts`'s `sendAdminCreatedAccountEmail()`
 (reusing the same `SNOWPRO_SMTP_*` config #59 added) — a temp *password*, not a link, since the new
 user still has to authenticate with something the first time. The email also includes a plain login
-link (the app's own root, built the same `req.protocol`/`req.get("host")` way as #59's `resetUrl` —
-no fixed public-URL config) so the new user doesn't have to already know the address; see this
-file's `## Running it` section for giving the host a stable name so that link doesn't rot when the
-LAN IP changes on reboot. Unlike the enumeration-sensitive forgot-password endpoint, this one is
+link (the app's own root, built by `publicOrigin()` — see this file's `## Running it` section for
+`SNOWPRO_HOST_NAME`, the same helper #59's `resetUrl` uses) so the new user doesn't have to already
+know the address. Unlike the enumeration-sensitive forgot-password endpoint, this one is
 authenticated/admin-only, so its response always includes the temp password too, whether or not the
 email actually sent — a manual fallback so the action never silently strands the admin if SMTP
 isn't configured or delivery fails. On that user's first login, `POST /api/session` responds

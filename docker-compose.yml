@@ -24,4 +24,10 @@ services:
       SNOWPRO_SMTP_PASS: ${SNOWPRO_SMTP_PASS:-}
       SNOWPRO_SMTP_FROM: ${SNOWPRO_SMTP_FROM:-}
       SNOWPRO_SMTP_SECURE: ${SNOWPRO_SMTP_SECURE:-false}
+      # Issue #62: emailed links (password reset, admin-added-user login link) prefer this host
+      # over whatever's in the request's Host header, since that can be a raw LAN IP (changes on
+      # reboot) or "localhost" (meaningless to anyone but the admin's own machine). Compose reads
+      # COMPUTERNAME from the host shell automatically -- Windows always has it set, no manual
+      # config needed. Empty/unset on non-Windows hosts, where the request-based fallback applies.
+      SNOWPRO_HOST_NAME: ${COMPUTERNAME:-}
     restart: unless-stopped

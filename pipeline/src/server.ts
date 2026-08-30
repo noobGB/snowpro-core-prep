@@ -191,6 +191,22 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
   next();
 }
 
+/** The origin every emailed link (password reset, admin-added-user login link) is built against.
+ *  Prefers `SNOWPRO_HOST_NAME` (Compose passes it through from the host's own `COMPUTERNAME` on
+ *  Windows, see docker-compose.yml -- no config needed, it's already set) over the incoming
+ *  request's own `Host` header, since that header reflects whatever the *admin* happened to type
+ *  to reach the app right now: a raw LAN IP (breaks on the next DHCP renewal/reboot) or
+ *  "localhost" (meaningless to the recipient, who isn't on the admin's own machine). Falls back to
+ *  the request's `Host` header when `SNOWPRO_HOST_NAME` isn't set (non-Windows hosts, or Compose
+ *  not in the picture at all) — same behavior this app had before issue #62. Always `http://`,
+ *  never `https://`: this app doesn't terminate TLS, matching the session cookie's own
+ *  `SameSite=Lax`-no-`Secure` choice for the same plain-HTTP-on-a-LAN threat model. */
+function publicOrigin(req: express.Request): string {
+  const hostOverride = process.env.SNOWPRO_HOST_NAME;
+  if (hostOverride) return `http://${hostOverride}:${PORT}`;
+  return `${req.protocol}://${req.get("host")}`;
+}
+
 function issueSessionCookie(res: express.Response, token: string): void {
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
@@ -471,7 +487,7 @@ app.post("/api/password-reset/request", express.json({ limit: "10kb" }), (req, r
   const user = findUserByEmail(db, email);
   if (user) {
     const token = createPasswordResetToken(db, user.id, PASSWORD_RESET_TOKEN_TTL_MS);
-    const resetUrl = `${req.protocol}://${req.get("host")}/reset-password?token=${token}`;
+    const resetUrl = `${publicOrigin(req)}/reset-password?token=${token}`;
     sendPasswordResetEmail(user.email, resetUrl).catch((err: unknown) => {
       console.error(`Failed to send password reset email to ${user.email}:`, err);
     });
@@ -549,7 +565,7 @@ app.post("/api/admin/users", requireSession, requireAdmin, express.json({ limit:
   let emailSent = false;
   if (isMailerConfigured()) {
     try {
-      const loginUrl = `${req.protocol}://${req.get("host")}/`;
+      const loginUrl = `${publicOrigin(req)}/`;
       await sendAdminCreatedAccountEmail(user.email, user.name, tempPassword, loginUrl);
       emailSent = true;
     } catch (err) {
