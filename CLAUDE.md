@@ -233,7 +233,11 @@ npm run dev         # dev server — check its own log for the actual port; 5173
                      # taken by another local project on this machine, and Vite silently shifts
                      # to 5174+ without asking
 npm run build        # production build
-npx tsc --noEmit      # typecheck
+npx tsc -b --noEmit   # typecheck -- NOT a bare `tsc --noEmit`: this tsconfig.json is
+                      # solution-style ("files": [], references to tsconfig.app.json/
+                      # tsconfig.node.json), which a bare `--noEmit` silently typechecks
+                      # zero files against and exits 0 unconditionally, even with a real type
+                      # error present (confirmed in ci.yml's own comment on this exact gotcha)
 ```
 
 ### Architecture
