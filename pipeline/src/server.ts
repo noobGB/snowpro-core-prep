@@ -192,17 +192,31 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
 }
 
 /** The origin every emailed link (password reset, admin-added-user login link) is built against.
- *  Prefers `SNOWPRO_HOST_NAME` (Compose passes it through from the host's own `COMPUTERNAME` on
- *  Windows, see docker-compose.yml -- no config needed, it's already set) over the incoming
- *  request's own `Host` header, since that header reflects whatever the *admin* happened to type
- *  to reach the app right now: a raw LAN IP (breaks on the next DHCP renewal/reboot) or
- *  "localhost" (meaningless to the recipient, who isn't on the admin's own machine). Falls back to
- *  the request's `Host` header when `SNOWPRO_HOST_NAME` isn't set (non-Windows hosts, or Compose
- *  not in the picture at all) — same behavior this app had before issue #62. Always `http://`,
- *  never `https://`: this app doesn't terminate TLS, matching the session cookie's own
- *  `SameSite=Lax`-no-`Secure` choice for the same plain-HTTP-on-a-LAN threat model. */
+ *  Prefers a stable host name over the incoming request's own `Host` header, since that header
+ *  reflects whatever the *admin* happened to type to reach the app right now: a raw LAN IP (breaks
+ *  on the next DHCP renewal/reboot) or "localhost" (meaningless to the recipient, who isn't on the
+ *  admin's own machine).
+ *
+ *  Issue #68: OS-independent. Three candidates, most-specific first -- coalesced *here in JS*, not
+ *  in `docker-compose.yml`'s env-var interpolation, since Compose doesn't reliably support nesting
+ *  (`${A:-${B:-}}`) to try multiple host-side variable names in one expression:
+ *   1. `SNOWPRO_HOST_NAME` -- manual override via `.env`, for whatever platform's automatic guess
+ *      below doesn't fire or isn't set.
+ *   2. `SNOWPRO_HOST_NAME_COMPUTERNAME` -- Compose passes this through from the host's own
+ *      `COMPUTERNAME` (Windows always has it set, zero config needed there).
+ *   3. `SNOWPRO_HOST_NAME_HOSTNAME` -- from the host's own `HOSTNAME` (commonly, not universally,
+ *      exported by the shell on Mac/Linux -- less of a hard guarantee than `COMPUTERNAME`, but a
+ *      real improvement over nothing).
+ *  Falls back to the request's `Host` header when none of the three are set (a fresh
+ *  Mac/Linux install whose shell doesn't export `HOSTNAME`, or Compose not in the picture at all)
+ *  — same behavior this app had before issue #62. Always `http://`, never `https://`: this app
+ *  doesn't terminate TLS, matching the session cookie's own `SameSite=Lax`-no-`Secure` choice for
+ *  the same plain-HTTP-on-a-LAN threat model. */
 function publicOrigin(req: express.Request): string {
-  const hostOverride = process.env.SNOWPRO_HOST_NAME;
+  const hostOverride =
+    process.env.SNOWPRO_HOST_NAME ||
+    process.env.SNOWPRO_HOST_NAME_COMPUTERNAME ||
+    process.env.SNOWPRO_HOST_NAME_HOSTNAME;
   if (hostOverride) return `http://${hostOverride}:${PORT}`;
   return `${req.protocol}://${req.get("host")}`;
 }
