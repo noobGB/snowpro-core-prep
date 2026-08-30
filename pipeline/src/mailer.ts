@@ -87,3 +87,44 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string): Prom
       `<p>This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>`,
   });
 }
+
+/** Issue #62: sent when an admin provisions a new account via `POST /api/admin/users`. Unlike
+ *  `sendPasswordResetEmail()`, the secret here IS the password itself, not a link to set one --
+ *  the admin explicitly chose a temporary-password flow, so the new user logs in with it directly
+ *  and is forced into a "set a real password" step immediately (`must_change_password`, see
+ *  db.ts's `completeMustChangePassword()`). `loginUrl` is built by the caller the same way
+ *  `sendPasswordResetEmail()`'s `resetUrl` is (`req.protocol`/`req.get("host")`, no fixed
+ *  public-URL config) -- just the app's root, not a token-bearing link, since there's nothing to
+ *  prove here that the temp password itself doesn't already prove. Throws the same way
+ *  `sendPasswordResetEmail()` does if SMTP isn't configured -- `POST /api/admin/users` catches
+ *  that itself and still reports the temp password back to the admin as a manual fallback, so this
+ *  failing is never a dead end. */
+export async function sendAdminCreatedAccountEmail(
+  to: string,
+  name: string,
+  tempPassword: string,
+  loginUrl: string,
+): Promise<void> {
+  const config = readConfig();
+  if (!config) {
+    throw new Error("SMTP is not configured (SNOWPRO_SMTP_HOST/USER/PASS/FROM) — call isMailerConfigured() first.");
+  }
+  await getTransporter().sendMail({
+    from: config.from,
+    to,
+    subject: "Your SnowPro Core Prep account",
+    text:
+      `Hi ${name},\n\n` +
+      `An account was created for you on SnowPro Core Prep.\n\n` +
+      `Log in: ${loginUrl}\n` +
+      `Email: ${to}\n` +
+      `Temporary password: ${tempPassword}\n\n` +
+      `You'll be asked to set your own password right away.`,
+    html:
+      `<p>Hi ${name},</p>` +
+      `<p>An account was created for you on SnowPro Core Prep.</p>` +
+      `<p><a href="${loginUrl}">Log in</a></p>` +
+      `<p>Email: <strong>${to}</strong><br>Temporary password: <strong>${tempPassword}</strong></p>` +
+      `<p>You'll be asked to set your own password right away.</p>`,
+  });
+}

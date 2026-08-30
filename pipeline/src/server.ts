@@ -20,27 +20,35 @@ import { runPipeline } from "./index.js";
 import { writeOutput } from "./write/output.js";
 import { printFailure, printNotices, printSuccess } from "./report.js";
 import {
+  completeMustChangePassword,
   completePasswordReset,
+  countAdmins,
   createPasswordResetToken,
   createSession,
+  createUserByAdmin,
   deleteSession,
+  deleteUser,
   findUserByEmail,
+  findUserById,
   getProgressRow,
+  listAllUsers,
   migrateFlatFileProgress,
   normalizeEmail,
   openDb,
   resolveSession,
   setPassword,
   setPasswordIfUnset,
+  setUserRole,
   upsertUserOnLogin,
   usersCount,
   writeProgressRow,
   ProgressConflictError,
   type Db,
+  type UserRole,
   type UserRow,
 } from "./db.js";
-import { hashPassword, verifyPassword, MIN_PASSWORD_LENGTH } from "./passwords.js";
-import { isMailerConfigured, sendPasswordResetEmail } from "./mailer.js";
+import { hashPassword, verifyPassword, generateTemporaryPassword, MIN_PASSWORD_LENGTH } from "./passwords.js";
+import { isMailerConfigured, sendAdminCreatedAccountEmail, sendPasswordResetEmail } from "./mailer.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DATA_DIR = path.resolve(process.env.SNOWPRO_DATA_DIR ?? "/data");
@@ -170,6 +178,35 @@ function requireSession(req: express.Request, res: express.Response, next: expre
   next();
 }
 
+/** Guards every `/api/admin/*` route (issue #62) — chained after `requireSession`, which is what
+ *  actually resolves `res.locals.user`. This is the real enforcement; the frontend hiding the
+ *  Admin nav link and redirecting non-admins off `/admin` (`Admin.tsx`) is UX only, never trusted
+ *  on its own. */
+function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const user = (res.locals as { user: UserRow }).user;
+  if (user.role !== "admin") {
+    res.status(403).json({ error: "Admin access required." });
+    return;
+  }
+  next();
+}
+
+/** The origin every emailed link (password reset, admin-added-user login link) is built against.
+ *  Prefers `SNOWPRO_HOST_NAME` (Compose passes it through from the host's own `COMPUTERNAME` on
+ *  Windows, see docker-compose.yml -- no config needed, it's already set) over the incoming
+ *  request's own `Host` header, since that header reflects whatever the *admin* happened to type
+ *  to reach the app right now: a raw LAN IP (breaks on the next DHCP renewal/reboot) or
+ *  "localhost" (meaningless to the recipient, who isn't on the admin's own machine). Falls back to
+ *  the request's `Host` header when `SNOWPRO_HOST_NAME` isn't set (non-Windows hosts, or Compose
+ *  not in the picture at all) — same behavior this app had before issue #62. Always `http://`,
+ *  never `https://`: this app doesn't terminate TLS, matching the session cookie's own
+ *  `SameSite=Lax`-no-`Secure` choice for the same plain-HTTP-on-a-LAN threat model. */
+function publicOrigin(req: express.Request): string {
+  const hostOverride = process.env.SNOWPRO_HOST_NAME;
+  if (hostOverride) return `http://${hostOverride}:${PORT}`;
+  return `${req.protocol}://${req.get("host")}`;
+}
+
 function issueSessionCookie(res: express.Response, token: string): void {
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
@@ -273,7 +310,10 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
       return;
     }
     const isFirstEverAccount = usersCount(db) === 0;
-    const user = upsertUserOnLogin(db, email, name, hashPassword(password));
+    // Issue #62: the very first account on a fresh database becomes admin automatically -- the
+    // live-database equivalent (a pre-existing account with no admin yet) is handled once, at boot,
+    // by db.ts's addRoleColumnIfMissing() migration, not here.
+    const user = upsertUserOnLogin(db, email, name, hashPassword(password), isFirstEverAccount ? "admin" : "user");
     if (isFirstEverAccount) {
       const migrated = migrateFlatFileProgress(db, user.id, OLD_PROGRESS_FILE);
       if (migrated) console.log(`✓ Migrated pre-upgrade progress.json into ${user.email}'s new account`);
@@ -300,6 +340,43 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
     if (!claimed) {
       // Someone else's claim committed first (vanishingly rare, but must not be silently
       // overridden) — this submitter must log in with whatever password just got set instead.
+      res.json({ status: "needs_password" });
+      return;
+    }
+    issueSessionCookie(res, createSession(db, existing.id));
+    res.json({ status: "known", email: existing.email, name: existing.name });
+    return;
+  }
+
+  // Issue #62: an admin-provisioned account (real temp password already set, unlike the legacy
+  // null-hash branch above) that hasn't completed its forced first-login password change yet.
+  // Same two-round-trip shape as the claim flow above: `password` here is the TEMP password being
+  // verified, `newPassword` is the real one replacing it — LoginOptions' existing fields, reused
+  // as-is, no new wire shape needed.
+  if (existing.mustChangePassword) {
+    if (newPassword === undefined) {
+      res.json({ status: "must_change_password" });
+      return;
+    }
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
+      return;
+    }
+    const lockedForSeconds = checkRateLimit(email);
+    if (lockedForSeconds !== undefined) {
+      res.status(429).json({ error: `Too many attempts. Try again in ${lockedForSeconds}s.` });
+      return;
+    }
+    if (password === undefined || !verifyPassword(password, existing.passwordHash)) {
+      recordFailedAttempt(email);
+      res.status(401).json({ error: "That temporary password doesn't match." });
+      return;
+    }
+    recordSuccessfulAttempt(email);
+    const changed = completeMustChangePassword(db, existing.id, hashPassword(newPassword));
+    if (!changed) {
+      // Already completed by a concurrent request (vanishingly rare, same reasoning as the claim
+      // flow's race handling above) — this submitter must log in normally with the new password.
       res.json({ status: "needs_password" });
       return;
     }
@@ -410,7 +487,7 @@ app.post("/api/password-reset/request", express.json({ limit: "10kb" }), (req, r
   const user = findUserByEmail(db, email);
   if (user) {
     const token = createPasswordResetToken(db, user.id, PASSWORD_RESET_TOKEN_TTL_MS);
-    const resetUrl = `${req.protocol}://${req.get("host")}/reset-password?token=${token}`;
+    const resetUrl = `${publicOrigin(req)}/reset-password?token=${token}`;
     sendPasswordResetEmail(user.email, resetUrl).catch((err: unknown) => {
       console.error(`Failed to send password reset email to ${user.email}:`, err);
     });
@@ -445,8 +522,9 @@ app.get("/api/me", (req, res) => {
     return;
   }
   // hasPassword (issue #46) tells SettingsPanel whether to offer "Set a password" (a legacy
-  // account still on the claim path) or "Change password" (already protected).
-  res.json({ email: user.email, name: user.name, hasPassword: user.passwordHash !== null });
+  // account still on the claim path) or "Change password" (already protected). role (issue #62)
+  // tells Sidebar.tsx whether to show the Admin nav link.
+  res.json({ email: user.email, name: user.name, hasPassword: user.passwordHash !== null, role: user.role });
 });
 
 app.post("/api/logout", (req, res) => {
@@ -455,6 +533,111 @@ app.post("/api/logout", (req, res) => {
   res.clearCookie(SESSION_COOKIE, { path: "/" });
   res.status(204).end();
 });
+
+// --- Issue #62: admin user management (list/add/remove/change-role). Every route below is
+//     `requireSession, requireAdmin` — see requireAdmin's own comment for why the frontend's own
+//     hiding of the Admin page is never trusted as the real gate. ---
+app.get("/api/admin/users", requireSession, requireAdmin, (req, res) => {
+  res.json({ users: listAllUsers(db) });
+});
+
+app.post("/api/admin/users", requireSession, requireAdmin, express.json({ limit: "10kb" }), async (req, res) => {
+  const body = req.body as { email?: unknown; name?: unknown } | null;
+  const email = typeof body?.email === "string" ? body.email.trim() : "";
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  if (!EMAIL_RE.test(email) || email.length > 254) {
+    res.status(400).json({ error: "A valid email is required." });
+    return;
+  }
+  if (name.length === 0 || name.length > 100) {
+    res.status(400).json({ error: "Name is required and must be 100 characters or fewer." });
+    return;
+  }
+  const tempPassword = generateTemporaryPassword();
+  const user = createUserByAdmin(db, email, name, hashPassword(tempPassword));
+  if (!user) {
+    res.status(400).json({ error: "An account with that email already exists." });
+    return;
+  }
+  // Authenticated admin action, not the enumeration-sensitive forgot-password flow (#59) — safe to
+  // report the real outcome, including the temp password itself as a manual fallback if SMTP isn't
+  // configured or delivery fails, so this action never silently strands the admin.
+  let emailSent = false;
+  if (isMailerConfigured()) {
+    try {
+      const loginUrl = `${publicOrigin(req)}/`;
+      await sendAdminCreatedAccountEmail(user.email, user.name, tempPassword, loginUrl);
+      emailSent = true;
+    } catch (err) {
+      console.error(`Failed to send welcome email to ${user.email}:`, err);
+    }
+  }
+  res.status(201).json({ user: { id: user.id, email: user.email, name: user.name, role: user.role }, tempPassword, emailSent });
+});
+
+app.delete("/api/admin/users/:id", requireSession, requireAdmin, (req, res) => {
+  const targetId = Number(req.params.id);
+  const requester = (res.locals as { user: UserRow }).user;
+  if (!Number.isInteger(targetId)) {
+    res.status(400).json({ error: "Invalid user id." });
+    return;
+  }
+  if (targetId === requester.id) {
+    res.status(400).json({ error: "You can't remove your own account. Ask another admin, or use admin-users.mjs." });
+    return;
+  }
+  const target = findUserById(db, targetId);
+  if (!target) {
+    res.status(404).json({ error: "No such user." });
+    return;
+  }
+  if (target.role === "admin" && countAdmins(db) <= 1) {
+    res.status(400).json({ error: "Can't remove the last remaining admin." });
+    return;
+  }
+  deleteUser(db, targetId);
+  res.status(204).end();
+});
+
+app.patch(
+  "/api/admin/users/:id/role",
+  requireSession,
+  requireAdmin,
+  express.json({ limit: "10kb" }),
+  (req, res) => {
+    const targetId = Number(req.params.id);
+    const requester = (res.locals as { user: UserRow }).user;
+    const body = req.body as { role?: unknown } | null;
+    const role = body?.role;
+    if (!Number.isInteger(targetId)) {
+      res.status(400).json({ error: "Invalid user id." });
+      return;
+    }
+    if (role !== "user" && role !== "admin") {
+      res.status(400).json({ error: 'role must be "user" or "admin".' });
+      return;
+    }
+    // Never your own role, in either direction -- same reasoning as the DELETE route's self-delete
+    // guard above: an admin demoting themselves mid-session has no in-app way back if no other
+    // admin happens to be around (or the last one, where countAdmins() would already catch it, but
+    // this also covers the "one of several admins" case, which that check alone wouldn't).
+    if (targetId === requester.id) {
+      res.status(400).json({ error: "You can't change your own role. Ask another admin, or use admin-users.mjs." });
+      return;
+    }
+    const target = findUserById(db, targetId);
+    if (!target) {
+      res.status(404).json({ error: "No such user." });
+      return;
+    }
+    if (target.role === "admin" && role === "user" && countAdmins(db) <= 1) {
+      res.status(400).json({ error: "Can't demote the last remaining admin." });
+      return;
+    }
+    setUserRole(db, targetId, role as UserRole);
+    res.status(204).end();
+  },
+);
 
 // --- Progress: GET/PUT /api/progress, now scoped to the logged-in user's own row in `progress`
 //     (SQLite, see db.ts) instead of a single shared /data/progress.json. Always the whole

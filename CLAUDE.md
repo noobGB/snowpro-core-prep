@@ -57,6 +57,22 @@ For local dev without Docker, run the pipeline and the Vite dev server directly 
 subsection's commands below) — `app/`'s dev server falls back to `localStorage` for progress when
 no `/api/progress` route exists (i.e., outside the container), so both paths work without config.
 
+**Stable emailed links via `SNOWPRO_HOST_NAME` (issue #62).** Both #59's reset link and #62's
+admin-added-user login link are built by `server.ts`'s `publicOrigin()`, which prefers
+`SNOWPRO_HOST_NAME` over the incoming request's own `Host` header. `docker-compose.yml` sets it
+from `${COMPUTERNAME}` — a Windows machine always has that in its shell environment already, so
+Compose picks it up with **zero manual config**: no renaming the PC, no `.env` entry, no code
+change. This matters because the request's `Host` header alone reflects whatever the *admin*
+happened to be on at that exact moment, not a guaranteed-reachable address for the *recipient*: a
+bare LAN IP (`192.168.1.x`) can change on the next DHCP renewal or host reboot, and `localhost`
+means nothing to anyone but the admin's own machine — both would otherwise get baked into an email
+that outlives the moment it was sent. Falls back to the request's `Host` header (this app's
+original behavior, pre-`SNOWPRO_HOST_NAME`) when the env var is empty — non-Windows hosts, or
+Compose not in the picture at all. If a recipient's device can't resolve the plain computer name
+(more likely from a phone/Mac than another Windows machine), Windows 10/11's built-in mDNS
+responder also answers to `<computername>.local` — no extra setup needed for that either, it's
+already listening.
+
 **Windows convenience launcher.** [`Launch-SnowPro.ps1`](Launch-SnowPro.ps1) wraps the two `docker
 compose` commands above (start Docker Desktop if needed → `up -d` → wait for `localhost:8080` to
 respond → open the browser) — optional, documented for end users in README.md's Option A, not part
@@ -290,8 +306,9 @@ breach-list check, since that defends against an internet-facing threat this app
 a known account's password field is revealed) → `POST /api/password-reset/request` → if the email
 has an account, `db.ts`'s `createPasswordResetToken()` mints a random token (`password_resets`
 table, 1-hour `expires_at`, any prior token for that user deleted first) and `mailer.ts` emails a
-`/reset-password?token=...` link built from the request's own `req.protocol`/`req.get("host")` (no
-fixed public-URL config, since the LAN address can vary). The response body is identical whether or
+`/reset-password?token=...` link built by `publicOrigin()` (see `## Running it`'s
+`SNOWPRO_HOST_NAME` paragraph — falls back to the request's own `req.protocol`/`req.get("host")`
+when that env var isn't set, since the LAN address can vary). The response body is identical whether or
 not the account exists — enumeration-safe — and is sent *before* the (fire-and-forget) email send
 resolves, not after, so response latency itself can't leak account existence either. `mailer.ts`
 wraps `nodemailer` against generic `SNOWPRO_SMTP_*` env vars (see `.env.example`; initial setup
@@ -305,13 +322,51 @@ authenticated password change, deletes every session for that account on success
 manually clearing `password_hash` back to `NULL` via direct DB access is still available** as a
 fallback for an account with no email access at all, but is no longer the only recovery path.
 
-**Admin CLI, not an admin UI** (`pipeline/scripts/admin-users.mjs`, `npm run admin:users --
-list|remove <email>|reset-all`, run from `pipeline/`) — listing/removing accounts or wiping the
-database entirely. No web-based admin route exists or is planned: that would need its own auth
-story and expands attack surface for a capability only the operator (filesystem access to the host)
-will ever use — same reasoning as the password-recovery path above. `remove`/`reset-all` default to
-a dry run; `remove` needs `--yes`, `reset-all` needs both `--yes` and `--i-am-sure` (deliberately
-harder to fat-finger, since there's no undo and the script takes no backup).
+**Admin roles and the `/admin` page (issue #62).** `users.role` (`"user"` | `"admin"`) unlocks
+`Sidebar.tsx`'s Admin nav link (desktop) and `MobileMoreSheet.tsx`'s appended row (mobile — the
+mobile bottom-nav shell has no sidebar at all, so this is a separate component with its own item
+list, not something `Sidebar.tsx` covers for free) and `pages/Admin.tsx` itself — all client-side,
+UX only. The real gate is `requireAdmin` (`server.ts`, chained after `requireSession`) on every
+`/api/admin/*` route: `GET` (list), `POST` (add — see below), `DELETE /:id` (remove), `PATCH
+/:id/role` (promote/demote). `DELETE` and `PATCH /:id/role` both refuse to act on **the requester's
+own account at all**, in either direction — not just when they're the last admin: even with several
+admins, self-demoting mid-session has no in-app way back if you change your mind or misclick, so
+this is deliberately more restrictive than "only block if you're the last one." Demoting anyone
+else still refuses to leave zero admins (`countAdmins(db)`). All three are a 400 with a clear
+message, never a silent no-op. **The very first account on a fresh database becomes admin
+automatically** (same `isFirstEverAccount` check `server.ts`'s `POST /api/session` already computed
+for issue #46's migration bookkeeping); for a database that *already had users* before this feature
+shipped, `db.ts`'s `addRoleColumnIfMissing()` migration does the equivalent once, at boot, promoting
+whichever existing account has the lowest `id` — the same "earliest account" convention
+`findFirstUser()` already uses for the MCP server's default owner. Neither path needs a manual step
+for the common case.
+
+**Adding a user as admin (issue #62).** `POST /api/admin/users` (`{email, name}`) generates a
+temporary password (`passwords.ts`'s `generateTemporaryPassword()`), stores it hashed with
+`must_change_password = 1`, and emails it directly via `mailer.ts`'s `sendAdminCreatedAccountEmail()`
+(reusing the same `SNOWPRO_SMTP_*` config #59 added) — a temp *password*, not a link, since the new
+user still has to authenticate with something the first time. The email also includes a plain login
+link (the app's own root, built by `publicOrigin()` — see this file's `## Running it` section for
+`SNOWPRO_HOST_NAME`, the same helper #59's `resetUrl` uses) so the new user doesn't have to already
+know the address. Unlike the enumeration-sensitive forgot-password endpoint, this one is
+authenticated/admin-only, so its response always includes the temp password too, whether or not the
+email actually sent — a manual fallback so the action never silently strands the admin if SMTP
+isn't configured or delivery fails. On that user's first login, `POST /api/session` responds
+`{status: "must_change_password"}` instead of logging them in — mirrors issue #46's legacy-claim
+state machine, but needs the temp password verified (not just replaced), so `LoginGate.tsx` reveals
+three fields at once (temp password + new password + confirm) where "claim" mode only needed two.
+`db.ts`'s `completeMustChangePassword()` is the one-time-use guard, same "the UPDATE itself is the
+guard" idiom as `setPasswordIfUnset()`. Any other path that sets a real password (`setPassword()`,
+`setPasswordIfUnset()`, `completePasswordReset()`) also clears `must_change_password`, so "Forgot
+password?" before ever completing first login still works.
+
+**Admin CLI escape hatch** (`pipeline/scripts/admin-users.mjs`, `npm run admin:users --
+list|remove <email>|promote <email>|demote <email>|reset-all`, run from `pipeline/`) — this
+predates the web admin UI above (issue #37/#46) and remains as the operator-level fallback for
+anything that needs filesystem access instead of a live admin session (recovering a database whose
+only admin was deleted, bulk cleanup). `remove`/`demote`/`reset-all` default to a dry run;
+`remove`/`reset-all` need `--yes` (`reset-all` also `--i-am-sure`), deliberately harder to
+fat-finger since there's no undo and the script takes no backup.
 
 **Progress/persistence** (`src/lib/progress.ts`) is a `useSyncExternalStore`-backed module store,
 not React context. It tries `GET /api/progress` once on load; a 200 switches it to the container's

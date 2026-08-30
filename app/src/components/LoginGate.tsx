@@ -24,6 +24,12 @@
  * "check your email" confirmation regardless of whether the account exists (see that function's own
  * doc comment) -- this component never learns, and must never display, whether the email it was
  * given actually has an account.
+ *
+ * A sixth mode, "must_change_password" (issue #62), IS reached from the server's email-submit
+ * response, same as "claim" -- an admin-provisioned account (`Admin.tsx`) already has a real
+ * (temporary) password, so it can't reuse "claim"'s "no password yet" framing. Needs three fields
+ * at once (temporary password + new password + confirm) rather than "claim"'s two, since the temp
+ * password has to be verified, not just replaced.
  */
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -41,7 +47,7 @@ const MIN_PASSWORD_LENGTH = 8;
 // actually read a short line, short enough that a genuinely-yours login doesn't feel delayed.
 const WELCOME_BACK_MS = 700;
 
-type Mode = "email" | "new" | "claim" | "password" | "forgot";
+type Mode = "email" | "new" | "claim" | "password" | "forgot" | "must_change_password";
 
 const cardStyle: React.CSSProperties = {
   width: 360,
@@ -82,6 +88,7 @@ export function LoginGate() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [tempPassword, setTempPassword] = useState("");
   const [welcomeName, setWelcomeName] = useState<string | null>(null);
   const [resetLinkSent, setResetLinkSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +106,7 @@ export function LoginGate() {
     setName("");
     setPassword("");
     setConfirmPassword("");
+    setTempPassword("");
     setResetLinkSent(false);
     setError(null);
   }
@@ -121,6 +129,11 @@ export function LoginGate() {
     }
     if (result.status === "needs_password") {
       setMode("password");
+      setSubmitting(false);
+      return;
+    }
+    if (result.status === "must_change_password") {
+      setMode("must_change_password");
       setSubmitting(false);
       return;
     }
@@ -183,6 +196,24 @@ export function LoginGate() {
       return;
     }
 
+    if (mode === "must_change_password") {
+      if (tempPassword.length === 0) {
+        setError("Enter the temporary password you were sent.");
+        return;
+      }
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError("Passwords don't match.");
+        return;
+      }
+      setSubmitting(true);
+      applyResult(await login(trimmedEmail, { password: tempPassword, newPassword: password }));
+      return;
+    }
+
     if (mode === "forgot") {
       setSubmitting(true);
       const result = await requestPasswordReset(trimmedEmail);
@@ -234,6 +265,7 @@ export function LoginGate() {
           {mode === "claim" && "Set a password to protect this account"}
           {mode === "password" && "Password"}
           {mode === "forgot" && "Reset your password"}
+          {mode === "must_change_password" && "Set your password"}
           {mode === "email" && "Who's studying?"}
         </h1>
         {mode === "email" && (
@@ -245,6 +277,12 @@ export function LoginGate() {
           <p style={{ margin: "0 0 18px", fontSize: 13, lineHeight: 1.5, color: "var(--text-muted)" }}>
             You&rsquo;ve been using this account without a password &mdash; set one now to keep
             others on this network from opening it.
+          </p>
+        )}
+        {mode === "must_change_password" && (
+          <p style={{ margin: "0 0 18px", fontSize: 13, lineHeight: 1.5, color: "var(--text-muted)" }}>
+            An admin created this account for you. Enter the temporary password you were emailed,
+            then choose a real one.
           </p>
         )}
         {mode === "forgot" && !resetLinkSent && (
@@ -315,6 +353,56 @@ export function LoginGate() {
               </label>
               <PasswordInput
                 inputRef={mode === "claim" ? firstRevealedFieldRef : undefined}
+                id="login-password"
+                autoComplete="new-password"
+                required
+                minLength={MIN_PASSWORD_LENGTH}
+                maxLength={200}
+                value={password}
+                onChange={setPassword}
+                placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                style={inputStyle}
+              />
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <label style={labelStyle} htmlFor="login-password-confirm">
+                Confirm password
+              </label>
+              <PasswordInput
+                id="login-password-confirm"
+                autoComplete="new-password"
+                required
+                maxLength={200}
+                value={confirmPassword}
+                onChange={setConfirmPassword}
+                style={inputStyle}
+              />
+            </div>
+          </>
+        )}
+
+        {mode === "must_change_password" && (
+          <>
+            <div style={{ marginBottom: 12 }}>
+              <label style={labelStyle} htmlFor="login-temp-password">
+                Temporary password
+              </label>
+              <PasswordInput
+                inputRef={firstRevealedFieldRef}
+                id="login-temp-password"
+                autoComplete="current-password"
+                required
+                maxLength={200}
+                value={tempPassword}
+                onChange={setTempPassword}
+                style={inputStyle}
+              />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={labelStyle} htmlFor="login-password">
+                New password
+              </label>
+              <PasswordInput
                 id="login-password"
                 autoComplete="new-password"
                 required

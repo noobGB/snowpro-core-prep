@@ -24,6 +24,16 @@ const SALT_BYTES = 16;
 
 export const MIN_PASSWORD_LENGTH = 8;
 
+/** Issue #62: a one-time temporary password for an admin-provisioned account, emailed to the new
+ *  user via `mailer.ts`'s `sendAdminCreatedAccountEmail()`. 9 random bytes, base64url-encoded, is
+ *  12 URL-safe characters -- comfortably over `MIN_PASSWORD_LENGTH` and copy-paste-friendly (no
+ *  `+`/`/` to mangle in an email client), unlike the hex tokens used elsewhere in this app for
+ *  session/reset tokens, which are meant to be clicked as part of a URL, not typed/pasted as a
+ *  password. */
+export function generateTemporaryPassword(): string {
+  return randomBytes(9).toString("base64url");
+}
+
 /** Hashes `plain` with a fresh random salt, returning the full self-describing stored string. */
 export function hashPassword(plain: string): string {
   const salt = randomBytes(SALT_BYTES);
