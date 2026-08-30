@@ -549,7 +549,8 @@ app.post("/api/admin/users", requireSession, requireAdmin, express.json({ limit:
   let emailSent = false;
   if (isMailerConfigured()) {
     try {
-      await sendAdminCreatedAccountEmail(user.email, user.name, tempPassword);
+      const loginUrl = `${req.protocol}://${req.get("host")}/`;
+      await sendAdminCreatedAccountEmail(user.email, user.name, tempPassword, loginUrl);
       emailSent = true;
     } catch (err) {
       console.error(`Failed to send welcome email to ${user.email}:`, err);
@@ -589,6 +590,7 @@ app.patch(
   express.json({ limit: "10kb" }),
   (req, res) => {
     const targetId = Number(req.params.id);
+    const requester = (res.locals as { user: UserRow }).user;
     const body = req.body as { role?: unknown } | null;
     const role = body?.role;
     if (!Number.isInteger(targetId)) {
@@ -597,6 +599,14 @@ app.patch(
     }
     if (role !== "user" && role !== "admin") {
       res.status(400).json({ error: 'role must be "user" or "admin".' });
+      return;
+    }
+    // Never your own role, in either direction -- same reasoning as the DELETE route's self-delete
+    // guard above: an admin demoting themselves mid-session has no in-app way back if no other
+    // admin happens to be around (or the last one, where countAdmins() would already catch it, but
+    // this also covers the "one of several admins" case, which that check alone wouldn't).
+    if (targetId === requester.id) {
+      res.status(400).json({ error: "You can't change your own role. Ask another admin, or use admin-users.mjs." });
       return;
     }
     const target = findUserById(db, targetId);

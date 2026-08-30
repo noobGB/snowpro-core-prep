@@ -57,6 +57,21 @@ For local dev without Docker, run the pipeline and the Vite dev server directly 
 subsection's commands below) — `app/`'s dev server falls back to `localStorage` for progress when
 no `/api/progress` route exists (i.e., outside the container), so both paths work without config.
 
+**A stable hostname for the login link email (issue #62).** `POST /api/admin/users`'s welcome email
+builds its login link from whatever host the admin's own browser used to reach the app
+(`req.get("host")`, same as #59's reset link) — there's no fixed `PUBLIC_URL` config to keep in
+sync, deliberately (see that route's own comment). That means the link is only as stable as the
+address the admin was actually on: a bare LAN IP (`192.168.1.x`) can change on a router/DHCP lease
+renewal or a host reboot, silently breaking every previously-sent link. Fix it at the OS level, not
+in this app — give the host machine a real name once, then always reach it by that name instead of
+its IP: Windows Settings → System → About → **Rename this PC** (or `Rename-Computer` in an elevated
+PowerShell), then reboot. Windows 10/11 answers both its NetBIOS name (`http://<PCNAME>:8080`, other
+Windows machines on the same LAN/workgroup) and, natively since Windows 10's mDNS responder,
+`http://<pcname>.local:8080` (phones, Macs, Linux — anything that speaks mDNS, as long as the
+network doesn't block multicast, e.g. some routers' "AP/client isolation" on guest networks). Once
+the admin reaches the app through that stable name instead of a raw IP, every link this app emails
+inherits it automatically — no code or env-var change needed on this app's side.
+
 **Windows convenience launcher.** [`Launch-SnowPro.ps1`](Launch-SnowPro.ps1) wraps the two `docker
 compose` commands above (start Docker Desktop if needed → `up -d` → wait for `localhost:8080` to
 respond → open the browser) — optional, documented for end users in README.md's Option A, not part
@@ -306,33 +321,43 @@ manually clearing `password_hash` back to `NULL` via direct DB access is still a
 fallback for an account with no email access at all, but is no longer the only recovery path.
 
 **Admin roles and the `/admin` page (issue #62).** `users.role` (`"user"` | `"admin"`) unlocks
-`Sidebar.tsx`'s Admin nav link and `pages/Admin.tsx` — client-side, UX only. The real gate is
-`requireAdmin` (`server.ts`, chained after `requireSession`) on every `/api/admin/*` route: `GET`
-(list), `POST` (add — see below), `DELETE /:id` (remove), `PATCH /:id/role` (promote/demote). Both
-`DELETE` and demoting refuse to touch the *last* remaining admin (`countAdmins(db)`), and `DELETE`
-refuses self-removal outright — both a 400 with a clear message, never a silent no-op. **The very
-first account on a fresh database becomes admin automatically** (same `isFirstEverAccount` check
-`server.ts`'s `POST /api/session` already computed for issue #46's migration bookkeeping); for a
-database that *already had users* before this feature shipped, `db.ts`'s `addRoleColumnIfMissing()`
-migration does the equivalent once, at boot, promoting whichever existing account has the lowest
-`id` — the same "earliest account" convention `findFirstUser()` already uses for the MCP server's
-default owner. Neither path needs a manual step for the common case.
+`Sidebar.tsx`'s Admin nav link (desktop) and `MobileMoreSheet.tsx`'s appended row (mobile — the
+mobile bottom-nav shell has no sidebar at all, so this is a separate component with its own item
+list, not something `Sidebar.tsx` covers for free) and `pages/Admin.tsx` itself — all client-side,
+UX only. The real gate is `requireAdmin` (`server.ts`, chained after `requireSession`) on every
+`/api/admin/*` route: `GET` (list), `POST` (add — see below), `DELETE /:id` (remove), `PATCH
+/:id/role` (promote/demote). `DELETE` and `PATCH /:id/role` both refuse to act on **the requester's
+own account at all**, in either direction — not just when they're the last admin: even with several
+admins, self-demoting mid-session has no in-app way back if you change your mind or misclick, so
+this is deliberately more restrictive than "only block if you're the last one." Demoting anyone
+else still refuses to leave zero admins (`countAdmins(db)`). All three are a 400 with a clear
+message, never a silent no-op. **The very first account on a fresh database becomes admin
+automatically** (same `isFirstEverAccount` check `server.ts`'s `POST /api/session` already computed
+for issue #46's migration bookkeeping); for a database that *already had users* before this feature
+shipped, `db.ts`'s `addRoleColumnIfMissing()` migration does the equivalent once, at boot, promoting
+whichever existing account has the lowest `id` — the same "earliest account" convention
+`findFirstUser()` already uses for the MCP server's default owner. Neither path needs a manual step
+for the common case.
 
 **Adding a user as admin (issue #62).** `POST /api/admin/users` (`{email, name}`) generates a
 temporary password (`passwords.ts`'s `generateTemporaryPassword()`), stores it hashed with
 `must_change_password = 1`, and emails it directly via `mailer.ts`'s `sendAdminCreatedAccountEmail()`
 (reusing the same `SNOWPRO_SMTP_*` config #59 added) — a temp *password*, not a link, since the new
-user still has to authenticate with something the first time. Unlike the enumeration-sensitive
-forgot-password endpoint, this one is authenticated/admin-only, so its response always includes the
-temp password too, whether or not the email actually sent — a manual fallback so the action never
-silently strands the admin if SMTP isn't configured or delivery fails. On that user's first login,
-`POST /api/session` responds `{status: "must_change_password"}` instead of logging them in —
-mirrors issue #46's legacy-claim state machine, but needs the temp password verified (not just
-replaced), so `LoginGate.tsx` reveals three fields at once (temp password + new password + confirm)
-where "claim" mode only needed two. `db.ts`'s `completeMustChangePassword()` is the one-time-use
-guard, same "the UPDATE itself is the guard" idiom as `setPasswordIfUnset()`. Any other path that
-sets a real password (`setPassword()`, `setPasswordIfUnset()`, `completePasswordReset()`) also
-clears `must_change_password`, so "Forgot password?" before ever completing first login still works.
+user still has to authenticate with something the first time. The email also includes a plain login
+link (the app's own root, built the same `req.protocol`/`req.get("host")` way as #59's `resetUrl` —
+no fixed public-URL config) so the new user doesn't have to already know the address; see this
+file's `## Running it` section for giving the host a stable name so that link doesn't rot when the
+LAN IP changes on reboot. Unlike the enumeration-sensitive forgot-password endpoint, this one is
+authenticated/admin-only, so its response always includes the temp password too, whether or not the
+email actually sent — a manual fallback so the action never silently strands the admin if SMTP
+isn't configured or delivery fails. On that user's first login, `POST /api/session` responds
+`{status: "must_change_password"}` instead of logging them in — mirrors issue #46's legacy-claim
+state machine, but needs the temp password verified (not just replaced), so `LoginGate.tsx` reveals
+three fields at once (temp password + new password + confirm) where "claim" mode only needed two.
+`db.ts`'s `completeMustChangePassword()` is the one-time-use guard, same "the UPDATE itself is the
+guard" idiom as `setPasswordIfUnset()`. Any other path that sets a real password (`setPassword()`,
+`setPasswordIfUnset()`, `completePasswordReset()`) also clears `must_change_password`, so "Forgot
+password?" before ever completing first login still works.
 
 **Admin CLI escape hatch** (`pipeline/scripts/admin-users.mjs`, `npm run admin:users --
 list|remove <email>|promote <email>|demote <email>|reset-all`, run from `pipeline/`) — this

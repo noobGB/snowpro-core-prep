@@ -17,7 +17,7 @@ const ITEMS = [
   { label: "Drill", to: "/drill" },
 ];
 
-const MORE_ROUTES = ["/plan", "/mocks", "/analytics", "/resources", "/setup"];
+const MORE_ROUTES = ["/plan", "/mocks", "/analytics", "/resources", "/setup", "/admin"];
 
 export function MobileBottomNav() {
   const [moreOpen, setMoreOpen] = useState(false);

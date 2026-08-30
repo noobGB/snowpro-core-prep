@@ -1,23 +1,29 @@
 /**
- * Bottom-sheet overflow menu for the 5 destinations that don't fit in the mobile bottom nav's
+ * Bottom-sheet overflow menu for the destinations that don't fit in the mobile bottom nav's
  * 4 direct tabs (Home/Notes/Practice/Drill — the highest-frequency, "several times a day"
  * destinations; see MobileBottomNav's own doc comment). Triggered by that bar's "More" tab.
  * Settings has no route of its own — it's a shared modal (settingsStore) — so it's listed here
- * as the sheet's first row, above the 5 page links and set off by its own divider: it's an
+ * as the sheet's first row, above the page links and set off by its own divider: it's an
  * *action* (opens a panel) not a *destination* (navigates), and putting it first means it's found
- * in one glance after one tap instead of buried last below 5 other rows.
+ * in one glance after one tap instead of buried last below the other rows.
+ *
+ * Issue #62: Admin is appended to the list, not baked into `BASE_ITEMS`, and only for a session
+ * whose role is "admin" — this component has no desktop counterpart of its own, but the same
+ * "shown only for admins, real enforcement is server-side" rule as `Sidebar.tsx`'s Admin link
+ * applies here too.
  */
 
 import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { openSettings } from "../lib/settingsStore";
+import { useSessionUser } from "../lib/session";
 
 interface MoreItem {
   label: string;
   to: string;
 }
 
-const ITEMS: MoreItem[] = [
+const BASE_ITEMS: MoreItem[] = [
   { label: "Study plan", to: "/plan" },
   { label: "Mock exams", to: "/mocks" },
   { label: "Analytics", to: "/analytics" },
@@ -36,6 +42,8 @@ const rowStyle: React.CSSProperties = {
 
 export function MobileMoreSheet({ onClose }: { onClose: () => void }) {
   const location = useLocation();
+  const sessionUser = useSessionUser();
+  const items = sessionUser?.role === "admin" ? [...BASE_ITEMS, { label: "Admin", to: "/admin" }] : BASE_ITEMS;
 
   // Escape dismisses the sheet, matching every other overlay in this app (SettingsPanel,
   // CommandPalette) — this one was missing it entirely.
@@ -77,7 +85,7 @@ export function MobileMoreSheet({ onClose }: { onClose: () => void }) {
         >
           Settings
         </button>
-        {ITEMS.map((item) => (
+        {items.map((item) => (
           <Link
             key={item.to}
             to={item.to}

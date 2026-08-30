@@ -243,13 +243,15 @@ export function Admin() {
                     <td style={{ padding: "10px 14px", color: "var(--text-muted)" }}>{u.sessionCount}</td>
                     <td style={{ padding: "10px 14px", color: "var(--text-muted)" }}>{new Date(u.createdAt).toLocaleDateString()}</td>
                     <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
-                      <button
-                        type="button"
-                        onClick={() => handleRoleChange(u, u.role === "admin" ? "user" : "admin")}
-                        style={{ ...buttonStyle, marginRight: 8 }}
-                      >
-                        {u.role === "admin" ? "Make user" : "Make admin"}
-                      </button>
+                      {!isSelf && (
+                        <button
+                          type="button"
+                          onClick={() => handleRoleChange(u, u.role === "admin" ? "user" : "admin")}
+                          style={{ ...buttonStyle, marginRight: 8 }}
+                        >
+                          {u.role === "admin" ? "Make user" : "Make admin"}
+                        </button>
+                      )}
                       {!isSelf && (
                         <button
                           type="button"
