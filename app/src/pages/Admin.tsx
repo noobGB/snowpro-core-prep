@@ -57,6 +57,18 @@ function statusLabel(u: AdminUser): string {
   return "active";
 }
 
+/** Issue #70: `publicOrigin()` (server.ts) always builds emailed links from the live request's own
+ *  address -- deliberately, since that's the one thing that's both portable (no static config,
+ *  adapts instantly to a new network) and actually reaches a phone (real device testing ruled out
+ *  hostname-based approaches). The one gap that leaves: a session on `localhost` produces a link
+ *  nobody else's device can open. Client-side only, since this is purely advisory -- the server has
+ *  no way to tell "localhost" apart from any other hostname that happens to resolve for the admin's
+ *  own machine. */
+function isLikelyUnreachableForOtherDevices(): boolean {
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+}
+
 export function Admin() {
   const sessionUser = useSessionUser();
   const [users, setUsers] = useState<AdminUser[] | null>(null);
@@ -136,6 +148,24 @@ export function Admin() {
       <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 24px", maxWidth: "50em" }}>
         Manage who can sign in and who else has admin access.
       </p>
+
+      {isLikelyUnreachableForOtherDevices() && (
+        <div
+          style={{
+            ...cardStyle,
+            marginBottom: 24,
+            borderLeft: "2px solid var(--status-warning)",
+            color: "var(--text-muted)",
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          You're on <code style={{ fontFamily: "var(--font-mono)" }}>{window.location.host}</code> —
+          any invite link sent from here will only work on this machine. Open this page via your
+          LAN IP instead (e.g. <code style={{ fontFamily: "var(--font-mono)" }}>192.168.1.x:8080</code>) before
+          adding a user, so the emailed link actually works on their device.
+        </div>
+      )}
 
       <div style={{ ...kicker, marginBottom: 12 }}>Add a user</div>
       <form onSubmit={handleCreate} style={{ ...cardStyle, marginBottom: 24, display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>

@@ -192,31 +192,33 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
 }
 
 /** The origin every emailed link (password reset, admin-added-user login link) is built against.
- *  Prefers a stable host name over the incoming request's own `Host` header, since that header
- *  reflects whatever the *admin* happened to type to reach the app right now: a raw LAN IP (breaks
- *  on the next DHCP renewal/reboot) or "localhost" (meaningless to the recipient, who isn't on the
- *  admin's own machine).
  *
- *  Issue #68: OS-independent. Three candidates, most-specific first -- coalesced *here in JS*, not
- *  in `docker-compose.yml`'s env-var interpolation, since Compose doesn't reliably support nesting
- *  (`${A:-${B:-}}`) to try multiple host-side variable names in one expression:
- *   1. `SNOWPRO_HOST_NAME` -- manual override via `.env`, for whatever platform's automatic guess
- *      below doesn't fire or isn't set.
- *   2. `SNOWPRO_HOST_NAME_COMPUTERNAME` -- Compose passes this through from the host's own
- *      `COMPUTERNAME` (Windows always has it set, zero config needed there).
- *   3. `SNOWPRO_HOST_NAME_HOSTNAME` -- from the host's own `HOSTNAME` (commonly, not universally,
- *      exported by the shell on Mac/Linux -- less of a hard guarantee than `COMPUTERNAME`, but a
- *      real improvement over nothing).
- *  Falls back to the request's `Host` header when none of the three are set (a fresh
- *  Mac/Linux install whose shell doesn't export `HOSTNAME`, or Compose not in the picture at all)
- *  — same behavior this app had before issue #62. Always `http://`, never `https://`: this app
- *  doesn't terminate TLS, matching the session cookie's own `SameSite=Lax`-no-`Secure` choice for
- *  the same plain-HTTP-on-a-LAN threat model. */
+ *  Issue #70: deliberately always the live incoming request's own `Host` header — recomputed fresh
+ *  on every single email, nothing stored or guessed anywhere. Issue #68 tried auto-detecting a
+ *  "stable" host name instead (Windows `COMPUTERNAME`, Mac/Linux `HOSTNAME`), on the theory that a
+ *  raw LAN IP is fragile (changes on DHCP renewal/reboot) and a hostname would survive that. Real
+ *  device testing found the opposite: the bare NetBIOS name never resolves from a phone at all
+ *  (phones don't speak NetBIOS), and `<name>.local` (mDNS) also failed on a real phone/router/
+ *  Windows combination even after fixing the most common cause (network profile set to Private) —
+ *  mDNS has too many independent failure points (third-party firewalls, router/AP multicast
+ *  handling) to rely on. A pinned/static IP works reliably but was explicitly rejected: it removes
+ *  the portability of just running this container on whatever network/host it happens to be on.
+ *  The live request's own address is the one thing that's simultaneously portable (recomputed
+ *  fresh every time, adapts instantly to a new network with zero config) *and* actually reaches a
+ *  phone — because it's exactly the raw IP address the admin is already proven to be reachable on
+ *  right now, this exact moment.
+ *
+ *  The one gap this doesn't close on its own: if the admin is on `localhost` when they trigger an
+ *  email, that address is useless to anyone else. `Admin.tsx` warns visibly when the current
+ *  session is on `localhost`, since that's the one case worth catching client-side rather than
+ *  silently baking a broken link into an email. `SNOWPRO_HOST_NAME` remains available as a fully
+ *  optional, manual, opt-in override for anyone who wants to force a specific value later — never
+ *  automatic, never guessed.
+ *
+ *  Always `http://`, never `https://`: this app doesn't terminate TLS, matching the session
+ *  cookie's own `SameSite=Lax`-no-`Secure` choice for the same plain-HTTP-on-a-LAN threat model. */
 function publicOrigin(req: express.Request): string {
-  const hostOverride =
-    process.env.SNOWPRO_HOST_NAME ||
-    process.env.SNOWPRO_HOST_NAME_COMPUTERNAME ||
-    process.env.SNOWPRO_HOST_NAME_HOSTNAME;
+  const hostOverride = process.env.SNOWPRO_HOST_NAME;
   if (hostOverride) return `http://${hostOverride}:${PORT}`;
   return `${req.protocol}://${req.get("host")}`;
 }
