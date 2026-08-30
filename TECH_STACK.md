@@ -141,11 +141,19 @@ about per-user *rows*, not about normalizing what's *inside* each row.
 HTTP-only cookie handles sessions; `pipeline/src/passwords.ts` handles passwords via `node:crypto`'s
 built-in `scrypt` (self-describing `scrypt$N$r$p$salt$hash` format), not bcrypt/argon2 — this app's
 threat model (a trusted LAN, not internet-facing) doesn't warrant a new native/WASM dependency for
-argon2's stronger offline-cracking resistance. No password reset flow either: no SMTP exists in this
-app, so recovery is the operator manually clearing an account's `password_hash`, documented in-app
-rather than built as a self-service flow. Email is the sole identity key; a name (and, since issue
-#46, a password) is asked once, on a genuinely new email, for display purposes only in the name's
-case.
+argon2's stronger offline-cracking resistance. Email is the sole identity key; a name (and, since
+issue #46, a password) is asked once, on a genuinely new email, for display purposes only in the
+name's case.
+
+**`nodemailer` — self-service password reset (issue #59)** — `pipeline/src/mailer.ts` wraps
+`nodemailer`'s generic SMTP transport (config from `SNOWPRO_SMTP_*` env vars, see `.env.example`)
+to email a one-time reset link, backed by a new `password_resets` table (`db.ts`) with a 1-hour
+expiry. Generic SMTP rather than a provider-specific SDK deliberately: any relay works (initial
+deployment targets Brevo's free tier), and switching providers later is an env-var change, not a
+code change. Node has no built-in SMTP client, which is the one thing that keeps this app from
+being 100% dependency-free on its identity/auth path. The operator manually clearing an account's
+`password_hash` via direct DB access is still available as a fallback for an account with no email
+access at all, but is no longer the only recovery path.
 
 **`tsx`** — runs TypeScript files directly (`tsx src/server.ts`) without a separate "compile to
 JS first" step. Used for both the CLI (`npm run build:content`) and, notably, as the **actual

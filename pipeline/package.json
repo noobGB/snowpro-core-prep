@@ -17,6 +17,7 @@
     "better-sqlite3": "^13.0.3",
     "express": "^5.2.1",
     "mdast-util-to-string": "^4.0.0",
+    "nodemailer": "^9.0.6",
     "rehype-stringify": "^10.0.0",
     "remark-gfm": "^4.0.0",
     "remark-parse": "^11.0.0",
@@ -29,6 +30,7 @@
     "@types/better-sqlite3": "^9.6.0",
     "@types/express": "^5.0.6",
     "@types/node": "^26.2.0",
+    "@types/nodemailer": "^8.0.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   }

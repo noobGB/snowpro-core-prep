@@ -41,7 +41,11 @@ docker compose down
 ```
 
 Open `http://localhost:8080` — a "Who's studying?" gate screen (email + password, name on first
-signup only) shows first; see "Identity & multi-user progress" below. `docker-compose.yml` mounts
+signup only) shows first; see "Identity & multi-user progress" below. Copy `.env.example` to
+`.env` (gitignored) and fill in `SNOWPRO_SMTP_*` to enable forgot-password email (issue #59) —
+Compose picks up a sibling `.env` automatically; without it, everything else works, "Forgot
+password?" just responds with a clear "email isn't configured" error instead. `docker-compose.yml`
+mounts
 `./SnowPro_Notes_and_Questions` (the markdown source, tracked in this repo) to `/content`, and a
 local `./data/` folder to `/data` for identity + progress persistence — `data/snowprep.sqlite`, one
 row per person (gitignored — that one's genuinely personal, everyone's quiz history). Editing
@@ -275,16 +279,31 @@ the race guard, not a preceding check. The **preferred** claim path is proactive
 already-live session (one that predates this feature, since cookies are 400-day) via
 SettingsPanel's "Set a password" → `POST /api/account/password-setup` (no current password needed,
 the session already proves ownership) — the login-gate `needs_password_setup` fallback above is
-for a device with no live session, unavoidable without SMTP. Setting or changing a password
-(`setPassword()`) deletes every *other* session for that user, which matters more than usual here
-since sessions never expire on their own. A lightweight in-memory `Map`-based lockout in
-`server.ts` (keyed by email, not IP — LAN clients share a router) locks out repeated wrong-password
-guesses. Password requirements are NIST 800-63B-style (length only, `MIN_PASSWORD_LENGTH = 8`, no
-composition/rotation rules) — no breach-list check, since that defends against an internet-facing
-threat this app doesn't have. **There is no self-service password reset** — recovery is the app
-operator manually clearing that one account's `password_hash` back to `NULL` (same claim flow,
-re-triggered) via direct DB access; this is documented in-product (LoginGate/SettingsPanel copy),
-not built as recovery codes.
+for a device with no live session. Setting or changing a password (`setPassword()`) deletes every
+*other* session for that user, which matters more than usual here since sessions never expire on
+their own. A lightweight in-memory `Map`-based lockout in `server.ts` (keyed by email, not IP — LAN
+clients share a router) locks out repeated wrong-password guesses. Password requirements are NIST
+800-63B-style (length only, `MIN_PASSWORD_LENGTH = 8`, no composition/rotation rules) — no
+breach-list check, since that defends against an internet-facing threat this app doesn't have.
+
+**Self-service password reset (issue #59).** LoginGate's "Forgot password?" link (only shown once
+a known account's password field is revealed) → `POST /api/password-reset/request` → if the email
+has an account, `db.ts`'s `createPasswordResetToken()` mints a random token (`password_resets`
+table, 1-hour `expires_at`, any prior token for that user deleted first) and `mailer.ts` emails a
+`/reset-password?token=...` link built from the request's own `req.protocol`/`req.get("host")` (no
+fixed public-URL config, since the LAN address can vary). The response body is identical whether or
+not the account exists — enumeration-safe — and is sent *before* the (fire-and-forget) email send
+resolves, not after, so response latency itself can't leak account existence either. `mailer.ts`
+wraps `nodemailer` against generic `SNOWPRO_SMTP_*` env vars (see `.env.example`; initial setup
+targets Brevo's free relay, since it verifies a single sender address rather than a whole domain);
+`isMailerConfigured()` gates a clear operator-facing 500 instead of a silent failure when SMTP was
+never set up. `/reset-password` is reachable from a fully logged-out browser — `App.tsx` special-
+cases that one path ahead of the normal loading/gate/ready auth-state machine, since the whole point
+of the flow is having no session yet. `db.ts`'s `completePasswordReset()` is the one-time-use guard
+(mirrors `setPasswordIfUnset()`'s "the UPDATE/DELETE itself is the guard" idiom) and, like an
+authenticated password change, deletes every session for that account on success. **The operator
+manually clearing `password_hash` back to `NULL` via direct DB access is still available** as a
+fallback for an account with no email access at all, but is no longer the only recovery path.
 
 **Admin CLI, not an admin UI** (`pipeline/scripts/admin-users.mjs`, `npm run admin:users --
 list|remove <email>|reset-all`, run from `pipeline/`) — listing/removing accounts or wiping the

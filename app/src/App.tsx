@@ -3,6 +3,7 @@ import { Outlet, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { CommandPalette } from "./components/CommandPalette";
 import { LoginGate } from "./components/LoginGate";
+import { ResetPasswordPage } from "./components/ResetPasswordPage";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { applyTheme } from "./lib/theme";
 import { useProgress } from "./lib/progress";
@@ -60,6 +61,12 @@ export default function App() {
   useEffect(() => {
     applyTheme(settings.theme);
   }, [settings.theme]);
+
+  // Issue #59: an emailed reset link must work from a fully logged-out browser with no session at
+  // all, so it can't wait on authState resolving (that "loading" state is a same-origin fetch that
+  // completes fine, but the point of this path IS having no session, so there's nothing gate-vs-
+  // ready needs to decide first). Checked ahead of every authState branch below, unconditionally.
+  if (window.location.pathname === "/reset-password") return <ResetPasswordPage />;
 
   if (authState === "loading") return null; // brief -- a same-origin fetch, not worth a spinner
   if (authState === "gate") return <LoginGate />;

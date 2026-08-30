@@ -11,16 +11,23 @@
  *  - "new": unknown email -> Name + a new-account Password field (+ confirm), created together.
  *  - "claim": a legacy (pre-#46) account with no password yet -> a "set a password" field (+
  *    confirm), framed as closing a gap, not correcting a mistake.
- *  - "password": a normal account -> a plain Password field, with an honest "no self-service
- *    reset" line since this app has no SMTP to power one.
+ *  - "password": a normal account -> a plain Password field, with a real "Forgot password?" link
+ *    (issue #59) into the fifth mode below.
  *  - "email": the default/reset state.
  * Issue #41's original "one round trip for a returning login" goal is structurally retired by
  * this feature -- verifying a secret requires asking for it, so two round trips (email, then
  * password) is the new floor for every returning login, not a regression to chase back down.
+ *
+ * A fifth mode, "forgot" (issue #59), is reached only from "password" mode's link, never from the
+ * server's own email-submit response -- it doesn't need a round trip to determine, unlike the
+ * other four. Submitting it calls `requestPasswordReset()`, which always resolves the same generic
+ * "check your email" confirmation regardless of whether the account exists (see that function's own
+ * doc comment) -- this component never learns, and must never display, whether the email it was
+ * given actually has an account.
  */
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { login, type LoginResult } from "../lib/session";
+import { login, requestPasswordReset, type LoginResult } from "../lib/session";
 import { PasswordInput } from "./PasswordInput";
 
 // Same pattern pipeline/src/server.ts's POST /api/session enforces server-side (its own EMAIL_RE
@@ -34,7 +41,7 @@ const MIN_PASSWORD_LENGTH = 8;
 // actually read a short line, short enough that a genuinely-yours login doesn't feel delayed.
 const WELCOME_BACK_MS = 700;
 
-type Mode = "email" | "new" | "claim" | "password";
+type Mode = "email" | "new" | "claim" | "password" | "forgot";
 
 const cardStyle: React.CSSProperties = {
   width: 360,
@@ -76,6 +83,7 @@ export function LoginGate() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [welcomeName, setWelcomeName] = useState<string | null>(null);
+  const [resetLinkSent, setResetLinkSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const firstRevealedFieldRef = useRef<HTMLInputElement>(null);
@@ -91,6 +99,7 @@ export function LoginGate() {
     setName("");
     setPassword("");
     setConfirmPassword("");
+    setResetLinkSent(false);
     setError(null);
   }
 
@@ -174,10 +183,35 @@ export function LoginGate() {
       return;
     }
 
+    if (mode === "forgot") {
+      setSubmitting(true);
+      const result = await requestPasswordReset(trimmedEmail);
+      setSubmitting(false);
+      // A failure here is a real server-side problem (network error, or SMTP genuinely unconfigured
+      // -- see requestPasswordReset()'s own doc comment on why that one case is safe to surface),
+      // never "this email doesn't have an account" -- that fact is never revealed to this component.
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setResetLinkSent(true);
+      return;
+    }
+
     // mode === "email": first submit, server decides which of the three modes above applies.
     setSubmitting(true);
     applyResult(await login(trimmedEmail));
   };
+
+  // Reached only from "password" mode's "Forgot password?" link -- unlike resetToEmailMode(), this
+  // deliberately keeps whatever email is already typed rather than clearing it back to "email" mode.
+  function goToForgotMode() {
+    setMode("forgot");
+    setPassword("");
+    setConfirmPassword("");
+    setResetLinkSent(false);
+    setError(null);
+  }
 
   return (
     <div
@@ -199,6 +233,7 @@ export function LoginGate() {
           {mode === "new" && "What should we call you?"}
           {mode === "claim" && "Set a password to protect this account"}
           {mode === "password" && "Password"}
+          {mode === "forgot" && "Reset your password"}
           {mode === "email" && "Who's studying?"}
         </h1>
         {mode === "email" && (
@@ -212,7 +247,19 @@ export function LoginGate() {
             others on this network from opening it.
           </p>
         )}
+        {mode === "forgot" && !resetLinkSent && (
+          <p style={{ margin: "0 0 18px", fontSize: 13, lineHeight: 1.5, color: "var(--text-muted)" }}>
+            Enter your email and we&rsquo;ll send a link to reset your password.
+          </p>
+        )}
+        {mode === "forgot" && resetLinkSent && (
+          <p style={{ margin: "0 0 22px", fontSize: 13, lineHeight: 1.5, color: "var(--text-muted)" }}>
+            If that email has an account, we&rsquo;ve sent a reset link to it &mdash; check your
+            inbox. The link expires in 1 hour.
+          </p>
+        )}
 
+        {!(mode === "forgot" && resetLinkSent) && (
         <div style={{ marginBottom: mode === "email" ? 22 : 14 }}>
           <label style={labelStyle} htmlFor="login-email">
             Email
@@ -234,6 +281,7 @@ export function LoginGate() {
             style={inputStyle}
           />
         </div>
+        )}
 
         {mode === "new" && (
           <div style={{ marginBottom: 14 }}>
@@ -292,10 +340,6 @@ export function LoginGate() {
                 style={inputStyle}
               />
             </div>
-            <p style={{ margin: "0 0 22px", fontSize: 12, lineHeight: 1.4, color: "var(--text-muted)" }}>
-              There&rsquo;s no self-service password reset in this app &mdash; if you forget it,
-              ask the app operator to reset it for you.
-            </p>
           </>
         )}
 
@@ -314,9 +358,22 @@ export function LoginGate() {
               onChange={setPassword}
               style={inputStyle}
             />
-            <p style={{ margin: "8px 0 22px", fontSize: 12, lineHeight: 1.4, color: "var(--text-muted)" }}>
-              Forgot? Ask the app operator.
-            </p>
+            <button
+              type="button"
+              onClick={goToForgotMode}
+              style={{
+                display: "block",
+                margin: "8px 0 22px",
+                padding: 0,
+                background: "none",
+                border: "none",
+                fontSize: 12,
+                color: "var(--accent)",
+                cursor: "pointer",
+              }}
+            >
+              Forgot password?
+            </button>
           </div>
         )}
 
@@ -329,25 +386,46 @@ export function LoginGate() {
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          style={{
-            width: "100%",
-            background: "var(--accent)",
-            color: "var(--canvas)",
-            border: "none",
-            borderRadius: 6,
-            padding: "11px 0",
-            minHeight: 44,
-            fontSize: 14,
-            fontWeight: 500,
-            cursor: submitting ? "default" : "pointer",
-            opacity: submitting ? 0.7 : 1,
-          }}
-        >
-          {submitting ? "Continuing…" : "Continue"}
-        </button>
+        {mode === "forgot" && resetLinkSent ? (
+          <button
+            type="button"
+            onClick={resetToEmailMode}
+            style={{
+              width: "100%",
+              background: "var(--accent)",
+              color: "var(--canvas)",
+              border: "none",
+              borderRadius: 6,
+              padding: "11px 0",
+              minHeight: 44,
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: "pointer",
+            }}
+          >
+            Back to login
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={submitting}
+            style={{
+              width: "100%",
+              background: "var(--accent)",
+              color: "var(--canvas)",
+              border: "none",
+              borderRadius: 6,
+              padding: "11px 0",
+              minHeight: 44,
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: submitting ? "default" : "pointer",
+              opacity: submitting ? 0.7 : 1,
+            }}
+          >
+            {submitting ? "Continuing…" : mode === "forgot" ? "Send reset link" : "Continue"}
+          </button>
+        )}
       </form>
     </div>
   );

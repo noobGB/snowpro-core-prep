@@ -205,6 +205,52 @@ export async function changePassword(currentPassword: string, newPassword: strin
   }
 }
 
+/** LoginGate's "Forgot password?" flow (issue #59) — always resolves `{ok: true}` on a successful
+ *  round trip regardless of whether the email actually has an account, matching the server's
+ *  enumeration-safe response (`POST /api/password-reset/request`): the caller shows the same
+ *  generic "check your email" copy either way. `ok: false` only for a genuine request failure
+ *  (network error, malformed email rejected client-side before this even runs, or SMTP not
+ *  configured server-side — that last one *does* surface a real error, since it's an operator
+ *  config fact, not per-account). */
+export async function requestPasswordReset(email: string): Promise<PasswordActionResult> {
+  try {
+    const res = await fetch("/api/password-reset/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      return { ok: false, error: body.error ?? `Failed (${res.status}).` };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error." };
+  }
+}
+
+/** `ResetPasswordPage`'s submit handler (issue #59) — completes a reset started by
+ *  `requestPasswordReset()`'s emailed link. Unlike every other function in this file, this runs
+ *  with no live session at all (the whole point of the flow), so there's no in-memory store to
+ *  update on success; the caller does a full `window.location.href = "/"` navigation instead, same
+ *  reasoning as `login()`'s reload. */
+export async function confirmPasswordReset(token: string, newPassword: string): Promise<PasswordActionResult> {
+  try {
+    const res = await fetch("/api/password-reset/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, newPassword }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      return { ok: false, error: body.error ?? `Failed (${res.status}).` };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error." };
+  }
+}
+
 /** SettingsPanel's "Sign out": clears the server-side session, then the caller must
  *  `window.location.reload()` (same reasoning as login() above, in reverse — a clean reload is
  *  what resets progress.ts's in-memory state so the next person on this shared machine doesn't

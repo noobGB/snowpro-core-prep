@@ -20,6 +20,8 @@ import { runPipeline } from "./index.js";
 import { writeOutput } from "./write/output.js";
 import { printFailure, printNotices, printSuccess } from "./report.js";
 import {
+  completePasswordReset,
+  createPasswordResetToken,
   createSession,
   deleteSession,
   findUserByEmail,
@@ -38,6 +40,7 @@ import {
   type UserRow,
 } from "./db.js";
 import { hashPassword, verifyPassword, MIN_PASSWORD_LENGTH } from "./passwords.js";
+import { isMailerConfigured, sendPasswordResetEmail } from "./mailer.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DATA_DIR = path.resolve(process.env.SNOWPRO_DATA_DIR ?? "/data");
@@ -127,14 +130,15 @@ console.log(`✓ Identity/progress database ready (${DB_FILE})`);
 
 const app = express();
 
-// --- Identity: POST /api/session, GET /api/me, POST /api/logout, POST /api/account/password[-setup].
-//     Email is the sole identity/lookup key (case/whitespace-normalized, see db.ts's
-//     normalizeEmail()), name is display-only and never used for lookups. Password is required for
-//     every account as of issue #46 (a legacy pre-#46 account claims one via the
-//     "needs_password_setup" state below) — no self-service reset exists (no SMTP in this app);
-//     recovery is the operator manually clearing that one account's password_hash back to NULL.
-//     Sessions are a random token in an HTTP-only cookie (SameSite=Lax, no Secure flag — plain
-//     HTTP on a LAN). ---
+// --- Identity: POST /api/session, GET /api/me, POST /api/logout, POST /api/account/password[-setup],
+//     POST /api/password-reset/[request|confirm]. Email is the sole identity/lookup key (case/
+//     whitespace-normalized, see db.ts's normalizeEmail()), name is display-only and never used for
+//     lookups. Password is required for every account as of issue #46 (a legacy pre-#46 account
+//     claims one via the "needs_password_setup" state below). Issue #59 added a real self-service
+//     reset (emailed link via SNOWPRO_SMTP_* / mailer.ts) — the operator manually clearing
+//     password_hash back to NULL is still available as a fallback for an account with no email
+//     access at all, but is no longer the only path. Sessions are a random token in an HTTP-only
+//     cookie (SameSite=Lax, no Secure flag — plain HTTP on a LAN). ---
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function getCookie(req: express.Request, name: string): string | undefined {
@@ -359,6 +363,78 @@ app.post("/api/account/password", requireSession, express.json({ limit: "10kb" }
     return;
   }
   setPassword(db, user.id, hashPassword(newPassword), getCookie(req, SESSION_COOKIE));
+  res.status(204).end();
+});
+
+// --- Issue #59: self-service forgot-password, over email. A separate, longer-window rate limit
+//     than the login lockout above (mail abuse, not credential guessing, is the risk here) — keyed
+//     by normalized email for the same LAN/shared-NAT reason `checkRateLimit` above is. ---
+const PASSWORD_RESET_MAX_REQUESTS = 3;
+const PASSWORD_RESET_WINDOW_MS = 60 * 60 * 1000;
+const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+const passwordResetRequests = new Map<string, { count: number; windowStart: number }>();
+
+function isPasswordResetRateLimited(email: string): boolean {
+  const key = normalizeEmail(email);
+  const now = Date.now();
+  const entry = passwordResetRequests.get(key);
+  if (!entry || now - entry.windowStart >= PASSWORD_RESET_WINDOW_MS) {
+    passwordResetRequests.set(key, { count: 1, windowStart: now });
+    return false;
+  }
+  entry.count += 1;
+  return entry.count > PASSWORD_RESET_MAX_REQUESTS;
+}
+
+app.post("/api/password-reset/request", express.json({ limit: "10kb" }), (req, res) => {
+  const body = req.body as { email?: unknown } | null;
+  const email = typeof body?.email === "string" ? body.email.trim() : "";
+  if (!EMAIL_RE.test(email) || email.length > 254) {
+    res.status(400).json({ error: "A valid email is required." });
+    return;
+  }
+  if (!isMailerConfigured()) {
+    res.status(500).json({ error: "Email isn't configured on this server yet — ask the app operator to set it up." });
+    return;
+  }
+  // Enumeration-safe: the response body is identical whether or not the account exists. Just as
+  // important, it's sent BEFORE the (awaited-nowhere) sendPasswordResetEmail() call below resolves
+  // -- an existing account triggers a real SMTP round trip that a nonexistent one never does, and
+  // awaiting it here would leak exactly the fact this response is trying to hide via response
+  // latency alone, generic body notwithstanding.
+  const GENERIC_RESPONSE = { message: "If that email has an account, a reset link has been sent." };
+  if (isPasswordResetRateLimited(email)) {
+    res.json(GENERIC_RESPONSE);
+    return;
+  }
+  const user = findUserByEmail(db, email);
+  if (user) {
+    const token = createPasswordResetToken(db, user.id, PASSWORD_RESET_TOKEN_TTL_MS);
+    const resetUrl = `${req.protocol}://${req.get("host")}/reset-password?token=${token}`;
+    sendPasswordResetEmail(user.email, resetUrl).catch((err: unknown) => {
+      console.error(`Failed to send password reset email to ${user.email}:`, err);
+    });
+  }
+  res.json(GENERIC_RESPONSE);
+});
+
+app.post("/api/password-reset/confirm", express.json({ limit: "10kb" }), (req, res) => {
+  const body = req.body as { token?: unknown; newPassword?: unknown } | null;
+  const token = typeof body?.token === "string" ? body.token : "";
+  const newPassword = typeof body?.newPassword === "string" ? body.newPassword : "";
+  if (!token) {
+    res.status(400).json({ error: "Missing reset token." });
+    return;
+  }
+  if (newPassword.length < MIN_PASSWORD_LENGTH || newPassword.length > 200) {
+    res.status(400).json({ error: `Password must be ${MIN_PASSWORD_LENGTH}-200 characters.` });
+    return;
+  }
+  const succeeded = completePasswordReset(db, token, hashPassword(newPassword));
+  if (!succeeded) {
+    res.status(400).json({ error: "This reset link is invalid or has expired." });
+    return;
+  }
   res.status(204).end();
 });
 
