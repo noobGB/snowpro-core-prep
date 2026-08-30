@@ -26,7 +26,7 @@ to the rule it describes.
 | **Docker / Compose / deployment shape** | `Dockerfile`, `docker-compose.yml` | CLAUDE.md `## Running it`; TECH_STACK.md `## 7. Containerization`; README.md's install instructions (`### Option A`) |
 | **Windows one-click launcher** | `Launch-SnowPro.ps1` | README.md's "Windows one-click launcher" callout under `### Option A`; CLAUDE.md `## Running it` |
 | **CI/CD** (`.github/workflows/*`, Dependabot) | `.github/workflows/*.yml`, `.github/dependabot.yml` | CLAUDE.md `## CI/CD (.github/)`; TECH_STACK.md `## 9. CI/CD` |
-| **Development workflow itself** (issue-first, branch/PR/CI-gate/merge) | N/A — process, not code | CLAUDE.md `## Development workflow` |
+| **Development workflow itself** (issue-first, branch/PR/CI-gate/merge) | N/A — process, not code | CLAUDE.md `## Development workflow` (source of truth); `CONTRIBUTING.md` (the human-facing summary of the same workflow — keep it in sync, don't let it drift into its own, different process) |
 | **Any visible UI change** | whatever page/component changed | README.md's screenshot block (`.github/screenshot-*.png` + the `![...]` line above each) — a screenshot showing stale UI is exactly the kind of doc debt this file exists to prevent, same as stale prose |
 | **System architecture (topology, not one feature)** | this table's own rows, `Dockerfile`, `docker-compose.yml`, `pipeline/src/server.ts`, `mcp-server/src/index.ts` | `docs/architecture.drawio` (+ `.drawio.png` / `-flow.svg` / `-flow.gif`, regenerate via the `drawio-skill`'s `svgflow.py` + `buildup.py --gif`) and README.md's `## Architecture` section — a new process/container/data-store or a changed request path (not a route added to an existing box) means the diagram is stale |
 

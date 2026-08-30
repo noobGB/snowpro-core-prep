@@ -18,6 +18,7 @@ content and everyone's progress stay on your machine (or your local network — 
 > **🤖 If you're an AI coding agent working in this repo, read [`CLAUDE.md`](CLAUDE.md) first** —
 > architecture, file layout, data flow, and known gotchas, written specifically for that. The rest
 > of this README (below) is written for humans: what the app does, how to run it, how to use it.
+> Want to open an issue or a PR? See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ![Dashboard](.github/screenshot-dashboard.png)
 *Exam countdown, weighted readiness, and today's plan tasks — all in one view.*
