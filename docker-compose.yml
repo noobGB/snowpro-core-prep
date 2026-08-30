@@ -24,18 +24,11 @@ services:
       SNOWPRO_SMTP_PASS: ${SNOWPRO_SMTP_PASS:-}
       SNOWPRO_SMTP_FROM: ${SNOWPRO_SMTP_FROM:-}
       SNOWPRO_SMTP_SECURE: ${SNOWPRO_SMTP_SECURE:-false}
-      # Issue #62/#68: emailed links (password reset, admin-added-user login link) prefer a stable
-      # host name over whatever's in the request's Host header, since that can be a raw LAN IP
-      # (changes on reboot) or "localhost" (meaningless to anyone but the admin's own machine).
-      # Three inputs, most-specific first -- server.ts's publicOrigin() does the actual coalescing
-      # in order, not Compose: `${A:-${B:-}}`-style nesting isn't reliably supported by Compose's
-      # interpolation, so each candidate is passed through under its own name instead of chained
-      # here. SNOWPRO_HOST_NAME is the manual override (.env, for whichever platform's automatic
-      # guess below doesn't apply or isn't set). COMPUTERNAME is always set on Windows -- zero
-      # config needed there. HOSTNAME is commonly (not universally -- depends on shell/profile)
-      # exported on Mac/Linux; when neither fires, publicOrigin() falls back to the request's own
-      # Host header, this app's original pre-#62 behavior.
+      # Issue #70: emailed links (password reset, admin-added-user login link) always use the live
+      # request's own Host header by default -- deliberately NOT an auto-detected "stable" hostname
+      # (issue #68 tried Windows COMPUTERNAME / Mac-Linux HOSTNAME; real phone testing found neither
+      # actually reaches a phone reliably, see server.ts's publicOrigin() for the full story) and
+      # deliberately NOT a pinned static IP either (rejected -- breaks portability across networks).
+      # This is purely optional: only set it if you want to force a specific value.
       SNOWPRO_HOST_NAME: ${SNOWPRO_HOST_NAME:-}
-      SNOWPRO_HOST_NAME_COMPUTERNAME: ${COMPUTERNAME:-}
-      SNOWPRO_HOST_NAME_HOSTNAME: ${HOSTNAME:-}
     restart: unless-stopped

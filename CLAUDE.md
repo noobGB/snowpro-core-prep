@@ -57,28 +57,33 @@ For local dev without Docker, run the pipeline and the Vite dev server directly 
 subsection's commands below) — `app/`'s dev server falls back to `localStorage` for progress when
 no `/api/progress` route exists (i.e., outside the container), so both paths work without config.
 
-**Stable emailed links, OS-independent (issue #62/#68).** Both #59's reset link and #62's
-admin-added-user login link are built by `server.ts`'s `publicOrigin()`, which prefers a stable
-host name over the incoming request's own `Host` header — that header alone reflects whatever the
-*admin* happened to be on at that exact moment, not a guaranteed-reachable address for the
-*recipient*: a bare LAN IP (`192.168.1.x`) can change on the next DHCP renewal or host reboot, and
-`localhost` means nothing to anyone but the admin's own machine — both would otherwise get baked
-into an email that outlives the moment it was sent.
+**Emailed links always use the live request address (issue #62/#68/#70).** Both #59's reset link
+and #62's admin-added-user login link are built by `server.ts`'s `publicOrigin()`, which is always
+the incoming request's own `Host` header, recomputed fresh on every email — deliberately, after two
+earlier approaches were tried and rejected on real hardware:
 
-`publicOrigin()` coalesces three candidates in JS, not in `docker-compose.yml`'s env-var
-interpolation — Compose doesn't reliably support nesting (`${A:-${B:-}}`) to try multiple host-side
-variable names in one expression, so each is passed through under its own name and the app picks
-the first non-empty one: **(1)** `SNOWPRO_HOST_NAME` — a manual override via `.env`, for whatever
-the automatic guess below doesn't cover; **(2)** the host's own `COMPUTERNAME` — Windows always has
-this set, zero config needed there; **(3)** the host's own `HOSTNAME` — commonly, but not
-universally, exported by the shell on Mac/Linux (depends on the shell/profile — a real improvement
-over nothing, just not the hard guarantee `COMPUTERNAME` is on Windows). Falls back to the request's
-`Host` header (this app's original pre-`SNOWPRO_HOST_NAME` behavior) only when none of the three
-fire — e.g. a Mac/Linux shell that doesn't export `HOSTNAME` and no manual override set. If a
-recipient's device can't resolve the plain computer name (more likely from a phone than another
-machine of the same OS), Windows 10/11's built-in mDNS responder also answers to
-`<computername>.local` — no extra setup needed for that either, it's already listening; most modern
-Linux desktops and macOS answer to `<hostname>.local` the same way via Avahi/Bonjour.
+- **#68's auto-detected "stable" hostname** (Windows `COMPUTERNAME`, Mac/Linux `HOSTNAME`) —
+  theory: a raw LAN IP is fragile (changes on DHCP renewal/reboot), so a hostname should survive
+  that better. Real phone testing found the opposite: the bare NetBIOS name never resolves from a
+  phone at all (phones don't speak NetBIOS), and `<name>.local` (mDNS) *also* failed on a real
+  phone/router/Windows combination even after fixing the most common cause (Windows network profile
+  set to Private) — mDNS has too many independent failure points (third-party firewalls, router/AP
+  multicast handling) for a personal LAN app to depend on.
+- **A pinned static IP** (`.env`, or a router DHCP reservation) — reliable, but explicitly rejected:
+  it removes the portability of just running this container on whatever network/host it happens to
+  be on, which matters more here than one edge case.
+
+The live request's own address turns out to be the one option that's simultaneously portable
+(nothing stored, adapts instantly to a new network with zero config) *and* actually reaches a
+phone — it's exactly the raw IP the admin is already proven to be reachable on, this exact moment,
+since that's what they used to load the page that's sending the email.
+
+**The one gap this doesn't close on its own**: if the admin is on `localhost` when they trigger an
+email, that address is useless to anyone else. `Admin.tsx` shows a visible warning when the current
+session is on `localhost`/`127.0.0.1`, since that's the one case worth catching client-side rather
+than silently baking a broken link into an email. `SNOWPRO_HOST_NAME` remains available in `.env`
+as a fully optional, manual override for anyone who wants to force a specific value later — never
+automatic, never guessed.
 
 **Windows convenience launcher.** [`Launch-SnowPro.ps1`](Launch-SnowPro.ps1) wraps the two `docker
 compose` commands above (start Docker Desktop if needed → `up -d` → wait for `localhost:8080` to
