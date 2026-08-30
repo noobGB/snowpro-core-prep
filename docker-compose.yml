@@ -15,4 +15,13 @@ services:
       SNOWPRO_CONTENT_OUTPUT: /app/content
       SNOWPRO_DATA_DIR: /data
       SNOWPRO_DIST_DIR: /app/dist
+      # Forgot-password email (issue #59) — pulled from a sibling .env file (see .env.example);
+      # left unset, POST /api/password-reset/request fails clearly with an operator-facing error
+      # instead of the app refusing to boot.
+      SNOWPRO_SMTP_HOST: ${SNOWPRO_SMTP_HOST:-}
+      SNOWPRO_SMTP_PORT: ${SNOWPRO_SMTP_PORT:-587}
+      SNOWPRO_SMTP_USER: ${SNOWPRO_SMTP_USER:-}
+      SNOWPRO_SMTP_PASS: ${SNOWPRO_SMTP_PASS:-}
+      SNOWPRO_SMTP_FROM: ${SNOWPRO_SMTP_FROM:-}
+      SNOWPRO_SMTP_SECURE: ${SNOWPRO_SMTP_SECURE:-false}
     restart: unless-stopped

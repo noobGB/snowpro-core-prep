@@ -128,10 +128,10 @@ for accounts created before passwords did.
   asks for email, then password.
 - Progress lives in one shared SQLite database on the host machine (`data/snowprep.sqlite`), one
   row per person — nobody can read or write anyone else's data.
-- **No self-service password reset** — there's no email delivery in this app. If you forget your
-  password, ask whoever runs the server to reset it for you (they clear it directly in the
-  database, which lets you claim a fresh one on your next login, the same way the account was
-  created in the first place).
+- **Forgot your password?** Click "Forgot password?" on the login screen — if the server has email
+  set up (`SNOWPRO_SMTP_*`, see `.env.example`), you'll get a reset link valid for 1 hour. If the
+  operator hasn't configured email, they can still clear your password directly in the database as
+  a fallback (the same way the account was created in the first place).
 - **Running the server**: no admin panel exists on purpose (see [CLAUDE.md](CLAUDE.md)), but
   `pipeline/scripts/admin-users.mjs` (`npm run admin:users -- list|remove <email>|reset-all`) lists
   or removes accounts directly against the database — useful for clearing out test accounts.

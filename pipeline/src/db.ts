@@ -108,6 +108,13 @@ export function openDb(filePath: string): Db {
       data TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS password_resets (
+      token TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
   `);
   addPasswordHashColumnIfMissing(db);
   return db;
@@ -267,6 +274,46 @@ export function resolveSession(db: Db, token: string): UserRow | undefined {
 
 export function deleteSession(db: Db, token: string): void {
   db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
+}
+
+/** Issue #59's forgot-password flow: 32 random bytes hex, same shape as `createSession()`'s
+ *  session tokens, but carrying an `expires_at` (the first token in this app with one — sessions
+ *  never expire, they only get deleted). Any token(s) already outstanding for this user are deleted
+ *  first, so requesting a new reset link invalidates a previously-emailed one rather than leaving
+ *  two simultaneously valid. */
+export function createPasswordResetToken(db: Db, userId: number, ttlMs: number): string {
+  const token = randomBytes(32).toString("hex");
+  const now = Date.now();
+  const run = db.transaction((uid: number, tok: string) => {
+    db.prepare("DELETE FROM password_resets WHERE user_id = ?").run(uid);
+    db.prepare(
+      "INSERT INTO password_resets (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+    ).run(tok, uid, new Date(now).toISOString(), new Date(now + ttlMs).toISOString());
+  });
+  run(userId, token);
+  return token;
+}
+
+/** Atomically resolves and consumes a reset token, per issue #59 — mirrors
+ *  `setPasswordIfUnset()`'s "the UPDATE/DELETE itself is the guard" idiom rather than a preceding
+ *  SELECT: everything happens inside one transaction, so a token can never be used twice even if
+ *  two requests race on it (SQLite serializes writes to the same row; whichever commits first wins,
+ *  the second finds the row already gone). Returns `false` for a missing OR expired token — the
+ *  caller doesn't need to distinguish the two, both mean "ask for a new link." On success, also
+ *  deletes every session for this user (same as `setPassword()`'s no-`keepToken` branch — there's
+ *  no live session to preserve here, unlike an authenticated password change). */
+export function completePasswordReset(db: Db, token: string, newPasswordHash: string): boolean {
+  const run = db.transaction((tok: string, hash: string): boolean => {
+    const row = db
+      .prepare("SELECT user_id AS userId, expires_at AS expiresAt FROM password_resets WHERE token = ?")
+      .get(tok) as { userId: number; expiresAt: string } | undefined;
+    if (!row || new Date(row.expiresAt).getTime() <= Date.now()) return false;
+    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, row.userId);
+    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(row.userId);
+    db.prepare("DELETE FROM password_resets WHERE token = ?").run(tok);
+    return true;
+  });
+  return run(token, newPasswordHash);
 }
 
 export function getProgressRow(db: Db, userId: number): ProgressRow | undefined {

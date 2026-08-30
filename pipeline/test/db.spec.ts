@@ -13,6 +13,8 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, readFileSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  completePasswordReset,
+  createPasswordResetToken,
   createSession,
   deleteSession,
   findFirstUser,
@@ -410,6 +412,74 @@ describe("setPassword (authenticated change, invalidates other sessions)", () =>
     const bobToken = createSession(db, bob.id);
 
     setPassword(db, alice.id, "scrypt$16384$8$1$a2$hash");
+
+    expect(findUserById(db, bob.id)?.passwordHash).toBe("scrypt$16384$8$1$b$hash");
+    expect(resolveSession(db, bobToken)).toMatchObject({ id: bob.id });
+  });
+});
+
+// Issue #59: self-service forgot-password.
+describe("createPasswordResetToken / completePasswordReset", () => {
+  it("a valid token successfully sets the new password and consumes itself", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice", "scrypt$16384$8$1$old$hash");
+    const token = createPasswordResetToken(db, user.id, 60 * 60 * 1000);
+
+    const succeeded = completePasswordReset(db, token, "scrypt$16384$8$1$new$hash");
+
+    expect(succeeded).toBe(true);
+    expect(findUserById(db, user.id)?.passwordHash).toBe("scrypt$16384$8$1$new$hash");
+  });
+
+  it("an expired token fails and leaves the password unchanged", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice", "scrypt$16384$8$1$old$hash");
+    const token = createPasswordResetToken(db, user.id, -1); // already expired the instant it's created
+
+    const succeeded = completePasswordReset(db, token, "scrypt$16384$8$1$new$hash");
+
+    expect(succeeded).toBe(false);
+    expect(findUserById(db, user.id)?.passwordHash).toBe("scrypt$16384$8$1$old$hash");
+  });
+
+  it("an unknown token fails", () => {
+    expect(completePasswordReset(db, "not-a-real-token", "scrypt$16384$8$1$new$hash")).toBe(false);
+  });
+
+  it("a token can only be used once -- the second attempt against the same token fails", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+    const token = createPasswordResetToken(db, user.id, 60 * 60 * 1000);
+
+    expect(completePasswordReset(db, token, "scrypt$16384$8$1$first$hash")).toBe(true);
+    expect(completePasswordReset(db, token, "scrypt$16384$8$1$second$hash")).toBe(false);
+    expect(findUserById(db, user.id)?.passwordHash).toBe("scrypt$16384$8$1$first$hash");
+  });
+
+  it("requesting a new token invalidates the previously issued one for the same user", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+    const firstToken = createPasswordResetToken(db, user.id, 60 * 60 * 1000);
+    createPasswordResetToken(db, user.id, 60 * 60 * 1000); // second request supersedes the first
+
+    expect(completePasswordReset(db, firstToken, "scrypt$16384$8$1$new$hash")).toBe(false);
+  });
+
+  it("completing a reset deletes every session for that user, same as setPassword()'s no-keepToken branch", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+    const t1 = createSession(db, user.id);
+    const t2 = createSession(db, user.id);
+    const token = createPasswordResetToken(db, user.id, 60 * 60 * 1000);
+
+    completePasswordReset(db, token, "scrypt$16384$8$1$new$hash");
+
+    expect(resolveSession(db, t1)).toBeUndefined();
+    expect(resolveSession(db, t2)).toBeUndefined();
+  });
+
+  it("never touches another user's sessions or password", () => {
+    const alice = upsertUserOnLogin(db, "alice@example.com", "Alice", "scrypt$16384$8$1$a$hash");
+    const bob = upsertUserOnLogin(db, "bob@example.com", "Bob", "scrypt$16384$8$1$b$hash");
+    const bobToken = createSession(db, bob.id);
+    const aliceToken = createPasswordResetToken(db, alice.id, 60 * 60 * 1000);
+
+    completePasswordReset(db, aliceToken, "scrypt$16384$8$1$a2$hash");
 
     expect(findUserById(db, bob.id)?.passwordHash).toBe("scrypt$16384$8$1$b$hash");
     expect(resolveSession(db, bobToken)).toMatchObject({ id: bob.id });
