@@ -24,10 +24,18 @@ services:
       SNOWPRO_SMTP_PASS: ${SNOWPRO_SMTP_PASS:-}
       SNOWPRO_SMTP_FROM: ${SNOWPRO_SMTP_FROM:-}
       SNOWPRO_SMTP_SECURE: ${SNOWPRO_SMTP_SECURE:-false}
-      # Issue #62: emailed links (password reset, admin-added-user login link) prefer this host
-      # over whatever's in the request's Host header, since that can be a raw LAN IP (changes on
-      # reboot) or "localhost" (meaningless to anyone but the admin's own machine). Compose reads
-      # COMPUTERNAME from the host shell automatically -- Windows always has it set, no manual
-      # config needed. Empty/unset on non-Windows hosts, where the request-based fallback applies.
-      SNOWPRO_HOST_NAME: ${COMPUTERNAME:-}
+      # Issue #62/#68: emailed links (password reset, admin-added-user login link) prefer a stable
+      # host name over whatever's in the request's Host header, since that can be a raw LAN IP
+      # (changes on reboot) or "localhost" (meaningless to anyone but the admin's own machine).
+      # Three inputs, most-specific first -- server.ts's publicOrigin() does the actual coalescing
+      # in order, not Compose: `${A:-${B:-}}`-style nesting isn't reliably supported by Compose's
+      # interpolation, so each candidate is passed through under its own name instead of chained
+      # here. SNOWPRO_HOST_NAME is the manual override (.env, for whichever platform's automatic
+      # guess below doesn't apply or isn't set). COMPUTERNAME is always set on Windows -- zero
+      # config needed there. HOSTNAME is commonly (not universally -- depends on shell/profile)
+      # exported on Mac/Linux; when neither fires, publicOrigin() falls back to the request's own
+      # Host header, this app's original pre-#62 behavior.
+      SNOWPRO_HOST_NAME: ${SNOWPRO_HOST_NAME:-}
+      SNOWPRO_HOST_NAME_COMPUTERNAME: ${COMPUTERNAME:-}
+      SNOWPRO_HOST_NAME_HOSTNAME: ${HOSTNAME:-}
     restart: unless-stopped

@@ -57,21 +57,28 @@ For local dev without Docker, run the pipeline and the Vite dev server directly 
 subsection's commands below) — `app/`'s dev server falls back to `localStorage` for progress when
 no `/api/progress` route exists (i.e., outside the container), so both paths work without config.
 
-**Stable emailed links via `SNOWPRO_HOST_NAME` (issue #62).** Both #59's reset link and #62's
-admin-added-user login link are built by `server.ts`'s `publicOrigin()`, which prefers
-`SNOWPRO_HOST_NAME` over the incoming request's own `Host` header. `docker-compose.yml` sets it
-from `${COMPUTERNAME}` — a Windows machine always has that in its shell environment already, so
-Compose picks it up with **zero manual config**: no renaming the PC, no `.env` entry, no code
-change. This matters because the request's `Host` header alone reflects whatever the *admin*
-happened to be on at that exact moment, not a guaranteed-reachable address for the *recipient*: a
-bare LAN IP (`192.168.1.x`) can change on the next DHCP renewal or host reboot, and `localhost`
-means nothing to anyone but the admin's own machine — both would otherwise get baked into an email
-that outlives the moment it was sent. Falls back to the request's `Host` header (this app's
-original behavior, pre-`SNOWPRO_HOST_NAME`) when the env var is empty — non-Windows hosts, or
-Compose not in the picture at all. If a recipient's device can't resolve the plain computer name
-(more likely from a phone/Mac than another Windows machine), Windows 10/11's built-in mDNS
-responder also answers to `<computername>.local` — no extra setup needed for that either, it's
-already listening.
+**Stable emailed links, OS-independent (issue #62/#68).** Both #59's reset link and #62's
+admin-added-user login link are built by `server.ts`'s `publicOrigin()`, which prefers a stable
+host name over the incoming request's own `Host` header — that header alone reflects whatever the
+*admin* happened to be on at that exact moment, not a guaranteed-reachable address for the
+*recipient*: a bare LAN IP (`192.168.1.x`) can change on the next DHCP renewal or host reboot, and
+`localhost` means nothing to anyone but the admin's own machine — both would otherwise get baked
+into an email that outlives the moment it was sent.
+
+`publicOrigin()` coalesces three candidates in JS, not in `docker-compose.yml`'s env-var
+interpolation — Compose doesn't reliably support nesting (`${A:-${B:-}}`) to try multiple host-side
+variable names in one expression, so each is passed through under its own name and the app picks
+the first non-empty one: **(1)** `SNOWPRO_HOST_NAME` — a manual override via `.env`, for whatever
+the automatic guess below doesn't cover; **(2)** the host's own `COMPUTERNAME` — Windows always has
+this set, zero config needed there; **(3)** the host's own `HOSTNAME` — commonly, but not
+universally, exported by the shell on Mac/Linux (depends on the shell/profile — a real improvement
+over nothing, just not the hard guarantee `COMPUTERNAME` is on Windows). Falls back to the request's
+`Host` header (this app's original pre-`SNOWPRO_HOST_NAME` behavior) only when none of the three
+fire — e.g. a Mac/Linux shell that doesn't export `HOSTNAME` and no manual override set. If a
+recipient's device can't resolve the plain computer name (more likely from a phone than another
+machine of the same OS), Windows 10/11's built-in mDNS responder also answers to
+`<computername>.local` — no extra setup needed for that either, it's already listening; most modern
+Linux desktops and macOS answer to `<hostname>.local` the same way via Avahi/Bonjour.
 
 **Windows convenience launcher.** [`Launch-SnowPro.ps1`](Launch-SnowPro.ps1) wraps the two `docker
 compose` commands above (start Docker Desktop if needed → `up -d` → wait for `localhost:8080` to
