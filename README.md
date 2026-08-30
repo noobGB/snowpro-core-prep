@@ -180,6 +180,16 @@ docker compose up -d
 > open the app. It's unsigned, so Windows SmartScreen may warn on first run; that's expected for a
 > personal-project executable you built yourself — click **More info → Run anyway**.
 
+> **Running on a second machine without a local build.** Every tagged release publishes a
+> ready-to-run image to GHCR, so a machine that already has Docker but not this repo's full dev
+> toolchain can skip the clone-and-build step entirely:
+> ```bash
+> docker login ghcr.io -u <your-github-username>   # needs a PAT with read:packages -- this repo is private
+> docker pull ghcr.io/noobgb/snowpro-core-prep:latest
+> ```
+> then point `docker-compose.yml`'s `image:` at that tag instead of building locally, or `docker run`
+> it directly with the same env vars/volumes `docker-compose.yml` already documents.
+
 Open **http://localhost:8080** and:
 
 1. **Dashboard's Exam card** → set your real exam date in the date field. The countdown and the

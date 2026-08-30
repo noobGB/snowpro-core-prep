@@ -524,7 +524,7 @@ rest of the repo" summary.
 
 ## CI/CD (`.github/`)
 
-Three GitHub Actions workflows, all repo-wide (not scoped to one package):
+Four GitHub Actions workflows, all repo-wide (not scoped to one package):
 
 - **`workflows/ci.yml`** — four jobs on every push to `master` and every PR: `pipeline`
   (typecheck + vitest), `app` (typecheck + oxlint — no test script exists yet, see the app/
@@ -537,6 +537,17 @@ Three GitHub Actions workflows, all repo-wide (not scoped to one package):
   the image's own build-time `chown`), an implicitly-auto-created host directory would come up
   root-owned and fail `server.ts`'s `verifyDataDirWritable()` boot check — a CI-only false negative,
   not a real bug, if that step is ever removed.
+- **`workflows/release.yml`** (issue #74) — fires on any `v*` tag push (both `git push --tags` and
+  `gh release create <tag>` create that ref). Builds the same `Dockerfile` as `docker-smoke` but
+  actually pushes the result to GHCR (`ghcr.io/noobgb/snowpro-core-prep`, lowercased since
+  Docker/OCI refs reject the account's real `noobGB` casing), tagged with both the pushed tag name
+  and `latest`. This is purely an *additional* way to run the app — cutting a release doesn't
+  change or replace the primary clone-and-build path in README.md's `### Option A`, it just means a
+  second machine can `docker pull` the already-built image instead of also needing this repo's full
+  source + a local build. The package inherits this repo's private visibility by default (GHCR
+  packages have their own visibility toggle, separate from the repo's) — a puller needs `docker
+  login ghcr.io` with a token that has `read:packages` scope against this repo, same as cloning the
+  repo itself needs read access.
 - **`workflows/claude.yml`** — the Claude Code GitHub Action (`anthropics/claude-code-action@v1`),
   responding to an `@claude` mention in a PR/issue comment or review — on demand only, never
   automatically. Its `claude_args`' `--system-prompt` tells it to follow this file's conventions

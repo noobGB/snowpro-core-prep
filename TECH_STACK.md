@@ -226,10 +226,17 @@ test`. Three independent jobs here, one per package (`pipeline/`, `app/`, `mcp-s
 they aren't an npm workspace — each needs its own dependency install.
 
 **Docker smoke test** — `docker compose build` + boot + a real `curl` against `localhost:8080`
-inside CI. This isn't a deploy step (nothing here is deployed anywhere) — it's the closest thing
-this project has to an integration test, since the container-boot path (`verifyDataDirWritable()`
-then `runPipeline()` then bind the port, per `pipeline/src/server.ts`) is the one code path none
-of the unit tests exercise end-to-end.
+inside CI. This isn't a deploy step (the image it builds is thrown away, not published anywhere) —
+it's the closest thing this project has to an integration test, since the container-boot path
+(`verifyDataDirWritable()` then `runPipeline()` then bind the port, per `pipeline/src/server.ts`) is
+the one code path none of the unit tests exercise end-to-end.
+
+**Release / GHCR publish** (issue #74, `workflows/release.yml`) — the one workflow that actually
+*does* publish something: pushing a `v*` tag (via `git push --tags` or `gh release create`) builds
+the real `Dockerfile` and pushes it to GHCR, GitHub's own container registry, as
+`ghcr.io/noobgb/snowpro-core-prep:<tag>` and `:latest`. This is a second, optional way to run the
+app — `docker pull` the already-built image on another machine instead of cloning this repo and
+building locally there — not a replacement for the primary clone-and-`docker compose build` path.
 
 **Claude Code GitHub Action** (`anthropics/claude-code-action`) — a mention-driven assistant
 (`@claude` in a PR/issue comment) that can review, diagnose a CI failure, or make a fix on request,

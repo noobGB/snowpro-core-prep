@@ -1,0 +1,41 @@
+name: Release
+
+# Runs on any `vX.Y.Z`-style tag push -- both `git push --tags` and `gh release create <tag>`
+# create that ref, so this fires either way. Separate from ci.yml (push/PR against master) since
+# this builds the real GHCR-published image rather than the throwaway one docker-smoke discards.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish-image:
+    name: Build + push image to GHCR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # ghcr.io/OWNER/IMAGE must be all-lowercase (Docker rejects uppercase refs outright);
+      # github.repository preserves the account's actual casing (noobGB), so it can't be used as-is.
+      - name: Compute lowercase image name
+        id: image
+        run: echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ github.ref_name }}
+            ${{ steps.image.outputs.name }}:latest
