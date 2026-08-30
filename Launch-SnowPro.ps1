@@ -6,11 +6,32 @@
 # double-clickable .exe - see the README's "Windows one-click launcher" section for the command.
 
 # ---------------- config ----------------
-$AppUrl          = "http://localhost:8080"
+$AppUrl          = "https://localhost"
 $ComposeFile     = "docker-compose.yml"
 $WindowTitle     = "SnowPro Study App"
 $HealthTimeoutSec = 90
 # -----------------------------------------
+
+# Issue #64: the app is now served over HTTPS via Caddy's self-signed local cert (see README's
+# "Adding a user" / CLAUDE.md's HTTPS section for why there's no way around that without owning a
+# domain) -- Invoke-WebRequest below would otherwise throw a trust error and this script would
+# report "didn't confirm readiness" even though the app is genuinely up. Windows PowerShell 5.1
+# (what this script targets, per its own header comment) has no -SkipCertificateCheck parameter
+# (that's PowerShell 7+ only), so this is the standard 5.1-compatible workaround: install a
+# callback that accepts any cert for the lifetime of this process. Scoped to this script's own
+# short-lived process, not a machine-wide trust change.
+if (-not ("TrustAllCertsPolicy" -as [type])) {
+    Add-Type @"
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
+public class TrustAllCertsPolicy : ICertificatePolicy {
+    public bool CheckValidationResult(ServicePoint sp, X509Certificate cert, WebRequest req, int problem) {
+        return true;
+    }
+}
+"@
+}
+[System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
 
 $Host.UI.RawUI.WindowTitle = $WindowTitle
 

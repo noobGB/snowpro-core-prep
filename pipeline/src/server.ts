@@ -137,6 +137,13 @@ const db: Db = openDb(DB_FILE);
 console.log(`✓ Identity/progress database ready (${DB_FILE})`);
 
 const app = express();
+// Issue #64: this app now always sits behind Caddy's TLS termination in the Docker Compose
+// deployment (see docker-compose.yml/Caddyfile) -- `trust proxy: 1` tells Express to trust exactly
+// one hop's `X-Forwarded-Proto`/`X-Forwarded-For`, which is what makes `req.secure`/`req.protocol`
+// correctly report "https" for a request Caddy forwarded, rather than the plain-HTTP protocol the
+// backend actually received it over on the internal Docker network. `1`, not `true` (trust every
+// hop) -- there's exactly one reverse proxy in front of this app, no reason to trust further.
+app.set("trust proxy", 1);
 
 // --- Identity: POST /api/session, GET /api/me, POST /api/logout, POST /api/account/password[-setup],
 //     POST /api/password-reset/[request|confirm]. Email is the sole identity/lookup key (case/
@@ -198,18 +205,32 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
  *  to reach the app right now: a raw LAN IP (breaks on the next DHCP renewal/reboot) or
  *  "localhost" (meaningless to the recipient, who isn't on the admin's own machine). Falls back to
  *  the request's `Host` header when `SNOWPRO_HOST_NAME` isn't set (non-Windows hosts, or Compose
- *  not in the picture at all) — same behavior this app had before issue #62. Always `http://`,
- *  never `https://`: this app doesn't terminate TLS, matching the session cookie's own
- *  `SameSite=Lax`-no-`Secure` choice for the same plain-HTTP-on-a-LAN threat model. */
+ *  not in the picture at all) — same behavior this app had before issue #62.
+ *
+ *  Issue #64: scheme comes from `req.protocol`, which (thanks to `trust proxy` above) correctly
+ *  reports "https" for anything that arrived via Caddy, "http" for local dev run directly with no
+ *  proxy in front. No port on the `SNOWPRO_HOST_NAME` branch, deliberately -- that env var is only
+ *  ever populated by Compose, where Caddy is always in front answering on the *standard* port for
+ *  whichever scheme (443 for https, 80 for http), never this app's own internal `PORT` (8080,
+ *  reachable only from Caddy over the Docker network since issue #64 removed its host publish).
+ *  The request-based fallback branch keeps whatever port the request actually came in on, since
+ *  local dev without Docker/Caddy has no such standard-port guarantee. */
 function publicOrigin(req: express.Request): string {
   const hostOverride = process.env.SNOWPRO_HOST_NAME;
-  if (hostOverride) return `http://${hostOverride}:${PORT}`;
+  if (hostOverride) return `${req.protocol}://${hostOverride}`;
   return `${req.protocol}://${req.get("host")}`;
 }
 
-function issueSessionCookie(res: express.Response, token: string): void {
+function issueSessionCookie(req: express.Request, res: express.Response, token: string): void {
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
+    // Issue #64: dynamic, not hardcoded false -- `req.secure` is true for anything that arrived
+    // via Caddy's HTTPS (see `trust proxy` above), false for local dev run directly over plain
+    // HTTP with no proxy in front. A hardcoded `true` would silently break login in that
+    // no-Docker dev path (browsers refuse to send a Secure cookie back over plain HTTP); a
+    // hardcoded `false` (this app's behavior before #64) would needlessly weaken the cookie now
+    // that real HTTPS is the norm.
+    secure: req.secure,
     sameSite: "lax",
     path: "/",
     maxAge: SESSION_COOKIE_MAX_AGE_MS,
@@ -318,7 +339,7 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
       const migrated = migrateFlatFileProgress(db, user.id, OLD_PROGRESS_FILE);
       if (migrated) console.log(`✓ Migrated pre-upgrade progress.json into ${user.email}'s new account`);
     }
-    issueSessionCookie(res, createSession(db, user.id));
+    issueSessionCookie(req, res, createSession(db, user.id));
     res.json({ status: "known", email: user.email, name: user.name });
     return;
   }
@@ -343,7 +364,7 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
       res.json({ status: "needs_password" });
       return;
     }
-    issueSessionCookie(res, createSession(db, existing.id));
+    issueSessionCookie(req, res, createSession(db, existing.id));
     res.json({ status: "known", email: existing.email, name: existing.name });
     return;
   }
@@ -380,7 +401,7 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
       res.json({ status: "needs_password" });
       return;
     }
-    issueSessionCookie(res, createSession(db, existing.id));
+    issueSessionCookie(req, res, createSession(db, existing.id));
     res.json({ status: "known", email: existing.email, name: existing.name });
     return;
   }
@@ -401,7 +422,7 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
     return;
   }
   recordSuccessfulAttempt(email);
-  issueSessionCookie(res, createSession(db, existing.id));
+  issueSessionCookie(req, res, createSession(db, existing.id));
   res.json({ status: "known", email: existing.email, name: existing.name });
 });
 

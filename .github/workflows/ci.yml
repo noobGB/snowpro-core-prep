@@ -116,10 +116,12 @@ jobs:
         run: docker compose build
       - name: docker compose up -d
         run: docker compose up -d
+      # Issue #64: Caddy fronts the app with a self-signed local cert (tls internal) -- expected
+      # here too, not just on a real LAN, so curl's -k (insecure) is correct, not a workaround.
       - name: Wait for readiness (pipeline runs at boot before the port binds)
         run: |
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:8080/ -o /dev/null; then
+            if curl -sfk https://localhost/ -o /dev/null; then
               echo "Up after ${i} attempt(s)."
               exit 0
             fi
@@ -127,8 +129,15 @@ jobs:
           done
           echo "::error::Container never became ready within 60s"
           exit 1
-      - name: Smoke-test HTTP 200
-        run: curl --fail -sS http://localhost:8080/ -o /dev/null
+      - name: Smoke-test HTTPS 200 (through Caddy, self-signed cert)
+        run: curl --fail -sSk https://localhost/ -o /dev/null
+      - name: Smoke-test plain HTTP redirects to HTTPS
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/)
+          if [ "$code" != "301" ] && [ "$code" != "308" ]; then
+            echo "::error::Expected a redirect (301/308) from :80, got $code"
+            exit 1
+          fi
       - name: Dump container logs on failure
         if: failure()
         run: docker compose logs

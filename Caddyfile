@@ -1,0 +1,30 @@
+# Issue #64: TLS termination for the LAN app. `tls internal` is Caddy's built-in local-CA mode —
+# it generates its own root CA plus a leaf cert for whatever Host header it sees, entirely inside
+# the container, no cert files or ACME account to manage. That CA/cert pair lives in the
+# `caddy_data` named volume (see docker-compose.yml), so it survives a container restart instead
+# of regenerating (and re-triggering every browser's "new certificate" warning) every time.
+#
+# `:443` matches any Host header rather than one hardcoded name -- this app is reached by whatever
+# name/IP a given LAN device resolves it as (SNOWPRO_HOST_NAME, a raw IP, "localhost"). `on_demand`
+# is required for that: without it, `tls internal` only pre-provisions certs for hostnames actually
+# written in the Caddyfile, and a bind-only address like bare `:443` has none, so every handshake
+# fails with a TLS-layer internal error before Caddy has a cert to serve at all (confirmed the hard
+# way — silent boot success, then every connection failing below the HTTP layer). `on_demand`
+# instead asks "does a cert for whatever hostname just showed up in this ClientHello's SNI exist
+# yet? no? generate one now." Caddy's own docs flag this as resource-exhaustion risk on a
+# *publicly*-reachable instance (anyone could make it mint certs for junk hostnames all day) — not
+# a real concern here, since this app is never port-forwarded to the internet by design (same LAN-
+# only threat model as everywhere else in this app).
+:443 {
+	tls internal {
+		on_demand
+	}
+	reverse_proxy snowprep:8080
+}
+
+# Plain HTTP still works (mainly so an old bookmark/emailed http:// link from before this feature
+# shipped doesn't just error out) but only to redirect straight to HTTPS, never to serve the app
+# directly -- that's the whole point of adding TLS in the first place.
+:80 {
+	redir https://{host}{uri} permanent
+}
