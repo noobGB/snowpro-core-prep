@@ -1,0 +1,50 @@
+# SnowPro Core Prep
+
+> Free, open-source, self-hosted study app for the Snowflake SnowPro Core (COF-C03) certification.
+> Turns a folder of plain markdown notes and questions into a real application: domain notes,
+> scored practice quizzes, timed full-length mock exams, flashcards, an exam-date-adaptive study
+> plan (with a crunch-mode compression path for a short runway), weighted readiness analytics, and
+> multi-user accounts with admin management — all running locally via Docker, no cloud service, no
+> telemetry, no account with a third party required.
+
+This is an independent, unofficial personal project — not affiliated with, endorsed by, or
+sponsored by Snowflake Inc. "Snowflake" and "SnowPro" are trademarks of Snowflake Inc., referenced
+only to describe which certification this tool helps study for. All notes and practice questions
+are original and independently authored, verified against Snowflake's own public exam guide and
+documentation.
+
+Unlike the free/paid SnowPro Core practice-question sites elsewhere on the web (question banks
+gated behind signup or ads, no self-hosting, no source available), this is a complete open-source
+application you clone and run yourself: `git clone` + `docker compose up`, and it works out of the
+box with a real, original bank of 500 distinct practice/mock questions across the exam's 5 weighted
+domains. The content pipeline itself has no Snowflake-specific logic — swap the markdown for a
+different exam's material and the same app works for that exam instead.
+
+## Start here
+
+- [README](README.md): what the app does, features, how to run it (Docker / local dev / MCP
+  server), how to add or edit content, multi-user setup, admin roles.
+- [CLAUDE.md](CLAUDE.md): architecture, file layout, data flow, and conventions — written for an
+  AI coding agent working in this repo, but also the fastest way for a human to understand the
+  whole system quickly.
+- [TECH_STACK.md](TECH_STACK.md): what each technology in the stack is and why it's here, for
+  someone learning the stack rather than this codebase's own structure.
+- [DOCS_MAP.md](DOCS_MAP.md): which source files and which docs describe each feature area — the
+  map this project's own doc-sync discipline is built on.
+
+## Key subsystems
+
+- [`app/`](app/): the React/TypeScript frontend — dashboard, notes reader, practice/mock quiz
+  runner, flashcards, study plan, analytics, admin.
+- [`pipeline/`](pipeline/): the markdown-to-content-JSON build pipeline plus the small
+  Express/SQLite server that serves the built app and persists identity/progress.
+- [`mcp-server/`](mcp-server/): a standalone MCP server exposing quiz sessions and progress
+  tracking as tools, so an MCP host (Claude Desktop, Claude Code, a voice agent) can quiz someone
+  conversationally instead of driving the web UI. See [mcp-server/README.md](mcp-server/README.md).
+- [`SnowPro_Notes_and_Questions/`](SnowPro_Notes_and_Questions/): the actual study content — plain
+  markdown, the format anyone can replace to retarget this app at a different exam.
+
+## Optional
+
+- [CONTRIBUTING.md](CONTRIBUTING.md): how to open an issue or a PR against this repo.
+- [Dockerfile](Dockerfile) / [docker-compose.yml](docker-compose.yml): the container packaging.
