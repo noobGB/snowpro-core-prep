@@ -107,7 +107,7 @@ export function Dashboard() {
     ? content.sets.find((s) => s.id === progress.inProgress!.setId)
     : undefined;
 
-  const recentAttempts = [...progress.attempts].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)).slice(0, 4);
+  const recentAttempts = [...progress.attempts].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
 
   return (
     <div>
@@ -454,16 +454,11 @@ export function Dashboard() {
         </div>
 
         <div style={cardStyle}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
-            <div style={kicker}>Recent attempts</div>
-            <Link to="/analytics" style={{ fontSize: 12, color: "var(--text-muted)" }}>
-              All
-            </Link>
-          </div>
+          <div style={{ ...kicker, marginBottom: 16 }}>Recent attempts</div>
           {recentAttempts.length === 0 ? (
             <div style={{ fontSize: 13, color: "var(--text-dim)" }}>Nothing attempted yet.</div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column" }}>
+            <div style={{ maxHeight: "50vh", overflowY: "auto", display: "flex", flexDirection: "column", paddingRight: 6 }}>
               {recentAttempts.map((a) => {
                 const set = content.sets.find((s) => s.id === a.setId);
                 return (

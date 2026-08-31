@@ -15,15 +15,26 @@ export interface SlowQuestion {
   attemptId: string;
 }
 
-export function slowestQuestions(content: ContentBundle, attempts: Attempt[], limit = 10): SlowQuestion[] {
+/**
+ * One row per distinct question ever attempted (Practice or Mock) — deliberately not one row per
+ * (question, attempt) pair. A question answered more than once keeps only its most recently
+ * recorded timeSec: a retake supersedes an older recorded time for the same question rather than
+ * both coexisting, which also means a stale/corrupted value (see issue #81's original bug, where
+ * every question in an attempt was wrongly stamped with the same submit-time total) gets replaced
+ * the moment that question is answered again post-fix, instead of permanently out-ranking correct
+ * data in the sort below. Sorted slowest-first, uncapped — the caller renders this inside a
+ * scrollable container rather than truncating to a fixed count.
+ */
+export function slowestQuestions(content: ContentBundle, attempts: Attempt[]): SlowQuestion[] {
   const questionsById = new Map(content.questions.map((q) => [q.id, q]));
-  const all: SlowQuestion[] = [];
-  for (const attempt of attempts) {
+  const latestByQuestion = new Map<string, SlowQuestion>();
+  const byRecency = [...attempts].sort((a, b) => a.submittedAt.localeCompare(b.submittedAt));
+  for (const attempt of byRecency) {
     for (const [qid, answer] of Object.entries(attempt.answers)) {
       const question = questionsById.get(qid);
       if (!question || answer.timeSec <= 0) continue;
-      all.push({ questionId: qid, domainId: question.domainId, stem: question.stem, timeSec: answer.timeSec, attemptId: attempt.id });
+      latestByQuestion.set(qid, { questionId: qid, domainId: question.domainId, stem: question.stem, timeSec: answer.timeSec, attemptId: attempt.id });
     }
   }
-  return all.sort((a, b) => b.timeSec - a.timeSec).slice(0, limit);
+  return [...latestByQuestion.values()].sort((a, b) => b.timeSec - a.timeSec);
 }

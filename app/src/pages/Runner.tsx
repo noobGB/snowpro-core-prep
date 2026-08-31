@@ -92,6 +92,10 @@ export function Runner() {
       submittedRef.current = true;
       const { id, startedAt } = sessionRef.current;
       const currentAnswers = answersRef.current;
+      // Per-question timing comes from toggleOption()'s own live-recorded elapsed-at-answer
+      // value, not a fresh elapsedSec() here — that would stamp every question in the attempt
+      // with the same submit-time total instead of its own time (issue #81).
+      const inProgressAnswers = getProgress().inProgress?.answers ?? {};
 
       const answerRecords: Attempt["answers"] = {};
       let totalCredit = 0;
@@ -99,7 +103,7 @@ export function Runner() {
         const picked = currentAnswers[q.id] ?? [];
         const credit = questionCredit(q, picked);
         totalCredit += credit;
-        answerRecords[q.id] = { picked, correct: credit === 1, credit, timeSec: elapsedSec() };
+        answerRecords[q.id] = { picked, correct: credit === 1, credit, timeSec: inProgressAnswers[q.id]?.timeSec ?? 0 };
       }
 
       const attempt: Attempt = {

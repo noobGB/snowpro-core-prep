@@ -10,7 +10,8 @@
  * page instead, the best granularity the data actually supports.
  */
 
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { useContent } from "../lib/useContent";
 import { useProgress, type Attempt } from "../lib/progress";
 import type { Question } from "../lib/content";
@@ -45,8 +46,31 @@ export function Results() {
   const { attemptId } = useParams<{ attemptId: string }>();
   const progress = useProgress();
   const { content } = useContent();
+  const location = useLocation();
+  // Deep-linked from Analytics' "Time per question" chart (issue #81) as `#question-<id>` — a
+  // row there previously linked to this whole attempt with no way to land on the specific
+  // question it was about. Correct-bucket questions live inside a collapsed <details>, which
+  // doesn't render its children at all while closed, so this needs to force that section open
+  // before the scroll/focus effect below can find the element — see that effect's own comment.
+  const [correctOpen, setCorrectOpen] = useState(false);
+  const targetQuestionId = location.hash.startsWith("#question-") ? location.hash.slice("#question-".length) : null;
 
   const attempt = progress.attempts.find((a: Attempt) => a.id === attemptId);
+
+  useEffect(() => {
+    if (!targetQuestionId || !attempt) return;
+    const answer = attempt.answers[targetQuestionId];
+    const bucket = bucketFor(answer?.credit ?? 0, answer?.picked ?? []);
+    if (bucket === "correct" && !correctOpen) {
+      setCorrectOpen(true);
+      return; // re-run once the details element commits open and the card actually exists in the DOM
+    }
+    const el = document.getElementById(`question-${targetQuestionId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.focus({ preventScroll: true });
+  }, [targetQuestionId, attempt, correctOpen]);
+
   if (!attempt) {
     return <div style={{ color: "var(--text-dim)" }}>No attempt found with id {attemptId}.</div>;
   }
@@ -103,12 +127,12 @@ export function Results() {
 
       {(["incorrect", "partial", "unanswered"] as const).map((bucket) =>
         groups[bucket].length > 0 ? (
-          <ReviewSection key={bucket} bucket={bucket} questions={groups[bucket]} attempt={attempt} />
+          <ReviewSection key={bucket} bucket={bucket} questions={groups[bucket]} attempt={attempt} highlightId={targetQuestionId} />
         ) : null,
       )}
 
       {groups.correct.length > 0 && (
-        <details style={{ marginBottom: 12 }}>
+        <details open={correctOpen} onToggle={(e) => setCorrectOpen(e.currentTarget.open)} style={{ marginBottom: 12 }}>
           <summary
             style={{
               cursor: "pointer",
@@ -124,7 +148,7 @@ export function Results() {
           </summary>
           <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
             {groups.correct.map((q) => (
-              <ReviewCard key={q.id} question={q} attempt={attempt} bucket="correct" />
+              <ReviewCard key={q.id} question={q} attempt={attempt} bucket="correct" highlighted={q.id === targetQuestionId} />
             ))}
           </div>
         </details>
@@ -139,7 +163,7 @@ export function Results() {
   );
 }
 
-function ReviewSection({ bucket, questions, attempt }: { bucket: ReviewBucket; questions: Question[]; attempt: Attempt }) {
+function ReviewSection({ bucket, questions, attempt, highlightId }: { bucket: ReviewBucket; questions: Question[]; attempt: Attempt; highlightId?: string | null }) {
   return (
     <div style={{ marginBottom: 24 }}>
       <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: bucketColor[bucket], marginBottom: 12 }}>
@@ -147,19 +171,28 @@ function ReviewSection({ bucket, questions, attempt }: { bucket: ReviewBucket; q
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         {questions.map((q) => (
-          <ReviewCard key={q.id} question={q} attempt={attempt} bucket={bucket} />
+          <ReviewCard key={q.id} question={q} attempt={attempt} bucket={bucket} highlighted={q.id === highlightId} />
         ))}
       </div>
     </div>
   );
 }
 
-function ReviewCard({ question, attempt, bucket }: { question: Question; attempt: Attempt; bucket: ReviewBucket }) {
+function ReviewCard({ question, attempt, bucket, highlighted }: { question: Question; attempt: Attempt; bucket: ReviewBucket; highlighted?: boolean }) {
   const answer = attempt.answers[question.id];
   const picked = answer?.picked ?? [];
 
   return (
-    <div style={{ background: "var(--card)", border: `1px solid ${bucket === "incorrect" ? "var(--status-incorrect)" : "var(--hairline)"}`, borderRadius: "var(--radius-card)", padding: 20 }}>
+    <div
+      id={`question-${question.id}`}
+      tabIndex={-1}
+      style={{
+        background: highlighted ? "rgba(43,212,217,.06)" : "var(--card)",
+        border: `1px solid ${highlighted ? "var(--accent)" : bucket === "incorrect" ? "var(--status-incorrect)" : "var(--hairline)"}`,
+        borderRadius: "var(--radius-card)",
+        padding: 20,
+      }}
+    >
       <div className="inline-md" style={{ fontSize: 15, lineHeight: 1.6, color: "var(--text-body)", marginBottom: 14 }}>{renderInline(question.stem)}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
         {question.options.map((opt) => {

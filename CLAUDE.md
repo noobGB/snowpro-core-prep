@@ -472,6 +472,40 @@ through `src/lib/inlineMarkdown.tsx`'s `renderInline()` (real React elements for
 `.md` files and every display site (Runner, Results, Practice's missed-review, Analytics) needs to
 render it, not just Notes' pre-rendered HTML sections.
 
+**Per-question timing and Analytics' "Time per question" chart (issue #81).** `Runner.tsx`'s
+`finalize()` writes each finished question's own `timeSec` from `progress.inProgress.answers[qid]`
+— every question keeps its own real elapsed-at-answer value, not one shared elapsed-at-submit
+timestamp stamped onto all of them (the original bug: every bar in the chart showed the same
+maxed-out value because every question's `timeSec` was identical by construction). `lib/timing.ts`'s
+`slowestQuestions()` returns **one row per distinct question ever attempted** (Practice or Mock),
+not one row per (question, attempt) pair and not capped to a top N — a question answered more than
+once keeps only its most recently recorded `timeSec` (attempts processed oldest-to-newest into a
+`Map` keyed by question id, so the last write per question wins), sorted slowest-first. This means a
+retake supersedes an older recorded time for the same question automatically, including a
+stale/corrupted pre-fix value — it stops out-ranking correct data the moment that question is
+answered again, rather than sitting at a fixed top-8 forever. `Analytics.tsx`'s `TimingView` renders
+the full uncapped list inside a `maxHeight: 50vh; overflowY: auto` scrollable container (matching
+`CommandPalette.tsx`'s own scrollable-list convention) rather than truncating it, against a **fixed
+absolute scale** (`TIME_SCALE_MAX_SEC = 300`, ~4.3x the 69s pace target), not `Math.max()` of the
+values being shown — the old relative scaling made the single slowest row always render as a
+full-width bar regardless of whether the real outlier was 90s or 400s, so severity wasn't comparable
+across attempts and the pace tick's position moved every render. This matches the "Domain accuracy"
+chart directly above it on the same page, which already used a fixed 0-1000 scale with a fixed
+pass-line tick for the identical reason. A bar beyond the cap clips at 100% width with a square-cut
+trailing edge (vs. a rounded edge for a bar showing its true length); the `{timeSec}s` label next to
+every bar stays exact regardless, so clipping never loses information, it only narrows the bar's own
+job to coarse severity at a glance. Each row's
+question stem renders in full (`renderInline`, wrapped, no truncation) — matching how every other
+place in the app shows a question stem (`Results.tsx`, `Practice.tsx`'s missed-review) — instead of
+the single-line `text-overflow: ellipsis` truncation it used before, which made a row impossible to
+identify (and, being hover/`title`-only, doubly so on the mobile bottom-nav layout this repo treats
+as first-class). Each row links to `/results/<attemptId>#question-<questionId>`, not just the bare
+attempt — `Results.tsx` reads that hash, force-opens the collapsed "correct" bucket `<details>` if
+the target question landed there (a closed `<details>` doesn't render its children at all, so the
+element wouldn't exist yet for `scrollIntoView` to find), then scrolls the exact `ReviewCard` into
+view, focuses it (`tabIndex={-1}`), and gives it a distinct accent border/tint so the specific
+question the chart was about is unambiguous, not just "somewhere on this attempt's results page."
+
 **A recurring gotcha, hit twice in this codebase**: calling a store's synchronous-subscriber-
 notifying update function (e.g. `updateProgress()`) from *inside* another `setState`'s functional
 updater trips "Cannot update a component while rendering a different component." Always call
