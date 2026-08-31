@@ -60,7 +60,7 @@ export function Analytics() {
   if (!content) return <div style={{ color: "var(--text-dim)" }}>Loading…</div>;
 
   const readiness = overallReadiness(content, progress.attempts);
-  const slow = slowestQuestions(content, progress.attempts, 8);
+  const slow = slowestQuestions(content, progress.attempts);
 
   return (
     <div style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 16 }}>
@@ -206,11 +206,12 @@ function TimingView({ content, slow }: { content: ContentBundle; slow: ReturnTyp
     <div>
       <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 14, lineHeight: 1.5 }}>
         Pace for a 115-min, 100-question exam:{" "}
-        <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-body)" }}>{PACE_SEC}s</span> per question (accent tick below). Bars use
-        a fixed 0–{Math.round(TIME_SCALE_MAX_SEC / 60)}-min scale so severity is comparable across attempts, not just relative to your own
-        slowest question that day{anyClipped ? " — a bar cut off at the end means the real time was even higher, see the exact number" : ""}.
+        <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-body)" }}>{PACE_SEC}s</span> per question (accent tick below). Every
+        question you've attempted (Practice or Mock) — <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-body)" }}>{slow.length}</span>{" "}
+        so far, most recent time if you retook it, slowest first. Bars use a fixed 0–{Math.round(TIME_SCALE_MAX_SEC / 60)}-min scale so severity is
+        comparable across attempts{anyClipped ? " — a bar cut off at the end means the real time was even higher, see the exact number" : ""}.
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ maxHeight: "50vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: 16, paddingRight: 6 }}>
         {slow.map((s) => {
           const overPace = s.timeSec > PACE_SEC;
           const clipped = s.timeSec > TIME_SCALE_MAX_SEC;
