@@ -12,7 +12,7 @@ import { useContent } from "../lib/useContent";
 import { useProgress, updateProgress } from "../lib/progress";
 import { useSessionUser } from "../lib/session";
 import { overallReadiness, pickWeakestDomain } from "../lib/readiness";
-import { daysBetweenIso, defaultExamDate, isoDate, remapPlan } from "../lib/planDates";
+import { buildPlan, daysBetweenIso, defaultExamDate, isoDate } from "../lib/planDates";
 
 function daysBetween(today: Date, exam: Date): number {
   const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -48,6 +48,7 @@ export function Dashboard() {
   const progress = useProgress();
   const me = useSessionUser();
   const [openWeightTip, setOpenWeightTip] = useState<string | null>(null);
+  const [todaySkippableExpanded, setTodaySkippableExpanded] = useState(false);
 
   const today = useMemo(() => new Date(), []);
   const examDate = progress.examDate ?? (content ? defaultExamDate(content.plan) : isoDate(today));
@@ -61,6 +62,7 @@ export function Dashboard() {
     updateProgress((p) => ({
       ...p,
       plan: {
+        ...p.plan,
         checked: p.plan.checked.includes(taskId) ? p.plan.checked.filter((id) => id !== taskId) : [...p.plan.checked, taskId],
       },
     }));
@@ -85,12 +87,19 @@ export function Dashboard() {
   const nextDomainReadiness = readiness?.perDomain.find((d) => d.domainId === nextDomainId);
   const nextDomainReason = nextDomainReadiness?.scaled === null ? "Not started yet" : "Lowest score so far";
   const mockSet = content.sets.find((s) => s.kind === "mock");
-  const remappedPlan = remapPlan(content.plan, examDate);
   const todayIso = isoDate(today);
-  const todayPlan = remappedPlan.find((p) => p.displayDate === todayIso);
-  const doneCount = todayPlan?.tasks.filter((t) => progress.plan.checked.includes(t.id)).length ?? 0;
-  const planStartsIn = remappedPlan.length > 0 && todayIso < remappedPlan[0]!.displayDate
-    ? daysBetweenIso(todayIso, remappedPlan[0]!.displayDate)
+  // Issue #76: buildPlan() compresses the authored plan into a discrete "crunch mode" below a
+  // real-days-of-runway threshold, instead of remapPlan()'s old pure linear shift -- see
+  // planDates.ts's module doc comment. planStartsIn's math is untouched: in crunch mode
+  // buckets[0].displayDate can never be after today by construction, so this naturally stays null
+  // there with no special-casing needed.
+  const planResult = buildPlan(content.plan, todayIso, examDate);
+  const todayBucket = planResult.buckets.find((b) => b.displayDate === todayIso);
+  const todayMustTasks = todayBucket?.tasks.filter((t) => t.tier === "must") ?? [];
+  const todaySkippableTasks = todayBucket?.tasks.filter((t) => t.tier === "skippable") ?? [];
+  const doneCount = todayBucket?.tasks.filter((t) => progress.plan.checked.includes(t.id)).length ?? 0;
+  const planStartsIn = planResult.buckets.length > 0 && todayIso < planResult.buckets[0]!.displayDate
+    ? daysBetweenIso(todayIso, planResult.buckets[0]!.displayDate)
     : null;
 
   const hasData = progress.attempts.length > 0;
@@ -338,13 +347,13 @@ export function Dashboard() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
         <div style={cardStyle}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 16 }}>
-            <div style={kicker}>Today</div>
+            <div style={kicker}>{planResult.mode === "crunch" ? (todayBucket?.relativeLabel ?? "Today") : "Today"}</div>
             <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-dim)" }}>
-              {todayPlan ? `${doneCount} / ${todayPlan.tasks.length}` : ""}
+              {todayBucket ? `${doneCount} / ${todayBucket.tasks.length}` : ""}
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {!todayPlan && (
+            {!todayBucket && (
               <div style={{ fontSize: 13, color: "var(--text-dim)" }}>
                 {planStartsIn !== null
                   ? `Your plan starts in ${planStartsIn} ${planStartsIn === 1 ? "day" : "days"}. `
@@ -354,7 +363,7 @@ export function Dashboard() {
                 </Link>
               </div>
             )}
-            {todayPlan?.tasks.map((t) => {
+            {todayMustTasks.map((t) => {
               const on = progress.plan.checked.includes(t.id);
               return (
                 <button
@@ -390,6 +399,57 @@ export function Dashboard() {
                 </button>
               );
             })}
+            {todaySkippableTasks.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setTodaySkippableExpanded((cur) => !cur)}
+                  style={{ padding: "7px 12px", minHeight: 38, border: "1px solid var(--hairline)", background: "transparent", color: "var(--text-muted)", borderRadius: 6, fontFamily: "var(--font-mono)", fontSize: 12, cursor: "pointer", alignSelf: "flex-start" }}
+                >
+                  {todaySkippableExpanded ? "Hide skippable items" : `Show ${todaySkippableTasks.length} more ${todaySkippableTasks.length === 1 ? "item" : "items"} you can skip if short on time`}
+                </button>
+                {todaySkippableExpanded &&
+                  todaySkippableTasks.map((t) => {
+                    const on = progress.plan.checked.includes(t.id);
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        role="checkbox"
+                        aria-checked={on}
+                        onClick={() => toggleTask(t.id)}
+                        style={{ display: "flex", flexDirection: "column", gap: 4, textAlign: "left", width: "100%", minHeight: 44, padding: "11px 12px", border: "1px solid var(--hairline)", borderRadius: 6, background: "transparent", cursor: "pointer" }}
+                      >
+                        <span style={{ display: "flex", gap: 11, alignItems: "flex-start" }}>
+                          <span
+                            style={{
+                              flex: "0 0 15px",
+                              width: 15,
+                              height: 15,
+                              marginTop: 2,
+                              borderRadius: 3,
+                              border: `1px solid ${on ? "var(--accent)" : "var(--hairline-strong)"}`,
+                              background: on ? "var(--accent)" : "transparent",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: 10,
+                              color: "var(--canvas)",
+                              lineHeight: 1,
+                            }}
+                          >
+                            {on ? "✓" : ""}
+                          </span>
+                          <span style={{ fontSize: 14, lineHeight: 1.45, color: on ? "var(--text-dim)" : "var(--text-body)", textDecoration: on ? "line-through" : "none" }}>
+                            {t.text}
+                          </span>
+                        </span>
+                        {t.reason && <span style={{ fontSize: 12, color: "var(--text-dim)", marginLeft: 26 }}>{t.reason}</span>}
+                      </button>
+                    );
+                  })}
+              </>
+            )}
           </div>
         </div>
 
