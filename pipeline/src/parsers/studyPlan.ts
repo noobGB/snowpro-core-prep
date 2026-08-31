@@ -10,6 +10,12 @@
  * checking a task off is app/progress state, not content. `links` come from real markdown links
  * in the task text (translated to app routes via the same filename classification the pipeline
  * uses for discovery), plus a fallback for bare "Domain N" mentions with no link at all.
+ *
+ * A task line may end with an optional bracketed tag -- {skip-ok}, {pin-early}, {mock:1},
+ * {mock:2}, or {review} -- stripped from the displayed text and turned into `priority`/`role` on
+ * the parsed PlanTask. This feeds app/src/lib/planDates.ts's crunch-mode compression (which day
+ * groups may merge, which tasks are safe to demote when the exam is only a few real days out) —
+ * see that file and issue #76 for the full design. Untagged tasks default to `priority: "must"`.
  */
 
 import { visit } from "unist-util-visit";
@@ -22,6 +28,19 @@ import { flattenText, headingText, parseMd } from "../util/markdown.js";
 const DAY_HEADING_RE = /^\w{3} (\d{4}-\d{2}-\d{2})(?:\s*\(([^)]+)\)|\s*—\s*(.+))?$/;
 const DAY_BY_DAY_HEADING_RE = /day-by-day/i;
 const DOMAIN_MENTION_RE = /Domain\s*([1-5])/gi;
+
+// Crunch-mode compression (app/src/lib/planDates.ts) needs per-task priority/role metadata that
+// plain markdown has no room for -- an optional trailing bracketed tag on the task line carries it.
+// Curly braces don't appear anywhere else in this content (verified across
+// SnowPro_Notes_and_Questions/*.md), so this sigil can't collide with real prose or with the mock
+// exam parser's own "**N. [Dx]**" square-bracket convention.
+const TASK_TAG_RE = /\s*\{(skip-ok|pin-early|mock:1|mock:2|review)\}\s*$/i;
+const TASK_ROLE: Record<string, PlanTask["role"]> = {
+  "pin-early": "pin-early",
+  "mock:1": "mock1",
+  "mock:2": "mock2",
+  review: "review",
+};
 
 function routeForFilename(filename: string): string | null {
   const [file] = classifyFiles([filename]).classified;
@@ -51,7 +70,16 @@ function collectTasks(nodes: RootContent[], dayIndex: number): PlanTask[] {
         links.add(`/notes/${domainId(Number(m[1]))}`);
       }
 
-      tasks.push({ id: `p-${dayIndex}-${taskIndex}`, text, links: [...links] });
+      // Link extraction above runs against the full text/AST before the tag is stripped -- the
+      // trailing "{...}" tag never contains a domain mention or a link, so stripping it after
+      // doesn't affect what was already collected.
+      const tagMatch = text.match(TASK_TAG_RE);
+      const cleanText = tagMatch ? text.slice(0, tagMatch.index).trimEnd() : text;
+      const tag = tagMatch?.[1]?.toLowerCase();
+      const priority: PlanTask["priority"] = tag === "skip-ok" ? "skippable" : "must";
+      const role = tag ? TASK_ROLE[tag] : undefined;
+
+      tasks.push({ id: `p-${dayIndex}-${taskIndex}`, text: cleanText, links: [...links], priority, role });
     });
   }
 

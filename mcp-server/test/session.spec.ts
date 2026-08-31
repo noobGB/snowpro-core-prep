@@ -79,8 +79,8 @@ function fixtureBundle(): ContentBundle {
     ],
     flashcards: [],
     plan: [
-      { date: yesterday, label: "Day 1", tasks: [{ id: "p-1", text: "Read domain 1 notes", links: [] }] },
-      { date: today, label: "Day 2", tasks: [{ id: "p-2", text: "Practice domain 1", links: [] }] },
+      { date: yesterday, label: "Day 1", tasks: [{ id: "p-1", text: "Read domain 1 notes", links: [], priority: "must" }] },
+      { date: today, label: "Day 2", tasks: [{ id: "p-2", text: "Practice domain 1", links: [], priority: "must" }] },
     ],
     resources: [],
     setup: [

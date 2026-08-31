@@ -67,6 +67,15 @@ export interface PlanTask {
   id: string;
   text: string;
   links: string[];
+  /** Authored default tier, parsed from an optional trailing "{skip-ok}" tag on the source line
+   *  (see studyPlan.ts) — "must" unless tagged. Crunch-mode compression (app/src/lib/planDates.ts)
+   *  may still override this per-task at render time; this field is always the *authored* intent,
+   *  never the effective one. */
+  priority: "must" | "skippable";
+  /** Structural tag for crunch-mode's hard invariants (mock ordering/gap, pinned registration),
+   *  parsed from an optional trailing "{pin-early}"/"{mock:1}"/"{mock:2}"/"{review}" tag. Absent on
+   *  ordinary tasks. Not for display -- never rendered to the user. */
+  role?: "pin-early" | "mock1" | "mock2" | "review";
 }
 
 export interface PlanDay {
