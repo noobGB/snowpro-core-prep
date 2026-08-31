@@ -29,7 +29,8 @@ Most exam-prep tools are either a paywalled question bank or a pile of markdown 
 to actually drill yourself. This is the middle path: write your study notes and practice questions
 as plain markdown, and a content pipeline turns them into a real app — scored quizzes, a
 spaced-ish flashcard deck, readiness analytics weighted by actual exam domain weights, and a study
-plan that shifts to fit whatever exam date you set.
+plan that adapts to whatever exam date you set — spreading out over a long runway, or compressing
+into a prioritized crunch-mode checklist when the exam is only days away.
 
 It ships with a real, original set of SnowPro Core notes and a bank of 500 distinct practice/mock
 questions — 50 domain-authored practice questions plus five full-length, 100-question mock exams
@@ -62,7 +63,9 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
 - **Flashcards** — flip-card drilling with a minimal knew-it/missed-it rating that biases which
   cards resurface first next session.
 - **Study plan** — a day-by-day checklist that remaps itself against your actual exam date, not a
-  fixed calendar.
+  fixed calendar. Set your exam only a few days out and it doesn't just shift into the past —
+  **crunch mode** compresses the plan to fit, keeping every must-do task and tucking lower-priority
+  ones behind a "skip if short on time" disclosure instead of silently dropping them.
 - **Analytics** — a weighted readiness score, per-domain breakdown, and pacing feedback benchmarked
   against the real exam's time budget.
 - **Resources** — official links plus per-domain study resources, with a standing caution against
@@ -365,6 +368,18 @@ which question and line.
 `### Wed 2026-08-19 — Exam day`. These dates are **offsets**, not literal — the app remaps every
 day relative to whichever exam date you set on the Dashboard, anchored on the plan's own last day.
 Add or remove days freely; edit the checklist items under each heading same as any markdown list.
+
+A task line may end with an optional bracketed tag, stripped from the displayed text:
+
+| Tag | Meaning |
+|---|---|
+| `{skip-ok}` | Lower priority — tucked behind crunch mode's "skip if short on time" disclosure |
+| `{pin-early}` | Stays pinned to the earliest possible day even under heavy compression (e.g. exam registration) |
+| `{mock:1}` / `{mock:2}` | Marks the first/second full mock exam, so crunch mode can enforce a real review gap between them |
+| `{review}` | Marks the wrong-answer review day that has to sit between the two mocks |
+
+No tag defaults to a normal must-do task. See `app/src/lib/planDates.ts`'s module doc comment for
+exactly how these drive crunch-mode compression when the exam is only a few real days away.
 
 ### Flashcards & resources
 

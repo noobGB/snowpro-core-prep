@@ -30,6 +30,7 @@ to the rule it describes.
 | **Development workflow itself** (issue-first, branch/PR/CI-gate/merge) | N/A — process, not code | CLAUDE.md `## Development workflow` (source of truth); `CONTRIBUTING.md` (the human-facing summary of the same workflow — keep it in sync, don't let it drift into its own, different process) |
 | **Any visible UI change** | whatever page/component changed | README.md's screenshot block (`.github/screenshot-*.png` + the `![...]` line above each) — a screenshot showing stale UI is exactly the kind of doc debt this file exists to prevent, same as stale prose |
 | **System architecture (topology, not one feature)** | this table's own rows, `Dockerfile`, `docker-compose.yml`, `pipeline/src/server.ts`, `mcp-server/src/index.ts` | `docs/architecture.drawio` (+ `.drawio.png` / `-flow.svg` / `-flow.gif`, regenerate via the `drawio-skill`'s `svgflow.py` + `buildup.py --gif`) and README.md's `## Architecture` section — a new process/container/data-store or a changed request path (not a route added to an existing box) means the diagram is stale |
+| **Public-facing summary / SEO & AI-agent discoverability** | this table's own rows (it's a summary of the same subsystems) | `llms.txt` (repo root — the whole-project summary an AI agent/crawler reads first) and the GitHub repo's own topics/description (`gh repo edit`, not a file) — a new top-level subsystem (a new `*/` package, a materially new feature area) means both are stale, same trigger as the System architecture row above |
 
 ## What's deliberately not covered here
 
