@@ -19,6 +19,22 @@ import { renderInline } from "../lib/inlineMarkdown";
 
 const PASS_LINE = 750;
 const PACE_SEC = 69; // 115 min / 100 questions
+// Fixed ceiling for the timing bars' scale (issue #81 design review) -- deliberately NOT
+// `Math.max(...slow.map(timeSec))`. The old relative-to-this-set's-own-max scaling made the
+// slowest of the 8 shown always render at 100% width regardless of whether that outlier was 90s
+// or 400s, so a mildly-over-pace attempt looked exactly as alarming as a genuinely stuck one, and
+// the same real time (say 150s) would paint a different-length bar depending on what else happened
+// to be slow that day -- severity wasn't comparable across attempts, and the accent pace-tick
+// jumped to a different position on every render instead of being a fixed, learnable reference
+// point. The "Domain accuracy" chart directly above this one on the same page already uses a
+// fixed 0-1000 scale with a fixed pass-line tick for the identical reason; this brings the timing
+// chart in line with that. ~4.3x PACE_SEC: generous enough that a normal over-pace question (say
+// 120-180s) still reads as a partial, non-maxed bar, high enough that only a genuinely stalled
+// question clips. A bar beyond this clips at 100% width with a square-cut trailing edge (vs. the
+// rounded edge of a bar showing its true length) rather than rescaling the whole chart around one
+// outlier -- the `{timeSec}s` label next to every bar stays exact regardless, so no information is
+// lost, only the bar's role narrows to "coarse severity at a glance," not fine-grained comparison.
+const TIME_SCALE_MAX_SEC = 300;
 
 const cardStyle: React.CSSProperties = {
   background: "var(--card)",
@@ -183,30 +199,46 @@ function TimingView({ content, slow }: { content: ContentBundle; slow: ReturnTyp
     return <div style={{ fontSize: 13, color: "var(--text-dim)" }}>No timing data yet.</div>;
   }
 
-  const maxTime = Math.max(...slow.map((s) => s.timeSec), PACE_SEC);
+  const anyClipped = slow.some((s) => s.timeSec > TIME_SCALE_MAX_SEC);
+  const paceTickPct = (PACE_SEC / TIME_SCALE_MAX_SEC) * 100;
 
   return (
     <div>
-      <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 14 }}>
+      <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 14, lineHeight: 1.5 }}>
         Pace for a 115-min, 100-question exam:{" "}
-        <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-body)" }}>{PACE_SEC}s</span> per question (accent tick below)
+        <span style={{ fontFamily: "var(--font-mono)", color: "var(--text-body)" }}>{PACE_SEC}s</span> per question (accent tick below). Bars use
+        a fixed 0–{Math.round(TIME_SCALE_MAX_SEC / 60)}-min scale so severity is comparable across attempts, not just relative to your own
+        slowest question that day{anyClipped ? " — a bar cut off at the end means the real time was even higher, see the exact number" : ""}.
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {slow.map((s) => {
           const overPace = s.timeSec > PACE_SEC;
-          const pct = (s.timeSec / maxTime) * 100;
+          const clipped = s.timeSec > TIME_SCALE_MAX_SEC;
+          const pct = Math.min(100, (s.timeSec / TIME_SCALE_MAX_SEC) * 100);
           const domain = content.domains.find((d) => d.id === s.domainId);
           return (
-            <Link key={`${s.questionId}-${s.attemptId}`} to={`/results/${s.attemptId}`} style={{ display: "block" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12, marginBottom: 5 }}>
-                <span className="inline-md" style={{ color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{renderInline(s.stem)}</span>
-                <span style={{ fontFamily: "var(--font-mono)", color: overPace ? "var(--status-warning)" : "var(--text-dim)", flexShrink: 0 }}>
+            <Link key={`${s.questionId}-${s.attemptId}`} to={`/results/${s.attemptId}#question-${s.questionId}`} style={{ display: "block" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, fontSize: 12, marginBottom: 6 }}>
+                <span className="inline-md" style={{ color: "var(--text-muted)", lineHeight: 1.5 }}>
+                  {renderInline(s.stem)}
+                </span>
+                <span style={{ fontFamily: "var(--font-mono)", color: overPace ? "var(--status-warning)" : "var(--text-dim)", flexShrink: 0, whiteSpace: "nowrap" }}>
                   {s.timeSec}s · D{domain?.number}
                 </span>
               </div>
               <div style={{ position: "relative", height: 6, background: "var(--hairline)", borderRadius: 3 }}>
-                <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct}%`, background: overPace ? "var(--status-warning)" : "var(--text-body)", borderRadius: 3 }} />
-                <div style={{ position: "absolute", left: `${(PACE_SEC / maxTime) * 100}%`, top: -3, width: 1, height: 12, background: "var(--accent)" }} />
+                <div
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: `${pct}%`,
+                    background: overPace ? "var(--status-warning)" : "var(--text-body)",
+                    borderRadius: clipped ? "3px 0 0 3px" : 3,
+                  }}
+                />
+                <div style={{ position: "absolute", left: `${paceTickPct}%`, top: -3, width: 1, height: 12, background: "var(--accent)" }} />
               </div>
             </Link>
           );
