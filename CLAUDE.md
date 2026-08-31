@@ -184,7 +184,18 @@ that can't be read at all) throws directly.
 - **`src/parsers/studyPlan.ts`** emits each plan day's *original* source date verbatim, not a
   pre-offset one — the frontend (`app/src/lib/planDates.ts`) remaps every day by the delta between
   the plan's own last day and the live exam date, and computes a plan-length-derived default (never
-  a hardcoded calendar date) when no exam date is set yet.
+  a hardcoded calendar date) when no exam date is set yet. A task line may also end with an
+  optional bracketed tag — `{skip-ok}`, `{pin-early}`, `{mock:1}`, `{mock:2}`, or `{review}` —
+  stripped from the displayed text and turned into `priority`/`role` on the parsed `PlanTask`.
+  Issue #76: `planDates.ts`'s `buildPlan()` uses this to compress the authored week into a discrete
+  **crunch mode** whenever the real exam date leaves fewer real days than the plan has authored
+  days — `remapPlan()`'s older pure linear date-shift pushed early days into the past before the
+  user ever saw them once the real runway dropped under a week; `buildPlan()` is additive on top of
+  it (kept byte-for-byte unchanged, since `mcp-server/src/session.ts`'s `get_study_plan` tool still
+  calls it directly) rather than a replacement. Full bucketing table and the three hard invariants
+  (exam day is always review-only, Mock 2 never runs without a review gap after Mock 1 or demotes
+  to skippable, exam registration stays pinned early) are in
+  `claude_plans/snowpro-crunch-mode-study-plan.md`, not repeated here.
 - **`src/parsers/setupLog.ts`** splits `15_Hands_On_Snowflake_Setup_Log.md` into two kinds — `##
   Setup Steps` (things to actually do, in order) and `## Known Issues & Fixes` (things that went
   wrong along the way) — so a step's instructions stay a clean checklist instead of mixed with

@@ -39,14 +39,14 @@ anything branded as an exam "dump" (see `07_Resources.md`).
 
 ### Thu 2026-08-13 (tonight, ~2-3 hrs)
 - [x] Downloaded the official exam guide PDF and verified the domain files against it.
-- [ ] Read this whole plan + skim all 5 domain files once, just to see the shape of the exam.
+- [ ] Read this whole plan + skim all 5 domain files once, just to see the shape of the exam. {skip-ok}
 - [ ] Set up Snowflake University (Community login) and a 30-day free trial account for
       hands-on labs — the guide asks you to do this before studying, and you'll want the trial
-      account for scratch experimentation separate from any work Snowflake account.
+      account for scratch experimentation separate from any work Snowflake account. {skip-ok}
 - [ ] Domain 1: architecture layers (1.1), interfaces/tools (1.2), micro-partitions and virtual
       warehouse basics (1.4-1.5).
 - [ ] Register/schedule the actual exam slot if not done yet (do this early — don't let
-      logistics slip to the final day).
+      logistics slip to the final day). {pin-early}
 
 ### Fri 2026-08-14 (evening, ~2-3 hrs)
 - [ ] Domain 1: finish remaining sections — object hierarchy (1.3, don't skip Pipes/Sequences/
@@ -56,7 +56,7 @@ anything branded as an exam "dump" (see `07_Resources.md`).
       [10_Practice_Questions_Domain1_Architecture.md](10_Practice_Questions_Domain1_Architecture.md),
       timed, then review every explanation (not just the ones you missed).
 - [ ] Read [09_Official_Sample_Questions_Analysis.md](09_Official_Sample_Questions_Analysis.md)
-      once — sets expectations for exact question style before you hit a full practice exam.
+      once — sets expectations for exact question style before you hit a full practice exam. {skip-ok}
 
 ### Sat 2026-08-15 (full day — the big one)
 - [ ] Morning: Domain 4 (Performance) end to end — warehouse sizing/scaling, caching, clustering,
@@ -65,7 +65,7 @@ anything branded as an exam "dump" (see `07_Resources.md`).
       structure, resource monitors, masking/row access policies, cost management.
 - [ ] Evening: [11_Practice_Questions_Domain2_Governance.md](11_Practice_Questions_Domain2_Governance.md)
       (10 Qs) and [13_Practice_Questions_Domain4_Performance.md](13_Practice_Questions_Domain4_Performance.md)
-      (11 Qs), timed. Log results in [06_Practice_Exam_Tracker.md](06_Practice_Exam_Tracker.md).
+      (11 Qs), timed. Log results in [06_Practice_Exam_Tracker.md](06_Practice_Exam_Tracker.md). {skip-ok}
 
 ### Sun 2026-08-16 (full day)
 - [ ] Morning: Domain 3 (Data Loading/Unloading/Connectivity) end to end — stages, file formats,
@@ -73,24 +73,24 @@ anything branded as an exam "dump" (see `07_Resources.md`).
       [12_Practice_Questions_Domain3_Loading.md](12_Practice_Questions_Domain3_Loading.md) (9 Qs).
 - [ ] Afternoon: Domain 5 (Data Collaboration) — Secure Data Sharing, Marketplace, listings. Then
       [14_Practice_Questions_Domain5_Collaboration.md](14_Practice_Questions_Domain5_Collaboration.md)
-      (5 Qs).
+      (5 Qs). {skip-ok}
 - [ ] Evening: **First full-length timed practice exam** —
       [16_Mock_Exam_1.md](16_Mock_Exam_1.md), 100 questions, closed-book, timed to 115 min. Log
       score + full per-domain breakdown in the tracker. This is the single most useful diagnostic
-      you'll get all week — don't skip it or split it up.
+      you'll get all week — don't skip it or split it up. {mock:1}
 
 ### Mon 2026-08-17 (evening, ~2-3 hrs)
 - [ ] Review every wrong/guessed answer from Sunday's practice exam — for each, write in the
       relevant domain file *why* you got it wrong (misread the question vs. genuine knowledge
-      gap vs. never covered).
+      gap vs. never covered). {review}
 - [ ] Re-study whichever domain(s) scored weakest.
-- [ ] Drill [08_Cheatsheet_Key_Numbers.md](08_Cheatsheet_Key_Numbers.md).
+- [ ] Drill [08_Cheatsheet_Key_Numbers.md](08_Cheatsheet_Key_Numbers.md). {skip-ok}
 
 ### Tue 2026-08-18 (evening, ~2-3 hrs)
 - [ ] **Second full-length timed practice exam.** Compare score/domain breakdown to Sunday's —
-      confirm the weak domains actually improved.
+      confirm the weak domains actually improved. {mock:2}
 - [ ] Light targeted review only on anything still shaky. Do not cram new topics this late.
-- [ ] Re-read the cheatsheet once more before bed.
+- [ ] Re-read the cheatsheet once more before bed. {skip-ok}
 
 ### Wed 2026-08-19 — Exam day
 - [ ] Light review only: cheatsheet + your own wrong-answer notes. No new material.

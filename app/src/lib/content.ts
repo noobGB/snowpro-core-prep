@@ -63,6 +63,8 @@ export interface PlanTask {
   id: string;
   text: string;
   links: string[];
+  priority: "must" | "skippable";
+  role?: "pin-early" | "mock1" | "mock2" | "review";
 }
 
 export interface PlanDay {
