@@ -60,7 +60,17 @@ export interface ProgressState {
    *  missing `grades`, not a `flashcards` object absent entirely. Same caveat applies to any future
    *  field added under `plan`/`setup`/`settings`. */
   flashcards: { seen: string[]; lastIndex: number; grades: Record<string, "known" | "missed"> };
-  plan: { checked: string[] };
+  plan: {
+    checked: string[];
+    /** Issue #76: whether the one-time crunch-mode explainer card has been dismissed. Optional
+     *  (not just defensively-read) rather than added to every `defaultProgressState()` copy across
+     *  packages (app/pipeline/mcp-server) — `mcp-server/src/progressStore.ts`'s copy is typed
+     *  against this same `ProgressState` interface, so a *required* field here would force that
+     *  package to also know about a purely web-UI concern it has no other reason to care about.
+     *  Read as `progress.plan.crunchExplainerSeen ?? false` at every call site, same pattern as
+     *  `grades` above. */
+    crunchExplainerSeen?: boolean;
+  };
   setup: { checked: string[] };
   /** "system" defers to prefers-color-scheme (see lib/theme.ts's resolveThemeAttribute()). Default
    *  stays "dark" (not "system") so no existing persisted record sees an unrequested visual change
