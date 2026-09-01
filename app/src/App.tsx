@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Outlet, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { CommandPalette } from "./components/CommandPalette";
+import { LandingPage } from "./components/LandingPage";
 import { LoginGate } from "./components/LoginGate";
 import { ResetPasswordPage } from "./components/ResetPasswordPage";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -31,28 +32,61 @@ function ShellLayout() {
   );
 }
 
-type AuthState = "loading" | "gate" | "ready";
+type AuthState = "loading" | "landing" | "gate" | "ready";
+
+// Issue #121: set the moment a first-time public-host visitor clicks either landing-page CTA, so
+// a returning signed-out visitor goes straight to the gate afterward instead of seeing the pitch
+// on every visit. Deliberately separate from progress.ts's own localStorage key/store -- this is a
+// pure one-way dismiss flag, not app state that needs to sync with a backend.
+const LANDING_DISMISSED_KEY = "snowprep.landingDismissed";
+
+function landingAlreadyDismissed(): boolean {
+  try {
+    return localStorage.getItem(LANDING_DISMISSED_KEY) === "1";
+  } catch {
+    return false; // storage disabled/unavailable -- fall through to showing the landing page
+  }
+}
 
 export default function App() {
   const { settings } = useProgress();
-  // "loading" until GET /api/me resolves once, at boot. "gate" only when the server genuinely
-  // requires a session and this browser doesn't have one yet -- fetchMe() reports authRequired:
-  // false (not "gate") for a server that has no /api/me route at all (vite dev without the
-  // container, or the built files opened as plain static files), so the app renders exactly as it
-  // did before this feature existed in that case, no login screen. See lib/session.ts's own doc
-  // comment for the full reasoning.
+  // "loading" until GET /api/me resolves once, at boot. "landing" only for a first-time,
+  // signed-out visitor on a public hostname (issue #121, server's isPrivateNetworkHost() check --
+  // localhost counts as public there, only LAN private IPs don't). LAN visitors and anyone who's
+  // already dismissed the pitch once go straight to "gate" instead. "gate" otherwise, whenever the
+  // server genuinely requires a session and this browser doesn't have one yet. fetchMe() reports
+  // authRequired: false (not "gate"/"landing") for a server that has no /api/me route at all (vite
+  // dev without the container, or the built files opened as plain static files), so the app
+  // renders exactly as it did before this feature existed in that case, no login screen. See
+  // lib/session.ts's own doc comment for the full reasoning.
   const [authState, setAuthState] = useState<AuthState>("loading");
 
   useEffect(() => {
     let cancelled = false;
     fetchMe().then((result) => {
       if (cancelled) return;
-      setAuthState(result.authRequired && !result.user ? "gate" : "ready");
+      if (!result.authRequired || result.user) {
+        setAuthState("ready");
+        return;
+      }
+      setAuthState(result.isPublicHost && !landingAlreadyDismissed() ? "landing" : "gate");
     });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // LandingPage's own two CTAs both call this -- there's no "just looking" third option, every
+  // path off the landing page ends at the login gate, so a plain state transition (no reload
+  // needed) is enough here, unlike login()/logout()'s reload requirement.
+  function dismissLanding() {
+    try {
+      localStorage.setItem(LANDING_DISMISSED_KEY, "1");
+    } catch {
+      // Best-effort -- worst case this visitor sees the landing page again next visit.
+    }
+    setAuthState("gate");
+  }
 
   // Root-level, not AppShell-scoped: CommandPalette/SettingsPanel are siblings of the routed tree
   // here, not descendants of AppShell's div, and Runner's /session/:setId route bypasses AppShell
@@ -70,6 +104,7 @@ export default function App() {
   if (window.location.pathname === "/reset-password") return <ResetPasswordPage />;
 
   if (authState === "loading") return null; // brief -- a same-origin fetch, not worth a spinner
+  if (authState === "landing") return <LandingPage onContinue={dismissLanding} />;
   if (authState === "gate") return <LoginGate />;
 
   return (

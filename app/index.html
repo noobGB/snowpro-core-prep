@@ -3,6 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Issue #121: a shared link (LinkedIn/Slack/README) previously unfurled with no preview text
+         at all -- only <title> existed. Values mirror LandingPage.tsx's own pitch copy so the
+         unfurl and the landing page tell the same story. -->
+    <meta name="description" content="A local, offline-first study app for the Snowflake SnowPro Core (COF-C03) certification — timed mock exams, weighted readiness, flashcards, and a day-by-day plan, self-hosted with no telemetry." />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="SnowPro Core Prep" />
+    <meta property="og:description" content="A local, offline-first study app for the Snowflake SnowPro Core (COF-C03) certification — timed mock exams, weighted readiness, flashcards, and a day-by-day plan, self-hosted with no telemetry." />
+    <!-- og:image/twitter:image need an absolute URL per spec, and this file is static (no
+         server-side templating, see the theme-sync script's own comment above on why) -- hardcoded
+         to the public deployment's own domain, since that's the only host a shared link actually
+         points at; a LAN/localhost visitor never triggers a link-unfurl in the first place. -->
+    <meta property="og:image" content="https://snowpro.gauravbarwalia.com/landing-dashboard.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="SnowPro Core Prep" />
+    <meta name="twitter:description" content="A local, offline-first study app for the Snowflake SnowPro Core (COF-C03) certification — timed mock exams, weighted readiness, flashcards, and a day-by-day plan, self-hosted with no telemetry." />
+    <meta name="twitter:image" content="https://snowpro.gauravbarwalia.com/landing-dashboard.png" />
     <script>
       // Pre-paint theme sync — avoids a flash of dark UI before React mounts and App.tsx's effect
       // runs. Only "light" needs handling here: "dark"/"system"/missing/invalid data all already
