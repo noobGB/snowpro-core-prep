@@ -926,6 +926,30 @@ app.get(/^\/(?!api\/).*/, (_req, res) => {
   res.sendFile(path.join(DIST_DIR, "index.html"));
 });
 
-app.listen(PORT, () => {
+const httpServer = app.listen(PORT, () => {
   console.log(`✓ Serving on http://0.0.0.0:${PORT}  (content: ${config.outputDir}, data: ${DATA_DIR})`);
 });
+
+// Graceful shutdown: Railway (and most container orchestrators) send SIGTERM before force-killing
+// on a redeploy. Without a handler, the process just dies mid-flight -- SQLite's rollback journal
+// generally recovers cleanly from an abrupt kill (an incomplete transaction rolls back on next
+// open), so this was never a live data-loss risk, but stopping new connections and closing the DB
+// handle cleanly is the correct behavior now that real user writes happen against this process,
+// not a theoretical nicety. The 5s fallback timer covers the case where server.close() itself
+// hangs (an open keep-alive connection that never finishes) -- exits anyway rather than becoming
+// the next un-killable process Railway has to force-kill.
+function shutdown(signal: string): void {
+  console.log(`${signal} received, shutting down gracefully...`);
+  const forceExit = setTimeout(() => {
+    console.error("Graceful shutdown timed out after 5s -- forcing exit.");
+    process.exit(1);
+  }, 5000);
+  forceExit.unref();
+  httpServer.close(() => {
+    db.close();
+    clearTimeout(forceExit);
+    process.exit(0);
+  });
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
