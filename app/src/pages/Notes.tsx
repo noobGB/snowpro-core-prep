@@ -135,7 +135,7 @@ export function Notes() {
           </div>
         </div>
 
-        <aside className="desktop-only" style={{ width: 200, flexShrink: 0, position: "sticky", top: 20 }}>
+        <aside aria-label="On this page" className="desktop-only" style={{ width: 200, flexShrink: 0, position: "sticky", top: 20 }}>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--text-dim)", marginBottom: 12 }}>
             On this page
           </div>

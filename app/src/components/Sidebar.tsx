@@ -50,6 +50,7 @@ export function Sidebar() {
 
   return (
     <aside
+      aria-label="Main navigation"
       style={{
         width: 240,
         minWidth: 240,

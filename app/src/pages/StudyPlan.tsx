@@ -44,21 +44,23 @@ const disclosureButtonStyle: React.CSSProperties = {
 };
 
 function TaskRow({ task, checked, onToggle }: { task: BucketTask; checked: boolean; onToggle: () => void }) {
+  // A real <button role="checkbox"> sized to just the checkbox square, not a div wrapping the
+  // whole row -- the task text (and its Link(s), when task.links is non-empty) render as a
+  // sibling instead of a descendant. A <Link> nested inside a role="checkbox" element is a real
+  // ambiguous-semantics bug (axe's nested-interactive rule), not just a style nit: a screen reader
+  // can't cleanly separate "toggle this task" from "navigate to this note" when one is nested
+  // inside the other, and it creates two overlapping tab stops for what should be two adjacent
+  // ones. The text span keeps its own onClick=onToggle so "click anywhere on the row" behavior is
+  // unchanged; native <button> also gives Enter/Space activation for free, so the manual
+  // onKeyDown handler the old role="checkbox" div needed is gone too.
   return (
-    <div
-      role="checkbox"
-      aria-checked={checked}
-      tabIndex={0}
-      onClick={onToggle}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onToggle();
-        }
-      }}
-      style={{ display: "flex", gap: 11, alignItems: "flex-start", padding: "9px 4px", cursor: "pointer" }}
-    >
-      <span
+    <div style={{ display: "flex", gap: 11, alignItems: "flex-start", padding: "9px 4px" }}>
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={checked}
+        aria-label={task.text}
+        onClick={onToggle}
         style={{
           flex: "0 0 15px",
           width: 15,
@@ -73,11 +75,12 @@ function TaskRow({ task, checked, onToggle }: { task: BucketTask; checked: boole
           fontSize: 10,
           color: "var(--canvas)",
           padding: 0,
+          cursor: "pointer",
         }}
       >
         {checked ? "✓" : ""}
-      </span>
-      <span>
+      </button>
+      <span onClick={onToggle} style={{ cursor: "pointer" }}>
         <span style={{ fontSize: 14, lineHeight: 1.5, color: checked ? "var(--text-dim)" : "var(--text-body)", textDecoration: checked ? "line-through" : "none" }}>
           {task.text}
           {task.links.map((link) => (

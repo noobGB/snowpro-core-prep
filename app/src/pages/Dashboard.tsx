@@ -144,6 +144,7 @@ export function Dashboard() {
           <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 8 }}>
             <input
               type="date"
+              aria-label="Exam date"
               value={examDate}
               onChange={(e) => setExamDate(e.target.value)}
               style={{

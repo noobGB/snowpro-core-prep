@@ -15,10 +15,14 @@
   --text-muted: #8a8f98;
   /* #62666d measured 3.30:1 against --card / 3.45:1 against --canvas -- both fail WCAG AA's 4.5:1
      for normal-size text (this token is used at 11-13px throughout: kickers, timestamps, "Low
-     sample" warnings, the domain weight badge). #7a7e85 keeps the same cool-gray hue (channels
-     scaled up together, not shifted to neutral gray) while clearing 4.67:1 / 4.89:1 -- a real
-     margin above 4.5, not a borderline pass. */
-  --text-dim: #7a7e85;
+     sample" warnings, the domain weight badge). #7a7e85 (the 2026-08-18 fix) cleared 4.67:1/4.89:1
+     against --card/--canvas specifically, but was never re-checked against --raised/
+     --surface-subtle -- both lighter dark-theme surfaces this same token is used on for
+     badges/chips/section labels (Practice's weight badges, Setup's chips, SettingsPanel's section
+     labels) -- where it actually measured 4.40:1/4.19:1, both still failing AA. #7f838a keeps the
+     same cool-gray hue (channels scaled up together) while clearing 4.5:1 against every surface
+     this token is actually rendered on, not just two of them. */
+  --text-dim: #7f838a;
   --text-body: #d0d6e0;
   --text-heading: #ffffff;
   --accent: #2bd4d9;
@@ -76,7 +80,10 @@
     --hairline: #848a92;
     --hairline-strong: #767c84;
     --hairline-faint: #e4e6e9;
-    --text-dim: #686d75;
+    /* #676c74 (was #686d75) -- same 2026-09-02 fix as the dark-theme value above: the original
+       passed against --card/--canvas but measured 4.48:1 against --raised, just under AA's 4.5:1.
+       A one-step nudge clears every surface this token is actually used on. */
+    --text-dim: #676c74;
     --text-muted: #565b62;
     --text-body: #3a3f47;
     --text-heading: #14161a;
@@ -106,7 +113,11 @@
   --hairline: #848a92;
   --hairline-strong: #767c84;
   --hairline-faint: #e4e6e9;
-  --text-dim: #686d75;
+  /* #676c74 (was #686d75) -- same 2026-09-02 fix as the dark-theme value above and the media-query
+     copy of this same block: the original passed against --card/--canvas but measured 4.48:1
+     against --raised, just under AA's 4.5:1. A one-step nudge clears every surface this token is
+     actually used on. */
+  --text-dim: #676c74;
   --text-muted: #565b62;
   --text-body: #3a3f47;
   --text-heading: #14161a;
