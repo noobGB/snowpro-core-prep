@@ -43,6 +43,10 @@ Thumbs.db
 .env
 .env.local
 
+# Railway CLI's local project link (currently stored globally, not per-project, but guard
+# proactively in case a future CLI version writes one here)
+.railway/
+
 # Personal marketing drafts (LinkedIn/social posts) — not app content, not for the public repo
 marketing/
 
