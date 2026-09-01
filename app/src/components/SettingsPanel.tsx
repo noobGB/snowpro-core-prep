@@ -163,7 +163,12 @@ export function SettingsPanel() {
   if (!open) return null;
 
   return (
-    <div onClick={closeSettings} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "flex-start", justifyContent: "flex-end", padding: 16, zIndex: 60 }}>
+    // Opens bottom-left, next to the Settings button that triggers it (Sidebar.tsx) rather than
+    // the generic top-right corner every other full-screen overlay in this app defaults to --
+    // unlike CommandPalette (triggerable from anywhere via ⌘K, so no single "near the trigger"
+    // position makes sense for it), Settings has exactly one fixed, always-visible trigger, so
+    // anchoring near it keeps the spatial connection between click and result.
+    <div onClick={closeSettings} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "flex-end", justifyContent: "flex-start", padding: 16, zIndex: 60 }}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{ width: 320, background: "var(--raised)", border: "1px solid var(--hairline)", borderRadius: 12, padding: 20, boxShadow: "var(--overlay-shadow)" }}
