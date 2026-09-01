@@ -93,3 +93,24 @@ describe("oauth.ts", () => {
     await expect(exchangeCodeForIdentity("bad-code", "https://example.com/callback")).rejects.toThrow(/token exchange failed/);
   });
 });
+
+// Issue #129: the account-pre-hijacking fix. This is the one piece of GET /api/oauth/google/
+// callback's account-linking logic that's genuinely pure (no DB/HTTP), extracted specifically so
+// it has real unit coverage instead of "verified live" being the only claim behind it -- see
+// resolveGoogleAccountLink()'s own doc comment in oauth.ts for the full attack scenario.
+describe("resolveGoogleAccountLink()", () => {
+  it("creates a brand-new account when no row exists for this email", async () => {
+    const { resolveGoogleAccountLink } = await importFresh();
+    expect(resolveGoogleAccountLink(undefined)).toBe("create");
+  });
+
+  it("links when the existing row has no password (legacy/Google-only account)", async () => {
+    const { resolveGoogleAccountLink } = await importFresh();
+    expect(resolveGoogleAccountLink({ passwordHash: null })).toBe("link");
+  });
+
+  it("refuses when the existing row already has a password -- the account-takeover case", async () => {
+    const { resolveGoogleAccountLink } = await importFresh();
+    expect(resolveGoogleAccountLink({ passwordHash: "scrypt$fake$hash" })).toBe("refuse");
+  });
+});

@@ -126,3 +126,26 @@ export async function exchangeCodeForIdentity(code: string, redirectUri: string)
 
   return { sub: claims.sub, email: claims.email, name: claims.name ?? claims.email };
 }
+
+export type GoogleAccountLinkDecision = "create" | "link" | "refuse";
+
+/** Pure decision logic for what `GET /api/oauth/google/callback` (server.ts) should do once a
+ *  verified Google identity has no matching `google_sub` row yet, but a lookup by email might
+ *  still find an existing account. Extracted out of that route (which has no test harness -- this
+ *  repo has no supertest-equivalent, see oauth.spec.ts's own header comment) specifically so this
+ *  one branch -- the actual security-critical decision -- has real, fast unit coverage rather than
+ *  "verified live" being the only claim behind it.
+ *
+ *  Security (issue #129): self-registration (POST /api/session's `!existing` branch) creates an
+ *  account for any email string with zero ownership proof, so an attacker can pre-register
+ *  someone else's email with an attacker-chosen password before the real owner ever tries Google
+ *  sign-in. Auto-linking a freshly-verified Google identity into that row would hand the attacker's
+ *  account to the real owner's session -- so only a passwordless existing row (a legacy pre-#46
+ *  account, or one already created by an earlier Google-only signup) is safe to auto-link; a row
+ *  that already has a password is refused, forcing the real owner through the password/
+ *  forgot-password path instead, which actually proves ownership of that email/password first. */
+export function resolveGoogleAccountLink(existingByEmail: { passwordHash: string | null } | undefined): GoogleAccountLinkDecision {
+  if (!existingByEmail) return "create";
+  if (existingByEmail.passwordHash !== null) return "refuse";
+  return "link";
+}
