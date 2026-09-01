@@ -1,40 +1,30 @@
 /**
- * Tests mailer.ts's config-gating and message-building logic with nodemailer's `createTransport`
- * mocked -- unlike db.spec.ts/passwords.spec.ts's "no mocking" style, an actual SMTP round trip
- * isn't something CI can or should do; what matters here is that this module reads the right env
- * vars, refuses clearly when they're missing, and builds the right message, not that a real mail
- * server accepts it.
+ * Tests mailer.ts's config-gating and message-building logic with global `fetch` mocked — issue
+ * #95 switched this module from nodemailer/SMTP to Brevo's HTTP API, so what's mocked changed
+ * accordingly (a real Brevo API round trip isn't something CI can or should do). What matters here
+ * is that this module reads the right env vars, refuses clearly when they're missing, calls the
+ * right Brevo endpoint/headers, and builds the right message body — not that Brevo actually
+ * accepts it.
  *
- * Each test re-imports the module fresh (`vi.resetModules()`) rather than relying on Node's module
- * cache, since mailer.ts's transporter is a lazily-created module-level singleton -- reusing it
- * across tests would let an earlier test's env vars leak into a later test's assertions.
+ * Each test re-imports the module fresh (`vi.resetModules()`), matching this file's pre-#95
+ * convention — mailer.ts has no module-level singleton anymore (no lazy transporter to leak
+ * between tests the way nodemailer's did), but re-importing still isolates each test's env vars
+ * cleanly, so the pattern is kept.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const sendMailMock = vi.fn().mockResolvedValue({ messageId: "test" });
-const createTransportMock = vi.fn((_config: unknown) => ({ sendMail: sendMailMock }));
+const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 201, statusText: "Created", text: async () => "" });
 
-vi.mock("nodemailer", () => ({
-  default: { createTransport: (config: unknown) => createTransportMock(config) },
-}));
-
-const ENV_KEYS = [
-  "SNOWPRO_SMTP_HOST",
-  "SNOWPRO_SMTP_PORT",
-  "SNOWPRO_SMTP_USER",
-  "SNOWPRO_SMTP_PASS",
-  "SNOWPRO_SMTP_FROM",
-  "SNOWPRO_SMTP_SECURE",
-] as const;
+const ENV_KEYS = ["SNOWPRO_EMAIL_API_KEY", "SNOWPRO_EMAIL_FROM", "SNOWPRO_EMAIL_FROM_NAME"] as const;
 
 let savedEnv: Record<string, string | undefined>;
 
 beforeEach(() => {
   savedEnv = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
   for (const k of ENV_KEYS) delete process.env[k];
-  sendMailMock.mockClear();
-  createTransportMock.mockClear();
+  fetchMock.mockClear();
+  vi.stubGlobal("fetch", fetchMock);
   vi.resetModules();
 });
 
@@ -43,119 +33,143 @@ afterEach(() => {
     if (savedEnv[k] === undefined) delete process.env[k];
     else process.env[k] = savedEnv[k];
   }
+  vi.unstubAllGlobals();
 });
 
 async function importMailer() {
   return import("../src/mailer.js");
 }
 
+function lastRequestBody(): Record<string, unknown> {
+  const [, init] = fetchMock.mock.calls[fetchMock.mock.calls.length - 1] as [string, RequestInit];
+  return JSON.parse(init.body as string);
+}
+
 describe("isMailerConfigured", () => {
-  it("is false when no SNOWPRO_SMTP_* env vars are set", async () => {
+  it("is false when no SNOWPRO_EMAIL_* env vars are set", async () => {
     const { isMailerConfigured } = await importMailer();
     expect(isMailerConfigured()).toBe(false);
   });
 
-  it("is true once host/user/pass/from are all set", async () => {
-    process.env.SNOWPRO_SMTP_HOST = "smtp-relay.brevo.com";
-    process.env.SNOWPRO_SMTP_USER = "user@example.com";
-    process.env.SNOWPRO_SMTP_PASS = "key";
-    process.env.SNOWPRO_SMTP_FROM = "noreply@example.com";
+  it("is true once api key and from are both set", async () => {
+    process.env.SNOWPRO_EMAIL_API_KEY = "xkeysib-test";
+    process.env.SNOWPRO_EMAIL_FROM = "noreply@example.com";
     const { isMailerConfigured } = await importMailer();
     expect(isMailerConfigured()).toBe(true);
   });
 
-  it("is false when only some of the required vars are set", async () => {
-    process.env.SNOWPRO_SMTP_HOST = "smtp-relay.brevo.com";
-    process.env.SNOWPRO_SMTP_USER = "user@example.com";
+  it("is false when only one of the two required vars is set", async () => {
+    process.env.SNOWPRO_EMAIL_API_KEY = "xkeysib-test";
     const { isMailerConfigured } = await importMailer();
     expect(isMailerConfigured()).toBe(false);
   });
 });
 
 describe("sendPasswordResetEmail", () => {
-  it("throws a clear error when SMTP isn't configured, without ever calling nodemailer", async () => {
+  it("throws a clear error when email isn't configured, without ever calling fetch", async () => {
     const { sendPasswordResetEmail } = await importMailer();
     await expect(
       sendPasswordResetEmail("alice@example.com", "https://host/reset-password?token=abc"),
-    ).rejects.toThrow(/not configured/i);
-    expect(createTransportMock).not.toHaveBeenCalled();
+    ).rejects.toThrow(/configured/i);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("builds a transport from the SNOWPRO_SMTP_* env vars and sends the reset link in both bodies", async () => {
-    process.env.SNOWPRO_SMTP_HOST = "smtp-relay.brevo.com";
-    process.env.SNOWPRO_SMTP_PORT = "587";
-    process.env.SNOWPRO_SMTP_USER = "user@example.com";
-    process.env.SNOWPRO_SMTP_PASS = "generated-key";
-    process.env.SNOWPRO_SMTP_FROM = "noreply@example.com";
+  it("calls Brevo's API with the right endpoint, api-key header, and sends the reset link in both bodies", async () => {
+    process.env.SNOWPRO_EMAIL_API_KEY = "xkeysib-test";
+    process.env.SNOWPRO_EMAIL_FROM = "noreply@example.com";
     const { sendPasswordResetEmail } = await importMailer();
 
     const resetUrl = "https://192.168.1.20:8080/reset-password?token=abc123";
     await sendPasswordResetEmail("alice@example.com", resetUrl);
 
-    expect(createTransportMock).toHaveBeenCalledWith(
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.brevo.com/v3/smtp/email",
       expect.objectContaining({
-        host: "smtp-relay.brevo.com",
-        port: 587,
-        secure: false,
-        auth: { user: "user@example.com", pass: "generated-key" },
+        method: "POST",
+        headers: expect.objectContaining({ "api-key": "xkeysib-test", "Content-Type": "application/json" }),
       }),
     );
-    expect(sendMailMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        from: "noreply@example.com",
-        to: "alice@example.com",
-        text: expect.stringContaining(resetUrl),
-        html: expect.stringContaining(resetUrl),
-      }),
-    );
+    const body = lastRequestBody();
+    expect(body).toMatchObject({
+      sender: { email: "noreply@example.com", name: "SnowPro Core Prep" },
+      to: [{ email: "alice@example.com" }],
+    });
+    expect(body.textContent).toContain(resetUrl);
+    expect(body.htmlContent).toContain(resetUrl);
   });
 
-  it("SNOWPRO_SMTP_SECURE=true is parsed to secure: true", async () => {
-    process.env.SNOWPRO_SMTP_HOST = "smtp-relay.brevo.com";
-    process.env.SNOWPRO_SMTP_USER = "user@example.com";
-    process.env.SNOWPRO_SMTP_PASS = "generated-key";
-    process.env.SNOWPRO_SMTP_FROM = "noreply@example.com";
-    process.env.SNOWPRO_SMTP_SECURE = "true";
+  it("uses SNOWPRO_EMAIL_FROM_NAME as the sender name when set", async () => {
+    process.env.SNOWPRO_EMAIL_API_KEY = "xkeysib-test";
+    process.env.SNOWPRO_EMAIL_FROM = "noreply@example.com";
+    process.env.SNOWPRO_EMAIL_FROM_NAME = "Custom Sender";
     const { sendPasswordResetEmail } = await importMailer();
 
     await sendPasswordResetEmail("alice@example.com", "https://host/reset-password?token=abc");
 
-    expect(createTransportMock).toHaveBeenCalledWith(expect.objectContaining({ secure: true }));
+    expect(lastRequestBody()).toMatchObject({ sender: { name: "Custom Sender" } });
+  });
+
+  it("throws when Brevo's API responds with a non-2xx status", async () => {
+    process.env.SNOWPRO_EMAIL_API_KEY = "xkeysib-test";
+    process.env.SNOWPRO_EMAIL_FROM = "noreply@example.com";
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 401, statusText: "Unauthorized", text: async () => "bad key" });
+    const { sendPasswordResetEmail } = await importMailer();
+
+    await expect(
+      sendPasswordResetEmail("alice@example.com", "https://host/reset-password?token=abc"),
+    ).rejects.toThrow(/401/);
   });
 });
 
 // Issue #62: admin-provisioned accounts.
 describe("sendAdminCreatedAccountEmail", () => {
-  it("throws a clear error when SMTP isn't configured, without ever calling nodemailer", async () => {
+  it("throws a clear error when email isn't configured, without ever calling fetch", async () => {
     const { sendAdminCreatedAccountEmail } = await importMailer();
     await expect(
       sendAdminCreatedAccountEmail("alice@example.com", "Alice", "tempPass123", "https://host/"),
-    ).rejects.toThrow(/not configured/i);
-    expect(createTransportMock).not.toHaveBeenCalled();
+    ).rejects.toThrow(/configured/i);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("sends the temp password and login link in both the text and HTML bodies", async () => {
-    process.env.SNOWPRO_SMTP_HOST = "smtp-relay.brevo.com";
-    process.env.SNOWPRO_SMTP_USER = "user@example.com";
-    process.env.SNOWPRO_SMTP_PASS = "generated-key";
-    process.env.SNOWPRO_SMTP_FROM = "noreply@example.com";
+    process.env.SNOWPRO_EMAIL_API_KEY = "xkeysib-test";
+    process.env.SNOWPRO_EMAIL_FROM = "noreply@example.com";
     const { sendAdminCreatedAccountEmail } = await importMailer();
 
     const loginUrl = "https://192.168.1.20:8080/";
     await sendAdminCreatedAccountEmail("alice@example.com", "Alice", "correct-horse-battery-9x2", loginUrl);
 
-    expect(sendMailMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        from: "noreply@example.com",
-        to: "alice@example.com",
-        text: expect.stringContaining("correct-horse-battery-9x2"),
-        html: expect.stringContaining("correct-horse-battery-9x2"),
-      }),
-    );
-    expect(sendMailMock).toHaveBeenCalledWith(
-      expect.objectContaining({ text: expect.stringContaining(loginUrl), html: expect.stringContaining(loginUrl) }),
-    );
+    const body = lastRequestBody();
+    expect(body.to).toEqual([{ email: "alice@example.com" }]);
+    expect(body.textContent).toContain("correct-horse-battery-9x2");
+    expect(body.htmlContent).toContain("correct-horse-battery-9x2");
+    expect(body.textContent).toContain(loginUrl);
+    expect(body.htmlContent).toContain(loginUrl);
     // Also greets the recipient by name, unlike the reset email (which has no name to greet with).
-    expect(sendMailMock).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining("Alice") }));
+    expect(body.textContent).toContain("Alice");
+  });
+});
+
+// Issue #93: self-registered accounts.
+describe("sendWelcomeEmail", () => {
+  it("throws a clear error when email isn't configured, without ever calling fetch", async () => {
+    const { sendWelcomeEmail } = await importMailer();
+    await expect(sendWelcomeEmail("alice@example.com", "Alice", "https://host/")).rejects.toThrow(/configured/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("greets the recipient by name and includes the login link, no secret in the body", async () => {
+    process.env.SNOWPRO_EMAIL_API_KEY = "xkeysib-test";
+    process.env.SNOWPRO_EMAIL_FROM = "noreply@example.com";
+    const { sendWelcomeEmail } = await importMailer();
+
+    const loginUrl = "https://192.168.1.20:8080/";
+    await sendWelcomeEmail("alice@example.com", "Alice", loginUrl);
+
+    const body = lastRequestBody();
+    expect(body.to).toEqual([{ email: "alice@example.com" }]);
+    expect(body.textContent).toContain("Alice");
+    expect(body.textContent).toContain(loginUrl);
+    expect(body.htmlContent).toContain(loginUrl);
   });
 });

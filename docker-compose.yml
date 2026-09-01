@@ -15,15 +15,13 @@ services:
       SNOWPRO_CONTENT_OUTPUT: /app/content
       SNOWPRO_DATA_DIR: /data
       SNOWPRO_DIST_DIR: /app/dist
-      # Forgot-password email (issue #59) — pulled from a sibling .env file (see .env.example);
-      # left unset, POST /api/password-reset/request fails clearly with an operator-facing error
-      # instead of the app refusing to boot.
-      SNOWPRO_SMTP_HOST: ${SNOWPRO_SMTP_HOST:-}
-      SNOWPRO_SMTP_PORT: ${SNOWPRO_SMTP_PORT:-587}
-      SNOWPRO_SMTP_USER: ${SNOWPRO_SMTP_USER:-}
-      SNOWPRO_SMTP_PASS: ${SNOWPRO_SMTP_PASS:-}
-      SNOWPRO_SMTP_FROM: ${SNOWPRO_SMTP_FROM:-}
-      SNOWPRO_SMTP_SECURE: ${SNOWPRO_SMTP_SECURE:-false}
+      # Outbound email (forgot-password #59, admin-invite #62, welcome #93) via Brevo's HTTP API,
+      # not SMTP (issue #95 — Railway and similar hosts block outbound SMTP ports outright) —
+      # pulled from a sibling .env file (see .env.example); left unset, email-sending calls fail
+      # clearly with an operator-facing error instead of the app refusing to boot.
+      SNOWPRO_EMAIL_API_KEY: ${SNOWPRO_EMAIL_API_KEY:-}
+      SNOWPRO_EMAIL_FROM: ${SNOWPRO_EMAIL_FROM:-}
+      SNOWPRO_EMAIL_FROM_NAME: ${SNOWPRO_EMAIL_FROM_NAME:-}
       # Issue #70: emailed links (password reset, admin-added-user login link) always use the live
       # request's own Host header by default -- deliberately NOT an auto-detected "stable" hostname
       # (issue #68 tried Windows COMPUTERNAME / Mac-Linux HOSTNAME; real phone testing found neither

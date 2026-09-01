@@ -151,7 +151,7 @@ app.set("trust proxy", 1);
 //     whitespace-normalized, see db.ts's normalizeEmail()), name is display-only and never used for
 //     lookups. Password is required for every account as of issue #46 (a legacy pre-#46 account
 //     claims one via the "needs_password_setup" state below). Issue #59 added a real self-service
-//     reset (emailed link via SNOWPRO_SMTP_* / mailer.ts) — the operator manually clearing
+//     reset (emailed link via SNOWPRO_EMAIL_* / mailer.ts) — the operator manually clearing
 //     password_hash back to NULL is still available as a fallback for an account with no email
 //     access at all, but is no longer the only path. Sessions are a random token in an HTTP-only
 //     cookie (SameSite=Lax, Secure iff req.secure — see issueSessionCookie()). ---

@@ -42,7 +42,7 @@ docker compose down
 
 Open `http://localhost:8080` — a "Who's studying?" gate screen (email + password, name on first
 signup only) shows first; see "Identity & multi-user progress" below. Copy `.env.example` to
-`.env` (gitignored) and fill in `SNOWPRO_SMTP_*` to enable forgot-password email (issue #59) —
+`.env` (gitignored) and fill in `SNOWPRO_EMAIL_*` to enable forgot-password email (issue #59) —
 Compose picks up a sibling `.env` automatically; without it, everything else works, "Forgot
 password?" just responds with a clear "email isn't configured" error instead. `docker-compose.yml`
 mounts
@@ -346,7 +346,7 @@ comparison), not argon2/bcrypt: this app's threat model is a trusted LAN with no
 by design, not an offline GPU-cracking attacker, so a new native/WASM dependency wasn't worth it.
 `users.password_hash` is nullable and added via a `PRAGMA table_info`-guarded `ALTER TABLE` in
 `db.ts`'s `openDb()` (idempotent on every boot, matching the rest of that function). **The
-passwordless-to-password migration has no out-of-band identity proof** (no SMTP in this app) —
+passwordless-to-password migration has no out-of-band identity proof** (no email capability in this app yet, at the time this migration path was built) —
 whoever claims a legacy account's password first gets it, which is the *same* trust level the app
 already had (anyone who knew the email had full access), just closing the door going forward.
 `db.ts`'s `setPasswordIfUnset()` makes the atomic `UPDATE ... WHERE password_hash IS NULL` itself
@@ -380,10 +380,13 @@ table, 1-hour `expires_at`, any prior token for that user deleted first) and `ma
 when that env var isn't set, since the LAN address can vary). The response body is identical whether or
 not the account exists — enumeration-safe — and is sent *before* the (fire-and-forget) email send
 resolves, not after, so response latency itself can't leak account existence either. `mailer.ts`
-wraps `nodemailer` against generic `SNOWPRO_SMTP_*` env vars (see `.env.example`; initial setup
-targets Brevo's free relay, since it verifies a single sender address rather than a whole domain);
-`isMailerConfigured()` gates a clear operator-facing 500 instead of a silent failure when SMTP was
-never set up. `/reset-password` is reachable from a fully logged-out browser — `App.tsx` special-
+calls Brevo's transactional HTTP API directly (`fetch`, no SDK) against `SNOWPRO_EMAIL_*` env vars
+(see `.env.example`) — **not SMTP** (issue #95): Railway, this app's primary public-hosting target,
+blocks all outbound SMTP ports below its Pro plan, confirmed live via a real failed delivery attempt
+before this switch, not assumed. Ties the app to Brevo specifically now, trading away the old
+"any SMTP relay works" generality — a deliberate, accepted choice, not an oversight; see the
+issue for the full reasoning. `isMailerConfigured()` gates a clear operator-facing 500 instead of a
+silent failure when email was never set up. `/reset-password` is reachable from a fully logged-out browser — `App.tsx` special-
 cases that one path ahead of the normal loading/gate/ready auth-state machine, since the whole point
 of the flow is having no session yet. `db.ts`'s `completePasswordReset()` is the one-time-use guard
 (mirrors `setPasswordIfUnset()`'s "the UPDATE/DELETE itself is the guard" idiom) and, like an
@@ -413,13 +416,13 @@ for the common case.
 **Adding a user as admin (issue #62).** `POST /api/admin/users` (`{email, name}`) generates a
 temporary password (`passwords.ts`'s `generateTemporaryPassword()`), stores it hashed with
 `must_change_password = 1`, and emails it directly via `mailer.ts`'s `sendAdminCreatedAccountEmail()`
-(reusing the same `SNOWPRO_SMTP_*` config #59 added) — a temp *password*, not a link, since the new
+(reusing the same `SNOWPRO_EMAIL_*` config #59 added) — a temp *password*, not a link, since the new
 user still has to authenticate with something the first time. The email also includes a plain login
 link (the app's own root, built by `publicOrigin()` — see this file's `## Running it` section for
 `SNOWPRO_HOST_NAME`, the same helper #59's `resetUrl` uses) so the new user doesn't have to already
 know the address. Unlike the enumeration-sensitive forgot-password endpoint, this one is
 authenticated/admin-only, so its response always includes the temp password too, whether or not the
-email actually sent — a manual fallback so the action never silently strands the admin if SMTP
+email actually sent — a manual fallback so the action never silently strands the admin if email
 isn't configured or delivery fails. On that user's first login, `POST /api/session` responds
 `{status: "must_change_password"}` instead of logging them in — mirrors issue #46's legacy-claim
 state machine, but needs the temp password verified (not just replaced), so `LoginGate.tsx` reveals
