@@ -1,10 +1,11 @@
 /**
- * Mock exams — spec §6.6. A list of every mock the pipeline found, newest first, with question
- * count, domain split, and attempt history. Starting one is deliberate: the actual "states the
- * rules before the clock begins" confirmation already lives in Runner.tsx's own pre-start gate
- * (spec frames that as part of the runner's strict-timer behavior, not this list screen) — this
- * page's job is the index, attempt history, and the "resume, blocks a second one" in-progress
- * handling.
+ * Mock exams — spec §6.6. A list of every mock the pipeline found, in series order (Mock 1
+ * first — they're a deliberate difficulty progression, e.g. Mock 5 is written to be the hardest
+ * and fully original, meant to be taken last), with question count, domain split, and attempt
+ * history. Starting one is deliberate: the actual "states the rules before the clock begins"
+ * confirmation already lives in Runner.tsx's own pre-start gate (spec frames that as part of the
+ * runner's strict-timer behavior, not this list screen) — this page's job is the index, attempt
+ * history, and the "resume, blocks a second one" in-progress handling.
  */
 
 import { Link } from "react-router-dom";
@@ -31,8 +32,23 @@ export function MockExams() {
   if (error) return <div style={{ color: "var(--status-incorrect)" }}>Couldn't load content: {error.message}</div>;
   if (!content) return <div style={{ color: "var(--text-dim)" }}>Loading…</div>;
 
-  const mockSets = [...content.sets.filter((s) => s.kind === "mock")].sort((a, b) => b.id.localeCompare(a.id));
+  const mockSets = [...content.sets.filter((s) => s.kind === "mock")].sort((a, b) => a.id.localeCompare(b.id));
   const inProgressMock = progress.inProgress?.kind === "mock" ? progress.inProgress : null;
+
+  // A mock's clock runs off its own startedAt with no server-side keepalive -- Runner.tsx only
+  // auto-finalizes an expired session while that session's own page is actually mounted, so
+  // navigating away before that fires can leave inProgress pointing at a session whose time is
+  // already up. Once that's true, stop treating it as blocking: it isn't a real in-progress
+  // attempt with answers left to lose anymore. The stale slot still gets cleared for real the
+  // moment its own card is opened (Runner re-checks and finalizes immediately on mount) -- this
+  // only stops it from blocking every OTHER mock in the meantime.
+  const blockingMockExpired = (() => {
+    if (!inProgressMock) return false;
+    const blockingSet = mockSets.find((s) => s.id === inProgressMock.setId);
+    const durationMin = blockingSet?.durationMin ?? 115;
+    const elapsedMs = Date.now() - new Date(inProgressMock.startedAt).getTime();
+    return elapsedMs >= durationMin * 60 * 1000;
+  })();
 
   return (
     <div style={{ maxWidth: 760 }}>
@@ -49,7 +65,7 @@ export function MockExams() {
             .filter((a) => a.setId === set.id)
             .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
           const isThisResumable = inProgressMock?.setId === set.id;
-          const blockedByOtherMock = inProgressMock && inProgressMock.setId !== set.id;
+          const blockedByOtherMock = inProgressMock && inProgressMock.setId !== set.id && !blockingMockExpired;
           const split = set.domainSplit
             ? content.domains.map((d) => set.domainSplit![d.id] ?? 0).join("/")
             : null;
