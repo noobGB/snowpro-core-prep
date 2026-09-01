@@ -289,3 +289,136 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     padding: 16px 16px 88px !important;
   }
 }
+
+/* HomePage.tsx (issue #123) -- permanent split-screen home page for a signed-out public-host
+   visitor. Mobile: single column, DOM order (hero -> form -> features) IS the visual order, no
+   grid needed. Desktop (>=900px): named-area grid puts the form in its own right-hand column
+   spanning both rows, independent of DOM order -- source order stays hero-then-form-then-features
+   either way, which is also what keeps a screen reader's linear reading order sane (short hero,
+   then the form, not the full feature grid first) and needs no explicit `order` overrides. */
+.home-grid {
+  display: grid;
+  /* Mobile: screenshot sits AFTER the form, ahead of the feature grid -- a compact hero, then the
+     form (what a daily returning visitor actually needs), with the screenshot and feature cards as
+     secondary scroll content below. Independent of DOM order (hero -> form -> screenshot ->
+     features in the markup) since each is its own named grid item. */
+  grid-template-areas: "hero" "form" "screenshot" "features";
+  gap: 32px;
+}
+@media (min-width: 900px) {
+  .home-grid {
+    grid-template-columns: minmax(0, 1fr) 400px;
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas: "hero form" "screenshot form" "features form";
+    column-gap: 48px;
+    row-gap: 32px;
+    align-items: start;
+  }
+  /* The pitch column (hero + screenshot + feature grid) usually runs taller than the form card --
+     sticky keeps the form anchored near the top of the viewport as the pitch scrolls underneath,
+     instead of leaving it stranded with a lot of dead space below once the page grows. */
+  .home-form {
+    position: sticky;
+    top: 64px;
+  }
+}
+.home-hero {
+  grid-area: hero;
+}
+.home-form {
+  grid-area: form;
+}
+.home-screenshot {
+  grid-area: screenshot;
+  width: 100%;
+  max-width: 620px;
+  border-radius: 12px;
+  border: 1px solid var(--hairline);
+  box-shadow: var(--overlay-shadow);
+}
+.home-features {
+  grid-area: features;
+}
+
+/* A soft, low-opacity radial glow behind the hero heading -- color-mix() (not rgba(var(...))) so
+   it tracks --accent correctly across both themes without a separate light-mode override. */
+.home-hero-glow {
+  position: absolute;
+  inset: -60px -40px auto -40px;
+  height: 280px;
+  background: radial-gradient(circle at 28% 35%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 62%);
+  background-size: 160% 160%;
+  filter: blur(36px);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Standard skip-nav pattern (WCAG 2.4.1) -- off-screen until focused, then a real, visible,
+   keyboard-reachable link. */
+.skip-link {
+  position: absolute;
+  top: -48px;
+  left: 12px;
+  z-index: 20;
+  background: var(--accent);
+  color: var(--canvas);
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: top 0.15s ease;
+}
+.skip-link:focus-visible {
+  top: 12px;
+}
+
+.home-feature-card {
+  transition: transform 150ms ease, border-color 150ms ease;
+}
+.home-feature-card:hover,
+.home-feature-card:focus-within {
+  transform: translateY(-2px);
+  border-color: var(--hairline-strong);
+}
+
+.home-page button:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+/* Entrance motion + the glow's slow drift -- kept out of the default cascade entirely (not just
+   zeroed via `animation: none`) for anyone who prefers no motion, per the header comment in
+   HomePage.tsx on why this stays understated: this screen is permanent, shown on every visit. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes homeFadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .home-hero {
+    animation: homeFadeUp 350ms ease-out both;
+  }
+  .home-form {
+    animation: homeFadeUp 350ms ease-out 100ms both;
+  }
+  .home-feature-card {
+    animation: homeFadeUp 350ms ease-out both;
+  }
+
+  @keyframes homeGlowDrift {
+    0%,
+    100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+  .home-hero-glow {
+    animation: homeGlowDrift 11s ease-in-out infinite;
+  }
+}
