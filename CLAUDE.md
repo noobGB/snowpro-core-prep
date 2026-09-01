@@ -361,6 +361,16 @@ clients share a router) locks out repeated wrong-password guesses. Password requ
 800-63B-style (length only, `MIN_PASSWORD_LENGTH = 8`, no composition/rotation rules) — no
 breach-list check, since that defends against an internet-facing threat this app doesn't have.
 
+**Welcome email on self-registration (issue #93).** The `!existing` branch of `POST /api/session`
+(brand-new account, name+password submitted together per #46 above) sends `mailer.ts`'s
+`sendWelcomeEmail()` after the account is created — fire-and-forget, same pattern as #59's reset
+email below, not `sendAdminCreatedAccountEmail()`'s awaited/`emailSent`-reported pattern, since
+there's no secret to convey here (the user already knows the password they just set) and nothing
+for the client response to usefully report back. Fires for every self-registered account, including
+the first-ever/auto-admin one — no admin-specific variant, that fact is already visible in-app via
+the Admin page. Skipped entirely (not attempted, not logged as a failure) when `isMailerConfigured()`
+is false, matching every other email path in this app.
+
 **Self-service password reset (issue #59).** LoginGate's "Forgot password?" link (only shown once
 a known account's password field is revealed) → `POST /api/password-reset/request` → if the email
 has an account, `db.ts`'s `createPasswordResetToken()` mints a random token (`password_resets`

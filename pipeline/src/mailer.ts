@@ -88,6 +88,38 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string): Prom
   });
 }
 
+/** Sent when a brand-new account self-registers via `POST /api/session` (the `!existing` branch —
+ *  see server.ts). Unlike `sendAdminCreatedAccountEmail()`, there's no secret to convey here: the
+ *  user already knows their own password, they just set it in the same request that created the
+ *  account — this is purely an onboarding touch, not a credential-delivery mechanism, so it's
+ *  fire-and-forget from the caller (same pattern as `sendPasswordResetEmail()`, not awaited/
+ *  reported back to the client the way the admin-created flow's `emailSent` is, since there's
+ *  nothing actionable a failure here would need to fall back to). `loginUrl` is built the same way
+ *  as the other two functions' links — the live request's own origin, no fixed config value. */
+export async function sendWelcomeEmail(to: string, name: string, loginUrl: string): Promise<void> {
+  const config = readConfig();
+  if (!config) {
+    throw new Error("SMTP is not configured (SNOWPRO_SMTP_HOST/USER/PASS/FROM) — call isMailerConfigured() first.");
+  }
+  await getTransporter().sendMail({
+    from: config.from,
+    to,
+    subject: "Welcome to SnowPro Core Prep",
+    text:
+      `Hi ${name},\n\n` +
+      `Your SnowPro Core Prep account is ready.\n\n` +
+      `Log in any time: ${loginUrl}\n\n` +
+      `Domain notes, scored practice, timed mock exams, flashcards, and an adaptive study plan are ` +
+      `all waiting for you — happy studying!`,
+    html:
+      `<p>Hi ${name},</p>` +
+      `<p>Your SnowPro Core Prep account is ready.</p>` +
+      `<p><a href="${loginUrl}">Log in any time</a></p>` +
+      `<p>Domain notes, scored practice, timed mock exams, flashcards, and an adaptive study plan ` +
+      `are all waiting for you — happy studying!</p>`,
+  });
+}
+
 /** Issue #62: sent when an admin provisions a new account via `POST /api/admin/users`. Unlike
  *  `sendPasswordResetEmail()`, the secret here IS the password itself, not a link to set one --
  *  the admin explicitly chose a temporary-password flow, so the new user logs in with it directly
