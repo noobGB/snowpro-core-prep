@@ -66,6 +66,14 @@ const FEATURES: Feature[] = [
     body: "A day-by-day plan that remaps itself to your actual exam date, not a fixed calendar -- compresses automatically into a prioritized checklist if your exam is close.",
   },
   {
+    title: "Pacing analytics",
+    body: "A per-question timing chart flags your slowest questions and links straight back to review them, benchmarked against the real exam's own time budget.",
+  },
+  {
+    title: "Backup and reset, on your terms",
+    body: "Export your entire progress as one file, restore it on another device, or wipe the slate clean for a fresh start -- always your call, never automatic.",
+  },
+  {
     title: "Your data stays private",
     body: "Your study activity isn't sold, tracked, or shared with anyone. It's yours, and it stays that way.",
   },
