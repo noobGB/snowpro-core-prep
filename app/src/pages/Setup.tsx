@@ -142,6 +142,8 @@ function StepCard({
         <button
           type="button"
           onClick={onToggle}
+          aria-pressed={done}
+          aria-label={`Mark "${step.title}" as ${done ? "done" : "not done"}`}
           style={{
             flex: "0 0 18px",
             width: 18,
