@@ -19,7 +19,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="desktop-only">
           <Sidebar />
         </div>
-        <main className="app-main" style={{ flex: 1, minWidth: 0, padding: "32px 40px 96px", maxWidth: 1180 }}>
+        {/* margin: "0 auto" matters once the viewport is wide enough for maxWidth to actually
+            clamp this element -- without it, flex:1 fills the remaining space up to the cap but
+            stays left-aligned next to the sidebar, leaving a large dead zone on the right at
+            ultrawide widths instead of centering the content column. */}
+        <main className="app-main" style={{ flex: 1, minWidth: 0, padding: "32px 40px 96px", maxWidth: 1180, margin: "0 auto" }}>
           {children}
         </main>
       </div>

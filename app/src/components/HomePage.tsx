@@ -114,7 +114,7 @@ export function HomePage() {
           </div>
 
           <div className="home-form">
-            <AuthForm />
+            <AuthForm headingLevel="h2" />
           </div>
 
           {/* Its own grid item (not nested in .home-hero) so tokens.css can place it after the
