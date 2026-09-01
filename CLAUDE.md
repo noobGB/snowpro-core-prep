@@ -60,13 +60,18 @@ namespace guarantee, not a merge — so this changes nothing about local self-ho
 above still wins there, every time); it only matters for a cloud deploy with no such mount (e.g.
 Railway), which would otherwise boot into an empty `/content` and fail the pipeline at startup.
 
-**The `production` branch is the public Railway deploy's source — not `master`.** `master` stays
-the normal dev branch (push/PR/merge exactly as always); Railway only redeploys the public site when
-`production` is deliberately fast-forwarded/merged from `master`. Deliberate: this app now holds
-real public users' accounts/passwords/sessions once live, so auto-deploying every `master` push
-would mean a broken or WIP commit going live immediately. Operational details of the actual Railway
-deployment (project/service IDs, domain, secrets checklist) live in the separate, private
-`snowprep-deployment` project, not here — see its own `RUNBOOK.md`.
+**The public Railway deploy's source is the GHCR image, not a branch build.** Railway pulls
+`ghcr.io/noobgb/snowpro-core-prep` (built by `release.yml` on `v*` tag pushes, tagged both the exact
+version and `:latest`) rather than watching `master` for every push. Deliberate, same reasoning as
+before but a cleaner mechanism: this app now holds real public users' accounts/passwords/sessions
+once live, so the public site should only update at a point you deliberately choose — cutting a
+version tag — not on every commit to `master`. (An earlier version of this plan used a dedicated
+`production` branch for the same purpose; superseded once GHCR tag-triggered builds turned out to
+give the identical guarantee more precisely — a tag is an immutable snapshot, a branch can still be
+pushed to by accident.) **Cutting a new tag after a change is required for that change to ever reach
+the public deploy** — merging to `master` alone does nothing there. Operational details of the
+actual Railway deployment (project/service IDs, domain, secrets checklist, the GHCR pull PAT) live
+in the separate, private `snowprep-deployment` project, not here — see its own `RUNBOOK.md`.
 
 For local dev without Docker, run the pipeline and the Vite dev server directly (see each
 subsection's commands below) — `app/`'s dev server falls back to `localStorage` for progress when
