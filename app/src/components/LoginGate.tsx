@@ -271,7 +271,7 @@ export function LoginGate() {
         <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--text-dim)", marginBottom: 8 }}>
           COF-C03
         </div>
-        <h1 style={{ margin: "0 0 6px", fontSize: 22, fontWeight: 500, letterSpacing: "-0.012em", color: "var(--text-heading)" }}>
+        <h1 style={{ margin: mode === "email" ? "0 0 22px" : "0 0 6px", fontSize: 22, fontWeight: 500, letterSpacing: "-0.012em", color: "var(--text-heading)" }}>
           {mode === "new" && "What should we call you?"}
           {mode === "claim" && "Set a password to protect this account"}
           {mode === "password" && "Password"}
@@ -279,11 +279,6 @@ export function LoginGate() {
           {mode === "must_change_password" && "Set your password"}
           {mode === "email" && "Who's studying?"}
         </h1>
-        {mode === "email" && (
-          <p style={{ margin: "0 0 22px", fontSize: 13, lineHeight: 1.5, color: "var(--text-muted)" }}>
-            Your email and password keep your progress separate from anyone else on this network.
-          </p>
-        )}
         {mode === "claim" && (
           <p style={{ margin: "0 0 18px", fontSize: 13, lineHeight: 1.5, color: "var(--text-muted)" }}>
             You&rsquo;ve been using this account without a password &mdash; set one now to keep
