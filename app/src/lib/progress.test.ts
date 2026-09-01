@@ -77,17 +77,19 @@ describe("progress.ts resetProgressConfirmed (issue #107)", () => {
   });
 
   it("retries on a 409 write conflict and confirms success against the fresh revision", async () => {
+    // rev is carried in the JSON body (issue #107), not just the ETag header -- these mocks return
+    // a deliberately unhelpful/absent header value to prove the body is what's actually trusted.
     let putAttempts = 0;
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
       if (!init) {
         // GET /api/progress -- both the initial hydrate and the post-409 re-sync.
-        return { ok: true, headers: { get: () => "rev-1" }, json: async () => ({ schemaVersion: 1, attempts: [] }) } as unknown as Response;
+        return { ok: true, headers: { get: () => null }, json: async () => ({ schemaVersion: 1, attempts: [], rev: "rev-1" }) } as unknown as Response;
       }
       putAttempts++;
       if (putAttempts === 1) {
         return { ok: false, status: 409, headers: { get: () => null } } as unknown as Response;
       }
-      return { ok: true, status: 204, headers: { get: () => "rev-2" } } as unknown as Response;
+      return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ rev: "rev-2" }) } as unknown as Response;
     });
 
     const { resetProgressConfirmed, getProgress } = await importFreshWithHttpBackend(fetchMock as unknown as typeof fetch);
@@ -98,15 +100,19 @@ describe("progress.ts resetProgressConfirmed (issue #107)", () => {
     expect(getProgress().attempts).toEqual([]);
   });
 
-  it("gives up and reports failure after repeated conflicts rather than retrying forever", async () => {
+  it("gives up and reports failure after repeated conflicts rather than retrying forever, without touching local state", async () => {
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
-      if (!init) return { ok: true, headers: { get: () => "rev-1" }, json: async () => ({ schemaVersion: 1, attempts: [] }) } as unknown as Response;
+      if (!init) return { ok: true, headers: { get: () => null }, json: async () => ({ schemaVersion: 1, attempts: ["untouched"], rev: "rev-1" }) } as unknown as Response;
       return { ok: false, status: 409, headers: { get: () => null } } as unknown as Response;
     });
 
-    const { resetProgressConfirmed } = await importFreshWithHttpBackend(fetchMock as unknown as typeof fetch);
+    const { resetProgressConfirmed, getProgress } = await importFreshWithHttpBackend(fetchMock as unknown as typeof fetch);
     const ok = await resetProgressConfirmed(3);
 
     expect(ok).toBe(false);
+    // The bug this guards against: an earlier version called setState(defaultState()) on every
+    // attempt regardless of outcome, so a failed reset still silently wiped every reactive view of
+    // local state. Local state must be untouched when the reset never actually succeeds.
+    expect(getProgress().attempts).toEqual(["untouched"]);
   });
 });
