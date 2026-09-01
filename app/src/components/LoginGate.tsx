@@ -1,9 +1,18 @@
 /**
- * "Who's studying?" gate screen — email first, password required (issue #46). Rendered by App.tsx
- * in place of the routed app for as long as GET /api/me reports no session. Visual language
- * matches SettingsPanel.tsx's overlay card (same tokens, same border-radius/padding scale) rather
- * than inventing a new one, just centered on the page instead of docked to a corner, since this
- * is a full-page gate, not a dismissible panel over other content.
+ * "Who's studying?" login/signup form (issue #46) -- email first, password required. Exported as
+ * `AuthForm` so it can be mounted two different ways depending on the visitor (issue #123):
+ *  - `LoginGate` (below) wraps it in a full-screen centered card, unchanged from before -- used
+ *    for a LAN/localhost visitor, who gets a bare login screen with no marketing content at all
+ *    (see App.tsx's isPublicHost branch).
+ *  - `HomePage.tsx` mounts `AuthForm` directly as one column of a split-screen layout, alongside
+ *    pitch/feature content, for a public-host visitor -- one persistent screen, not a click-through
+ *    from a separate landing page (issue #121's one-time dismissible landing page was rejected on
+ *    exactly this point: "no disappearing home page," "one home page which includes the login
+ *    container").
+ * Either way this component's own state machine and all six modes below are completely unchanged.
+ *
+ * Visual language matches SettingsPanel.tsx's overlay card (same tokens, same border-radius/padding
+ * scale) rather than inventing a new one.
  *
  * Per issue #46, an email submit resolves to one of four distinct modes, each with its own
  * heading and copy rather than one ambiguous "a field appeared" reveal (see session.ts's login()
@@ -82,7 +91,7 @@ const labelStyle: React.CSSProperties = {
 // WCAG AA contrast (per the 2026-08-18 audit), so nothing new should add to that debt.
 const hintStyle: React.CSSProperties = { margin: "0 0 8px", fontSize: 12, lineHeight: 1.4, color: "var(--text-muted)" };
 
-export function LoginGate() {
+export function AuthForm() {
   const [email, setEmail] = useState("");
   const [mode, setMode] = useState<Mode>("email");
   const [name, setName] = useState("");
@@ -256,17 +265,6 @@ export function LoginGate() {
   }
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "var(--canvas)",
-        padding: 16,
-      }}
-    >
       <form onSubmit={submit} style={cardStyle}>
         <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--text-dim)", marginBottom: 8 }}>
           COF-C03
@@ -568,6 +566,27 @@ export function LoginGate() {
           </>
         )}
       </form>
+  );
+}
+
+/** Full-screen centered wrapper around `AuthForm` -- used for a LAN/localhost visitor (see
+ *  App.tsx's isPublicHost branch), who gets a bare login screen with no pitch content, unchanged
+ *  from before issue #123's redesign. A public-host visitor gets `AuthForm` mounted directly
+ *  inside `HomePage.tsx`'s split-screen layout instead of this wrapper. */
+export function LoginGate() {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "var(--canvas)",
+        padding: 16,
+      }}
+    >
+      <AuthForm />
     </div>
   );
 }

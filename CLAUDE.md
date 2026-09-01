@@ -402,30 +402,51 @@ and `/start` account for it — the "Continue with Google" button hides itself f
 same way it already hides for an unconfigured deployment, rather than showing a button Google will
 always reject.
 
-**First-time-visitor landing page (issue #121).** `LoginGate.tsx` used to be the *only* pre-login
-screen — a stranger reaching the deployed app from a shared link, the GitHub README, or a bare URL
-saw nothing but a "Who's studying?" form, no context on what the app does. `App.tsx`'s `AuthState`
-gained a `"landing"` state, rendering `components/LandingPage.tsx` (hero + feature highlights +
-the dashboard screenshot + two CTAs, copy mirroring README.md's own "Why this exists"/"Features"
-sections) ahead of the gate for exactly one case: a signed-out visitor on a **public** hostname who
-hasn't dismissed it before. `GET /api/me`'s 401 body now carries `isPublicHost` (reusing issue
-#119's `isPrivateNetworkHost(req.hostname)` — the very check that hides the Google button for LAN
-clients, now also deciding whether to show the pitch at all) — a LAN visitor already has context
-from whoever shared the address with them, so a marketing pitch is pure friction there and they go
-straight to `LoginGate` like before. Clicking either CTA sets a `localStorage` dismiss flag
-(`snowprep.landingDismissed`) and transitions straight to `"gate"` with no reload, so a returning
-signed-out visitor on the same browser never sees the pitch twice. The dashboard screenshot itself
-can't go through `app/public/` — that directory is repurposed as `vite.config.ts`'s `publicDir` to
-serve the content pipeline's own output (`../content`), and that directory gets wiped and rewritten
-by the pipeline on every boot (`write/output.ts`'s writer deletes and replaces its whole output
-dir) — so it lives at `src/assets/landing-dashboard.png` and a small inline Vite plugin
-(`copyLandingScreenshot()` in `vite.config.ts`) copies it to a fixed, un-hashed `dist/` root path
-at build time (`closeBundle`) and serves the same fixed path directly from source in `vite dev`
+**Permanent home page for public-host visitors (issue #123, supersedes #121's first cut).**
+`LoginGate.tsx` used to be the *only* pre-login screen — a stranger reaching the deployed app from
+a shared link, the GitHub README, or a bare URL saw nothing but a "Who's studying?" form, no
+context on what the app does. Issue #121's first attempt added a one-time landing page shown only
+on a visitor's first visit (a `localStorage` dismiss flag, a separate `"landing"` AuthState, two
+CTA buttons that clicked through to `LoginGate` as its own destination) — rejected on live review:
+"no disappearing home page," "one home page which includes the login container." Issue #123 merges
+the two into one permanent screen instead. `LoginGate.tsx`'s form logic (all six modes — email/
+new/claim/password/forgot/must_change_password — completely unchanged) is now exported as
+`AuthForm`; `LoginGate` itself is just a thin full-screen-centered wrapper around it, still used
+as-is for a LAN/localhost visitor (bare form, no pitch). `components/HomePage.tsx` mounts `AuthForm`
+directly as one column of a split-screen layout (`.home-grid` in `tokens.css`) alongside pitch
+content — hero, the dashboard screenshot, and a "what you get once you're in" feature grid — for a
+**public**-host visitor, shown on *every* visit, not dismissed after a first click. `App.tsx`'s
+`AuthState` is back down to `"loading" | "gate" | "ready"`; a new `isPublicHost` piece of state
+(from `GET /api/me`'s 401 body, reusing issue #119's `isPrivateNetworkHost(req.hostname)` — the
+same check that hides the Google button for LAN clients) decides which of `HomePage`/`LoginGate`
+the `"gate"` state renders, rather than a separate AuthState value. Desktop (≥900px): pitch left,
+`AuthForm` right (`position: sticky` so it stays in view as the taller pitch column scrolls
+underneath). Below 900px: DOM order (hero → form → screenshot → feature grid) becomes visual order
+directly via each being its own named CSS grid item — a compact hero, then the form a daily
+returning visitor actually needs, with the screenshot and feature cards as secondary scroll content
+below, not ahead of it. A "Skip to sign in" link (visually hidden until focused, `.skip-link` in
+`tokens.css`) is the first focusable element, jumping straight to the email field — needed because
+the pitch is now read by a screen reader on *every* visit, not just once. Copy is deliberately NOT
+mirrored from README.md's own "Why this exists" section, unlike #121's first pass — this in-app
+screen reads as a polished product's own entry point (no "open source" framing, no "self-hosted/no
+telemetry" infrastructure language, no arguing against other exam-prep sites); README.md keeps its
+own OSS-audience voice, the two are intentionally decoupled (see `DOCS_MAP.md`'s row for this
+topic). Entrance/hover/press animation is pure CSS (`homeFadeUp`/`homeGlowDrift` keyframes,
+`tokens.css`), no new dependency — matches this codebase's consistent hand-rolled-over-library style
+elsewhere (`oauth.ts`, `passwords.ts`) — and every keyframe is gated behind
+`prefers-reduced-motion: no-preference`, kept deliberately understated since this screen is
+permanent now (motion that's charming on visit #1 still has to be unobtrusive on visit #100). The
+dashboard screenshot itself can't go through `app/public/` — that directory is repurposed as
+`vite.config.ts`'s `publicDir` to serve the content pipeline's own output (`../content`), which gets
+wiped and rewritten by the pipeline on every boot (`write/output.ts`'s writer deletes and replaces
+its whole output dir) — so it lives at `src/assets/landing-dashboard.png` and a small inline Vite
+plugin (`copyLandingScreenshot()` in `vite.config.ts`) copies it to a fixed, un-hashed `dist/` root
+path at build time (`closeBundle`) and serves the same fixed path directly from source in `vite dev`
 (`configureServer`) — needed because `index.html`'s Open Graph `<meta property="og:image">` tag is
 literal text Vite doesn't rewrite, unlike a JS import it would hash. Same reasoning is why
-`app/index.html` also gained `description`/`og:*`/`twitter:*` meta tags in this pass — the site had
-none before, so a shared link unfurled with no preview text either, same underlying "zero context
-before the ask" problem one layer earlier.
+`app/index.html` also gained `description`/`og:*`/`twitter:*` meta tags in #121's pass — the site
+had none before, so a shared link unfurled with no preview text either; #123 rewrote that copy to
+match the new professional-product tone.
 
 **Welcome email on self-registration (issue #93).** The `!existing` branch of `POST /api/session`
 (brand-new account, name+password submitted together per #46 above) sends `mailer.ts`'s
