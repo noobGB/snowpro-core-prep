@@ -138,6 +138,14 @@ console.log(`✓ Identity/progress database ready (${DB_FILE})`);
 
 const app = express();
 
+// Railway (and any TLS-terminating reverse proxy) forwards plain HTTP internally with
+// X-Forwarded-Proto/X-Forwarded-For set. Trust exactly one hop so req.protocol/req.secure reflect
+// the real public scheme instead of always reporting plain HTTP. Inert for the local LAN
+// deployment: there's no reverse proxy in front of it (docker-compose's 8080:8080 port mapping
+// goes straight to this process), so no X-Forwarded-* header is ever present on real LAN traffic
+// and req.protocol keeps resolving from the raw socket exactly as before.
+app.set("trust proxy", 1);
+
 // --- Identity: POST /api/session, GET /api/me, POST /api/logout, POST /api/account/password[-setup],
 //     POST /api/password-reset/[request|confirm]. Email is the sole identity/lookup key (case/
 //     whitespace-normalized, see db.ts's normalizeEmail()), name is display-only and never used for
@@ -146,7 +154,7 @@ const app = express();
 //     reset (emailed link via SNOWPRO_SMTP_* / mailer.ts) — the operator manually clearing
 //     password_hash back to NULL is still available as a fallback for an account with no email
 //     access at all, but is no longer the only path. Sessions are a random token in an HTTP-only
-//     cookie (SameSite=Lax, no Secure flag — plain HTTP on a LAN). ---
+//     cookie (SameSite=Lax, Secure iff req.secure — see issueSessionCookie()). ---
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function getCookie(req: express.Request, name: string): string | undefined {
@@ -215,18 +223,21 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
  *  optional, manual, opt-in override for anyone who wants to force a specific value later — never
  *  automatic, never guessed.
  *
- *  Always `http://`, never `https://`: this app doesn't terminate TLS, matching the session
- *  cookie's own `SameSite=Lax`-no-`Secure` choice for the same plain-HTTP-on-a-LAN threat model. */
+ *  Scheme is `req.protocol`, not hardcoded — this app doesn't terminate TLS itself, but may run
+ *  behind a TLS-terminating reverse proxy (e.g. a cloud host), in which case `app.set("trust
+ *  proxy", 1)` above makes `req.protocol` reflect the real public scheme via `X-Forwarded-Proto`.
+ *  On the local LAN deployment there's no such proxy, so this still just resolves to `http`. */
 function publicOrigin(req: express.Request): string {
   const hostOverride = process.env.SNOWPRO_HOST_NAME;
-  if (hostOverride) return `http://${hostOverride}:${PORT}`;
+  if (hostOverride) return `${req.protocol}://${hostOverride}:${PORT}`;
   return `${req.protocol}://${req.get("host")}`;
 }
 
-function issueSessionCookie(res: express.Response, token: string): void {
+function issueSessionCookie(req: express.Request, res: express.Response, token: string): void {
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
+    secure: req.secure,
     path: "/",
     maxAge: SESSION_COOKIE_MAX_AGE_MS,
   });
@@ -334,7 +345,7 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
       const migrated = migrateFlatFileProgress(db, user.id, OLD_PROGRESS_FILE);
       if (migrated) console.log(`✓ Migrated pre-upgrade progress.json into ${user.email}'s new account`);
     }
-    issueSessionCookie(res, createSession(db, user.id));
+    issueSessionCookie(req, res, createSession(db, user.id));
     res.json({ status: "known", email: user.email, name: user.name });
     return;
   }
@@ -359,7 +370,7 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
       res.json({ status: "needs_password" });
       return;
     }
-    issueSessionCookie(res, createSession(db, existing.id));
+    issueSessionCookie(req, res, createSession(db, existing.id));
     res.json({ status: "known", email: existing.email, name: existing.name });
     return;
   }
@@ -396,7 +407,7 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
       res.json({ status: "needs_password" });
       return;
     }
-    issueSessionCookie(res, createSession(db, existing.id));
+    issueSessionCookie(req, res, createSession(db, existing.id));
     res.json({ status: "known", email: existing.email, name: existing.name });
     return;
   }
@@ -417,7 +428,7 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
     return;
   }
   recordSuccessfulAttempt(email);
-  issueSessionCookie(res, createSession(db, existing.id));
+  issueSessionCookie(req, res, createSession(db, existing.id));
   res.json({ status: "known", email: existing.email, name: existing.name });
 });
 
