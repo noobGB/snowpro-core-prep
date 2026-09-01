@@ -44,8 +44,10 @@ Open `http://localhost:8080` — a "Who's studying?" gate screen (email + passwo
 signup only) shows first; see "Identity & multi-user progress" below. Copy `.env.example` to
 `.env` (gitignored) and fill in `SNOWPRO_EMAIL_*` to enable forgot-password email (issue #59) —
 Compose picks up a sibling `.env` automatically; without it, everything else works, "Forgot
-password?" just responds with a clear "email isn't configured" error instead. `docker-compose.yml`
-mounts
+password?" just responds with a clear "email isn't configured" error instead. Likewise
+`SNOWPRO_GOOGLE_CLIENT_ID`/`SNOWPRO_GOOGLE_CLIENT_SECRET` (issue #113) enable the "Continue with
+Google" button on that same gate screen — unset means the button just doesn't render, not an
+error. `docker-compose.yml` mounts
 `./SnowPro_Notes_and_Questions` (the markdown source, tracked in this repo) to `/content`, and a
 local `./data/` folder to `/data` for identity + progress persistence — `data/snowprep.sqlite`, one
 row per person (gitignored — that one's genuinely personal, everyone's quiz history). Editing
@@ -365,6 +367,25 @@ their own. A lightweight in-memory `Map`-based lockout in `server.ts` (keyed by 
 clients share a router) locks out repeated wrong-password guesses. Password requirements are NIST
 800-63B-style (length only, `MIN_PASSWORD_LENGTH = 8`, no composition/rotation rules) — no
 breach-list check, since that defends against an internet-facing threat this app doesn't have.
+
+**Google OAuth login (issue #113).** An additional sign-in option alongside password login above,
+not a replacement — `LoginGate.tsx`'s "Continue with Google" button, shown only once
+`GET /api/oauth/google/available` reports `SNOWPRO_GOOGLE_CLIENT_ID`/`SNOWPRO_GOOGLE_CLIENT_SECRET`
+are both set (unconfigured means no button, not a button that 404s). Manual OAuth 2.0 Authorization
+Code flow (`pipeline/src/oauth.ts`) via native `fetch`, no `passport`/`openid-client`/`jose`
+dependency — matches this app's existing style of calling `node:crypto`/`fetch` directly for
+auth/HTTP (`passwords.ts`, `mailer.ts` above). `GET /api/oauth/google/start` redirects to Google
+with a random CSRF `state` value stashed in a short-lived cookie; `GET /api/oauth/google/callback`
+checks that state, exchanges the returned `code` for tokens server-to-server, then verifies the
+`id_token` via Google's own `tokeninfo` endpoint (trading one extra HTTPS round trip per login for
+zero JWT/JWKS-verification dependency) and rejects an unverified email or an `aud` mismatch. A
+Google-only account reuses the exact "verified identity, no local password" shape legacy pre-#46
+accounts already have (`password_hash IS NULL`) — no new concept for `SettingsPanel`/`LoginGate` to
+handle. **"New user vs. existing user" is decided entirely by this app's own `findUserByGoogleSub`/
+`findUserByEmail` lookups against its own `users` table** (new nullable `users.google_sub` column,
+same idempotent `ALTER TABLE` pattern as `password_hash`/`role`) — Google's response only proves
+identity, never touches this app's database; a Google sign-in matching an existing password-based
+account's email links to that account (`linkGoogleAccount()`) rather than creating a duplicate.
 
 **Welcome email on self-registration (issue #93).** The `!existing` branch of `POST /api/session`
 (brand-new account, name+password submitted together per #46 above) sends `mailer.ts`'s
