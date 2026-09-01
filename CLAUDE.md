@@ -53,6 +53,13 @@ markdown + `docker compose restart` picks up content changes; editing `app/`/`pi
 needs `docker compose build` again, since the frontend bundle and pipeline are baked into the
 image, not mounted.
 
+**Issue #85: `/content` is also baked into the image itself** (the `Dockerfile`'s runtime stage
+`COPY`s `SnowPro_Notes_and_Questions` to `/content`), not just supplied via the bind mount above.
+A Docker bind mount always fully shadows whatever's in the image at the same path — a mount-
+namespace guarantee, not a merge — so this changes nothing about local self-host (the bind mount
+above still wins there, every time); it only matters for a cloud deploy with no such mount (e.g.
+Railway), which would otherwise boot into an empty `/content` and fail the pipeline at startup.
+
 For local dev without Docker, run the pipeline and the Vite dev server directly (see each
 subsection's commands below) — `app/`'s dev server falls back to `localStorage` for progress when
 no `/api/progress` route exists (i.e., outside the container), so both paths work without config.
@@ -84,6 +91,18 @@ session is on `localhost`/`127.0.0.1`, since that's the one case worth catching 
 than silently baking a broken link into an email. `SNOWPRO_HOST_NAME` remains available in `.env`
 as a fully optional, manual override for anyone who wants to force a specific value later — never
 automatic, never guessed.
+
+**Issue #85: scheme is `req.protocol`, not hardcoded `http://`, and the session cookie's `Secure`
+flag now follows `req.secure`.** Both were previously always plain-HTTP-only, matching the LAN-only
+threat model this app originally assumed. `app.set("trust proxy", 1)` (set once, near the top of
+`server.ts`) makes both reflect the real public scheme when running behind a TLS-terminating
+reverse proxy (e.g. a cloud host like Railway), via the one `X-Forwarded-Proto` hop it trusts. This
+is inert on the LAN: there's no reverse proxy in front of the local deployment, so no
+`X-Forwarded-*` header is ever present on real LAN traffic, and both keep resolving from the raw
+socket exactly as before (`req.protocol` is genuinely `"http"`, the cookie's `Secure` flag is
+`false` — same behavior as the old hardcoded version, verified directly against a real LAN request,
+not just inferred). The `SNOWPRO_HOST_NAME` override branch keeps its existing `:PORT` append
+unchanged, for the same reason — only the hardcoded scheme changed, not that branch's port logic.
 
 **Windows convenience launcher.** [`Launch-SnowPro.ps1`](Launch-SnowPro.ps1) wraps the two `docker
 compose` commands above (start Docker Desktop if needed → `up -d` → wait for `localhost:8080` to
