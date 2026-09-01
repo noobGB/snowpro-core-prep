@@ -60,6 +60,14 @@ namespace guarantee, not a merge — so this changes nothing about local self-ho
 above still wins there, every time); it only matters for a cloud deploy with no such mount (e.g.
 Railway), which would otherwise boot into an empty `/content` and fail the pipeline at startup.
 
+**The `production` branch is the public Railway deploy's source — not `master`.** `master` stays
+the normal dev branch (push/PR/merge exactly as always); Railway only redeploys the public site when
+`production` is deliberately fast-forwarded/merged from `master`. Deliberate: this app now holds
+real public users' accounts/passwords/sessions once live, so auto-deploying every `master` push
+would mean a broken or WIP commit going live immediately. Operational details of the actual Railway
+deployment (project/service IDs, domain, secrets checklist) live in the separate, private
+`snowprep-deployment` project, not here — see its own `RUNBOOK.md`.
+
 For local dev without Docker, run the pipeline and the Vite dev server directly (see each
 subsection's commands below) — `app/`'s dev server falls back to `localStorage` for progress when
 no `/api/progress` route exists (i.e., outside the container), so both paths work without config.
