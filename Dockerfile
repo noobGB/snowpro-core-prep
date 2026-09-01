@@ -50,9 +50,16 @@ ENV NODE_ENV=production \
 # see pipeline/src/write/output.ts. Existing entries under /app (dist/, pipeline/) stay root-owned;
 # only the directory's own write permission changes, so the app code itself stays untamperable by
 # the runtime user.
-RUN mkdir -p /content /data /app/content \
-    && chown -R node:node /content /data \
+RUN mkdir -p /data /app/content \
+    && chown -R node:node /data \
     && chown node:node /app /app/content
+
+# Bake study content into the image so the pipeline has something to read with no /content bind
+# mount (cloud deploys, e.g. Railway). docker-compose's bind mount at the same path fully shadows
+# this at container start for local dev/self-host (a bind mount always wins over whatever's in the
+# image at that path — a mount-namespace guarantee, not a merge) — this only "activates" when
+# nothing's mounted there.
+COPY --chown=node:node SnowPro_Notes_and_Questions /content
 
 COPY --from=pipeline-deps /build/pipeline/node_modules ./pipeline/node_modules
 COPY pipeline/package.json pipeline/tsconfig.json ./pipeline/
