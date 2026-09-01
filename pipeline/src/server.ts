@@ -29,8 +29,10 @@ import {
   deleteSession,
   deleteUser,
   findUserByEmail,
+  findUserByGoogleSub,
   findUserById,
   getProgressRow,
+  linkGoogleAccount,
   listAllUsers,
   migrateFlatFileProgress,
   normalizeEmail,
@@ -49,6 +51,8 @@ import {
 } from "./db.js";
 import { hashPassword, verifyPassword, generateTemporaryPassword, MIN_PASSWORD_LENGTH } from "./passwords.js";
 import { isMailerConfigured, sendAdminCreatedAccountEmail, sendPasswordResetEmail, sendWelcomeEmail } from "./mailer.js";
+import { buildAuthUrl, exchangeCodeForIdentity, isGoogleOAuthConfigured } from "./oauth.js";
+import { randomBytes } from "node:crypto";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DATA_DIR = path.resolve(process.env.SNOWPRO_DATA_DIR ?? "/data");
@@ -429,6 +433,94 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
   recordSuccessfulAttempt(email);
   issueSessionCookie(req, res, createSession(db, existing.id));
   res.json({ status: "known", email: existing.email, name: existing.name });
+});
+
+// --- Issue #113: Google OAuth login, an additional way in alongside the password flow above --
+//     existing accounts/passwords are completely untouched. See oauth.ts's header comment for the
+//     full step-by-step mechanism; this pair of routes is steps 1-2 (start) and 4-9 (callback) of
+//     that flow. `redirectUri` is recomputed from the live request the same way publicOrigin()'s
+//     other callers do (issue #70's reasoning applies identically here) — it must match, byte for
+//     byte, one of the URIs registered for this OAuth client in Google Cloud Console. ---
+const OAUTH_STATE_COOKIE = "snowprep_oauth_state";
+const GOOGLE_CALLBACK_PATH = "/api/oauth/google/callback";
+
+/** Lets LoginGate.tsx hide the "Continue with Google" button entirely until this deployment
+ *  actually has SNOWPRO_GOOGLE_* configured, rather than showing a button that 404s on click.
+ *  Deliberately unauthenticated (same reasoning as isMailerConfigured()'s own exposure, mailer.ts)
+ *  -- a fact about this server's global config, not about any one account. */
+app.get("/api/oauth/google/available", (_req, res) => {
+  res.json({ available: isGoogleOAuthConfigured() });
+});
+
+app.get("/api/oauth/google/start", (req, res) => {
+  if (!isGoogleOAuthConfigured()) {
+    res.status(404).json({ error: "Google sign-in isn't configured on this server." });
+    return;
+  }
+  // CSRF protection (mechanism described in oauth.ts's header comment, step 2/5): a random value
+  // we generate now, stash in a short-lived cookie, and must see echoed back unchanged on the
+  // callback -- proves the callback we're about to act on really corresponds to a flow we just
+  // initiated, not one an attacker tricked the browser into starting elsewhere.
+  const state = randomBytes(32).toString("hex");
+  res.cookie(OAUTH_STATE_COOKIE, state, { httpOnly: true, sameSite: "lax", secure: req.secure, path: "/", maxAge: 10 * 60 * 1000 });
+  res.redirect(buildAuthUrl(`${publicOrigin(req)}${GOOGLE_CALLBACK_PATH}`, state));
+});
+
+app.get("/api/oauth/google/callback", async (req, res) => {
+  if (!isGoogleOAuthConfigured()) {
+    res.status(404).json({ error: "Google sign-in isn't configured on this server." });
+    return;
+  }
+  const expectedState = getCookie(req, OAUTH_STATE_COOKIE);
+  res.clearCookie(OAUTH_STATE_COOKIE, { path: "/" });
+  const { code, state } = req.query;
+  if (typeof code !== "string" || typeof state !== "string" || !expectedState || state !== expectedState) {
+    res.status(400).send("Google sign-in failed: missing or mismatched state. Please try again.");
+    return;
+  }
+
+  let identity;
+  try {
+    identity = await exchangeCodeForIdentity(code, `${publicOrigin(req)}${GOOGLE_CALLBACK_PATH}`);
+  } catch (err) {
+    console.error("Google OAuth callback failed:", err);
+    res.status(400).send("Google sign-in failed. Please try again.");
+    return;
+  }
+
+  // "New user or existing user" is decided here, entirely by our own lookups against our own
+  // users table -- Google's response above proves identity, nothing about our database (see
+  // oauth.ts's header comment for the full reasoning). Same findUserByEmail() this app's password
+  // login already uses; the only new step is the google_sub fast-path lookup first.
+  let user = findUserByGoogleSub(db, identity.sub);
+  if (!user) {
+    user = findUserByEmail(db, identity.email);
+    if (!user) {
+      const isFirstEverAccount = usersCount(db) === 0;
+      // Same first-user-becomes-admin rule as the password-signup path above (issue #62) --
+      // passwordHash omitted (stays NULL), exactly the existing "no local password" shape
+      // SettingsPanel/LoginGate already handle for legacy accounts (see the plan's design notes).
+      // A `const` here (not reassigning the outer `let user` directly) deliberately, matching how
+      // the password-signup route above does this -- TypeScript can't narrow a mutable `let`
+      // inside the sendWelcomeEmail().catch() closure below, since the closure could in principle
+      // run after a later reassignment; a `const` has no such ambiguity.
+      const newUser = upsertUserOnLogin(db, identity.email, identity.name, undefined, isFirstEverAccount ? "admin" : "user");
+      if (isFirstEverAccount) {
+        const migrated = migrateFlatFileProgress(db, newUser.id, OLD_PROGRESS_FILE);
+        if (migrated) console.log(`✓ Migrated pre-upgrade progress.json into ${newUser.email}'s new account`);
+      }
+      if (isMailerConfigured()) {
+        sendWelcomeEmail(newUser.email, newUser.name, `${publicOrigin(req)}/`).catch((err: unknown) => {
+          console.error(`Failed to send welcome email to ${newUser.email}:`, err);
+        });
+      }
+      user = newUser;
+    }
+    linkGoogleAccount(db, user.id, identity.sub);
+  }
+
+  issueSessionCookie(req, res, createSession(db, user.id));
+  res.redirect("/");
 });
 
 // --- Issue #46: account-authenticated password management. Both require a valid session (the

@@ -43,6 +43,12 @@ export interface UserRow {
    *  `completeMustChangePassword()`, and also by `setPassword()`/`setPasswordIfUnset()`/
    *  `completePasswordReset()` — any path that sets a real password satisfies this. */
   mustChangePassword: boolean;
+  /** Google's stable, permanent subject ID for this account (issue #113) -- `null` for an account
+   *  that has never signed in with Google. Not the login lookup key (email still is, via the
+   *  unique `users.email` column) -- this is a secondary identifier, recorded so a future
+   *  "disconnect Google" admin action or a support question ("how did this account sign up") has a
+   *  real answer instead of a guess. Set once, on first Google sign-in, by `linkGoogleAccount()`. */
+  googleSub: string | null;
 }
 
 export interface ProgressRow {
@@ -131,6 +137,7 @@ export function openDb(filePath: string): Db {
   addPasswordHashColumnIfMissing(db);
   addRoleColumnIfMissing(db);
   addMustChangePasswordColumnIfMissing(db);
+  addGoogleSubColumnIfMissing(db);
   return db;
 }
 
@@ -170,6 +177,18 @@ function addMustChangePasswordColumnIfMissing(db: Db): void {
   db.exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0");
 }
 
+/** Issue #113 (Google OAuth login): adds `users.google_sub`, same idempotent
+ *  `PRAGMA table_info`-guarded pattern as the columns above. Nullable, no `UNIQUE` constraint at
+ *  the SQL level -- `findUserByGoogleSub()`/`linkGoogleAccount()`'s caller (the OAuth callback
+ *  route) already has to look it up before linking, so enforcing uniqueness in application code
+ *  there is no extra work, and avoids a second migration if this column's constraints ever need to
+ *  change. */
+function addGoogleSubColumnIfMissing(db: Db): void {
+  const columns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+  if (columns.some((c) => c.name === "google_sub")) return;
+  db.exec("ALTER TABLE users ADD COLUMN google_sub TEXT");
+}
+
 /** Email is the ONLY identity lookup key (per the plan's explicit decision) — normalized by
  *  trimming and lowercasing before every insert/lookup, so "Person@Example.com" and
  *  "person@example.com" are always the same account. Lowercasing in JS rather than relying on
@@ -182,7 +201,7 @@ export function normalizeEmail(email: string): string {
 
 const USER_COLUMNS =
   "id, email, name, created_at AS createdAt, password_hash AS passwordHash, role, " +
-  "must_change_password AS mustChangePassword";
+  "must_change_password AS mustChangePassword, google_sub AS googleSub";
 
 /** better-sqlite3 returns `INTEGER` columns as raw JS numbers, not booleans — every query that
  *  selects `must_change_password AS mustChangePassword` via `USER_COLUMNS` (or the equivalent
@@ -202,6 +221,16 @@ export function findUserByEmail(db: Db, email: string): UserRow | undefined {
 
 export function findUserById(db: Db, id: number): UserRow | undefined {
   const row = db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).get(id) as RawUserRow | undefined;
+  return row && toUserRow(row);
+}
+
+/** Issue #113: the fast path for a returning Google sign-in -- once an account has been linked
+ *  (see `linkGoogleAccount()`), this finds it directly by Google's stable subject ID rather than
+ *  needing an email lookup. The OAuth callback route only falls back to `findUserByEmail()` when
+ *  this returns nothing (a Google sign-in that's either genuinely new, or linking to an existing
+ *  password-based account for the first time). */
+export function findUserByGoogleSub(db: Db, sub: string): UserRow | undefined {
+  const row = db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE google_sub = ?`).get(sub) as RawUserRow | undefined;
   return row && toUserRow(row);
 }
 
@@ -277,6 +306,7 @@ export function upsertUserOnLogin(
     passwordHash: passwordHash ?? null,
     role,
     mustChangePassword: false,
+    googleSub: null,
   };
 }
 
@@ -317,6 +347,18 @@ export function setPassword(db: Db, userId: number, passwordHash: string, keepTo
   run(userId, passwordHash, keepToken);
 }
 
+/** Issue #113: records that this account has signed in with Google -- called by the OAuth callback
+ *  route the first time a given Google account is seen for this user, whether that's a brand new
+ *  account or an existing password-based account with the same verified email. Idempotent: safe to
+ *  call again on every subsequent Google sign-in even though `findUserByGoogleSub()` will short-
+ *  circuit the caller before it gets here in that case. No `UNIQUE` constraint to violate (see
+ *  `addGoogleSubColumnIfMissing()`'s comment) -- the caller already looked this sub up via
+ *  `findUserByGoogleSub()` before deciding to link, so a second Google account colliding with an
+ *  already-linked sub isn't a case this function needs to defend against itself. */
+export function linkGoogleAccount(db: Db, userId: number, sub: string): void {
+  db.prepare("UPDATE users SET google_sub = ? WHERE id = ?").run(sub, userId);
+}
+
 /** Session tokens: 32 random bytes (256 bits), hex-encoded — plenty to be unguessable, and a plain
  *  string so it drops straight into an HTTP-only cookie with no encoding concerns. */
 export function createSession(db: Db, userId: number): string {
@@ -337,7 +379,7 @@ export function resolveSession(db: Db, token: string): UserRow | undefined {
     .prepare(
       `SELECT users.id AS id, users.email AS email, users.name AS name, users.created_at AS createdAt,
               users.password_hash AS passwordHash, users.role AS role,
-              users.must_change_password AS mustChangePassword
+              users.must_change_password AS mustChangePassword, users.google_sub AS googleSub
        FROM sessions JOIN users ON users.id = sessions.user_id
        WHERE sessions.token = ?`,
     )
@@ -446,6 +488,7 @@ export function createUserByAdmin(db: Db, email: string, name: string, passwordH
     passwordHash,
     role: "user",
     mustChangePassword: true,
+    googleSub: null,
   };
 }
 

@@ -93,6 +93,7 @@ export function LoginGate() {
   const [resetLinkSent, setResetLinkSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [googleAvailable, setGoogleAvailable] = useState(false);
   const firstRevealedFieldRef = useRef<HTMLInputElement>(null);
 
   // Focus moves into the newly-revealed field the instant a mode change happens -- every user,
@@ -100,6 +101,16 @@ export function LoginGate() {
   useEffect(() => {
     if (mode !== "email") firstRevealedFieldRef.current?.focus();
   }, [mode]);
+
+  // Issue #113: only show "Continue with Google" once this deployment actually has it configured
+  // -- otherwise the button would 404 on click for any deployment (or any moment before Gaurav's
+  // finished the separate Google Cloud Console setup) that hasn't set SNOWPRO_GOOGLE_*.
+  useEffect(() => {
+    fetch("/api/oauth/google/available")
+      .then((r) => (r.ok ? r.json() : { available: false }))
+      .then((body: { available?: boolean }) => setGoogleAvailable(body.available === true))
+      .catch(() => setGoogleAvailable(false));
+  }, []);
 
   function resetToEmailMode() {
     setMode("email");
@@ -513,6 +524,40 @@ export function LoginGate() {
           >
             {submitting ? "Continuing…" : mode === "forgot" ? "Send reset link" : "Continue"}
           </button>
+        )}
+        {mode === "email" && googleAvailable && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0" }}>
+              <div style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
+              <span style={{ fontSize: 11, color: "var(--text-dim)" }}>or</span>
+              <div style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
+            </div>
+            {/* A plain page navigation, not a fetch/submit -- issue #113's OAuth flow needs the
+                browser to actually leave this page for accounts.google.com; see oauth.ts's header
+                comment for the full mechanism. Ends in a redirect back to "/", which naturally
+                hits the same reload-driven login this app's password path already uses. */}
+            <a
+              href="/api/oauth/google/start"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "100%",
+                boxSizing: "border-box",
+                background: "transparent",
+                color: "var(--text-body)",
+                border: "1px solid var(--hairline)",
+                borderRadius: 6,
+                padding: "11px 0",
+                minHeight: 44,
+                fontSize: 14,
+                fontWeight: 500,
+                textDecoration: "none",
+              }}
+            >
+              Continue with Google
+            </a>
+          </>
         )}
       </form>
     </div>

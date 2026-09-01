@@ -29,4 +29,12 @@ services:
       # deliberately NOT a pinned static IP either (rejected -- breaks portability across networks).
       # This is purely optional: only set it if you want to force a specific value.
       SNOWPRO_HOST_NAME: ${SNOWPRO_HOST_NAME:-}
+      # Google OAuth login (issue #113) -- an additional sign-in option alongside the password
+      # flow above, not a replacement. Left unset, LoginGate.tsx's "Continue with Google" button
+      # never appears at all (GET /api/oauth/google/available reports it unavailable) rather than
+      # showing a button that would 404 on click. Get these from Google Cloud Console -> APIs &
+      # Services -> Credentials -> OAuth 2.0 Client ID (Web application), with an authorized
+      # redirect URI of http://localhost:8080/api/oauth/google/callback for local dev.
+      SNOWPRO_GOOGLE_CLIENT_ID: ${SNOWPRO_GOOGLE_CLIENT_ID:-}
+      SNOWPRO_GOOGLE_CLIENT_SECRET: ${SNOWPRO_GOOGLE_CLIENT_SECRET:-}
     restart: unless-stopped
