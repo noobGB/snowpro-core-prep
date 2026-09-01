@@ -15,7 +15,7 @@ import { useContent } from "../lib/useContent";
 import { getProgress, getStorageBackend, resetProgress, updateProgress, useProgress, type ProgressState } from "../lib/progress";
 import { isoDate } from "../lib/planDates";
 import { closeSettings, useSettingsOpen } from "../lib/settingsStore";
-import { changePassword, logout, setInitialPassword, updateName, useSessionUser } from "../lib/session";
+import { changePassword, logout, setInitialPassword, useSessionUser } from "../lib/session";
 import { PasswordInput } from "./PasswordInput";
 
 const RESET_PHRASE = "RESET";
@@ -75,9 +75,6 @@ export function SettingsPanel() {
   const [resetInput, setResetInput] = useState("");
   const [resetDone, setResetDone] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
-  const [nameInput, setNameInput] = useState(me?.name ?? "");
-  const [nameSaving, setNameSaving] = useState(false);
-  const [nameMessage, setNameMessage] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
   const [currentPasswordInput, setCurrentPasswordInput] = useState("");
@@ -86,22 +83,6 @@ export function SettingsPanel() {
   const [pwSaving, setPwSaving] = useState(false);
   const [pwMessage, setPwMessage] = useState<string | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-
-  // Keep the input in sync if `me` resolves/changes after this panel already mounted (e.g. the
-  // App-root boot probe finishing after the panel's own initial render).
-  useEffect(() => {
-    setNameInput(me?.name ?? "");
-  }, [me?.name]);
-
-  const saveName = async () => {
-    const trimmed = nameInput.trim();
-    if (!trimmed || trimmed === me?.name) return;
-    setNameSaving(true);
-    setNameMessage(null);
-    const result = await updateName(trimmed);
-    setNameSaving(false);
-    setNameMessage(result.ok ? "Name updated." : result.error);
-  };
 
   // Issue #46: "Set a password" for a legacy pre-#46 account (me.hasPassword false, no current
   // password needed -- the live session already proves ownership) or "Change password" for one
@@ -199,35 +180,13 @@ export function SettingsPanel() {
         {me && (
           <div style={{ marginBottom: 18 }}>
             <label style={{ display: "block", fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>Profile</label>
-            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-              <input
-                type="text"
-                value={nameInput}
-                maxLength={100}
-                onChange={(e) => setNameInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") saveName();
-                }}
-                style={{ flex: 1, boxSizing: "border-box", background: "var(--card)", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-body)", fontSize: 13, padding: "8px 10px", minHeight: 36 }}
-              />
-              <button
-                type="button"
-                disabled={nameSaving || !nameInput.trim() || nameInput.trim() === me.name}
-                onClick={saveName}
-                style={{
-                  background: "var(--card)",
-                  border: "1px solid var(--hairline)",
-                  borderRadius: 6,
-                  color: nameInput.trim() && nameInput.trim() !== me.name ? "var(--text-body)" : "var(--text-dim)",
-                  fontSize: 13,
-                  padding: "8px 14px",
-                  cursor: nameSaving || !nameInput.trim() || nameInput.trim() === me.name ? "not-allowed" : "pointer",
-                }}
-              >
-                Save
-              </button>
-            </div>
-            {nameMessage && <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 8 }}>{nameMessage}</div>}
+            {/* Both read-only — name and email are shown so someone who forgets which identity
+                they're signed in as can check, but neither is user-editable in this app: email is
+                the identity/lookup key (server.ts's normalizeEmail()), and name-editing (issue
+                #41's original design) was deliberately removed rather than kept as a stray
+                affordance — see DOCS_MAP.md/CLAUDE.md for the removal. */}
+            <div style={{ fontSize: 14, color: "var(--text-body)", marginBottom: 2 }}>{me.name}</div>
+            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14 }}>{me.email}</div>
             <button
               type="button"
               disabled={signingOut}

@@ -312,24 +312,6 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
 
   const existing = findUserByEmail(db, email);
 
-  // Issue #41's display-name edit (SettingsPanel's inline Name field), kept working unchanged
-  // under issue #46: an already-authenticated session updating its OWN account's name never needs
-  // a password — the live session cookie already proves ownership just as well as a password
-  // would. Must be checked before every password branch below, or the existing "edit name" action
-  // would start demanding a password it was never designed to collect.
-  const sessionUser = currentUser(req);
-  if (
-    existing &&
-    name !== undefined &&
-    password === undefined &&
-    newPassword === undefined &&
-    sessionUser?.id === existing.id
-  ) {
-    const updated = upsertUserOnLogin(db, email, name);
-    res.json({ status: "known", email: updated.email, name: updated.name });
-    return;
-  }
-
   if (!existing) {
     // Issue #46: a brand new account needs a name AND a password together, in the same submit —
     // there's no legacy-migration issue for an account that doesn't exist yet, so no exemption.

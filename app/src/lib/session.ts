@@ -149,22 +149,6 @@ export async function login(email: string, opts: LoginOptions = {}): Promise<Log
   }
 }
 
-/** SettingsPanel's inline name edit: re-calls POST /api/session with the SAME email + the new
- *  name (no password fields) — server.ts's route recognizes this as an already-authenticated
- *  session updating its own display name and never asks for a password. Unlike a fresh login(),
- *  this updates the in-memory store directly and does NOT reload the page — a display-name edit
- *  doesn't touch progress.ts's session-scoped state at all, so there's nothing that needs a fresh
- *  boot probe. */
-export async function updateName(name: string): Promise<LoginResult> {
-  if (!currentUser) return { ok: false, error: "Not logged in." };
-  const result = await login(currentUser.email, { name });
-  if (result.ok && result.status === "known") {
-    currentUser = { ...currentUser, name: result.name };
-    emit();
-  }
-  return result;
-}
-
 export type PasswordActionResult = { ok: true } | { ok: false; error: string };
 
 /** SettingsPanel's "Set a password" action for an already-logged-in legacy (pre-issue-#46)

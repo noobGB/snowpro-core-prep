@@ -322,9 +322,14 @@ responds `{status:"new"}` (client reveals Name + a new-account Password field to
 created yet), and a known email with no password claimed yet (a legacy pre-#46 account) responds
 `{status:"needs_password_setup"}` (see "Password login" below). `POST /api/session` never creates
 or logs in on the first, information-gathering submit; only a resubmit with the right fields for
-that state does. `name` stays display-only and freely editable in
-place after the fact (SettingsPanel's Profile section, works with no password re-entry since a live
-session already proves ownership) without creating a new account. `App.tsx` calls `GET /api/me`
+that state does. **Issue #99: `name` is set once at registration and no longer editable after
+the fact.** SettingsPanel's Profile section originally let a live session edit its own name in
+place with no password re-entry (the session cookie already proving ownership) — that in-place
+edit path was deliberately removed, both the UI (an input + Save button) and the
+`POST /api/session` server branch that handled it (verified unreachable by anything else before
+deleting: no other client code sent that exact `{email, name, no password}` shape). Profile now
+shows name and email as plain static text, read-only, so a returning user can check which identity
+they're signed in as without an edit affordance existing at all. `App.tsx` calls `GET /api/me`
 once at boot; no session renders `components/LoginGate.tsx` (a "Who's studying?" card, same visual
 tokens as `SettingsPanel`) instead of the routed app. `lib/session.ts` is the client for
 `POST /api/session` / `GET /api/me` / `POST /api/logout` plus a tiny `useSessionUser()` store
