@@ -39,6 +39,11 @@ interface Feature {
   body: string;
 }
 
+// Deliberately excludes MCP conversational quizzing (mcp-server/) -- it's a real feature, but only
+// for someone running the app's own Docker container locally and pointing an MCP host at it (the
+// server reads/writes the SQLite database directly over local stdio, no network path). A visitor
+// to the public deployment this page is actually shown on can never use it, so advertising it here
+// would be a false claim about what signing in on THIS domain gets you.
 const FEATURES: Feature[] = [
   {
     title: "Timed mock exams",
@@ -49,8 +54,16 @@ const FEATURES: Feature[] = [
     body: "A dashboard scored against the real exam's actual domain weights, not a flat percentage -- so you always know exactly where to focus next.",
   },
   {
-    title: "Study by conversation",
-    body: "Quiz yourself through Claude Desktop or Claude Code instead of clicking through a web UI. Same progress, same analytics, either way.",
+    title: "Practice, domain by domain",
+    body: "Untimed drills, one domain at a time. Every wrong answer joins a missed-question notebook you can retry as its own focused set.",
+  },
+  {
+    title: "Flashcards that adapt",
+    body: "A quick knew-it/missed-it rating after every card biases which ones resurface first next session, so weak spots get more repetition automatically.",
+  },
+  {
+    title: "Adaptive study plan",
+    body: "A day-by-day plan that remaps itself to your actual exam date, not a fixed calendar -- compresses automatically into a prioritized checklist if your exam is close.",
   },
   {
     title: "Your data stays private",
@@ -83,11 +96,12 @@ export function HomePage() {
               COF-C03 · SNOWPRO CORE PREP
             </div>
             <h1 style={{ margin: "0 0 16px", fontSize: 34, lineHeight: 1.2, fontWeight: 500, letterSpacing: "-0.015em", color: "var(--text-heading)" }}>
-              Walk into the SnowPro Core exam ready.
+              Everything you need to pass the SnowPro Core exam.
             </h1>
             <p style={{ margin: 0, fontSize: 16, lineHeight: 1.6, color: "var(--text-muted)", maxWidth: 520 }}>
               Timed mock exams, a readiness score weighted by the real exam&rsquo;s domain weights,
-              and conversational quizzing &mdash; sign in to start tracking your progress.
+              and a study plan that adapts to your exam date &mdash; sign in to start tracking your
+              progress.
             </p>
           </div>
 
@@ -109,13 +123,7 @@ export function HomePage() {
             <div style={{ fontSize: 12, fontWeight: 500, letterSpacing: ".02em", color: "var(--text-dim)", margin: "8px 0 16px" }}>
               What you get once you&rsquo;re in
             </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: 16,
-              }}
-            >
+            <div className="home-feature-grid">
               {FEATURES.map((f, i) => (
                 <div
                   key={f.title}
