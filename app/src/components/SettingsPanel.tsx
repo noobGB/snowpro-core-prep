@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { getProgress, getStorageBackend, resetProgress, updateProgress, useProgress, type ProgressState } from "../lib/progress";
+import { getProgress, getStorageBackend, resetProgressConfirmed, updateProgress, useProgress, type ProgressState } from "../lib/progress";
 import { isoDate } from "../lib/planDates";
 import { closeSettings, useSettingsOpen } from "../lib/settingsStore";
 import { changePassword, logout, setInitialPassword, useSessionUser } from "../lib/session";
@@ -72,6 +72,8 @@ export function SettingsPanel() {
   const me = useSessionUser();
   const [resetInput, setResetInput] = useState("");
   const [resetDone, setResetDone] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetFailed, setResetFailed] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -345,26 +347,38 @@ export function SettingsPanel() {
           />
           <button
             type="button"
-            disabled={resetInput !== RESET_PHRASE}
-            onClick={() => {
-              resetProgress();
-              setResetDone(true);
-              setResetInput("");
+            disabled={resetInput !== RESET_PHRASE || resetting}
+            onClick={async () => {
+              setResetting(true);
+              setResetFailed(false);
+              const ok = await resetProgressConfirmed();
+              setResetting(false);
+              if (ok) {
+                setResetDone(true);
+                setResetInput("");
+              } else {
+                setResetFailed(true);
+              }
             }}
             style={{
               width: "100%",
-              background: resetInput === RESET_PHRASE ? "var(--status-incorrect)" : "var(--hairline)",
-              color: resetInput === RESET_PHRASE ? "var(--canvas)" : "var(--text-dim)",
+              background: resetInput === RESET_PHRASE && !resetting ? "var(--status-incorrect)" : "var(--hairline)",
+              color: resetInput === RESET_PHRASE && !resetting ? "var(--canvas)" : "var(--text-dim)",
               border: "none",
               borderRadius: 6,
               padding: "9px 0",
               fontSize: 13,
               fontWeight: 500,
-              cursor: resetInput === RESET_PHRASE ? "pointer" : "not-allowed",
+              cursor: resetInput === RESET_PHRASE && !resetting ? "pointer" : "not-allowed",
             }}
           >
-            {resetDone ? "Progress reset" : "Reset everything"}
+            {resetting ? "Resetting…" : resetDone ? "Progress reset" : "Reset everything"}
           </button>
+          {resetFailed && (
+            <div style={{ fontSize: 12, color: "var(--status-incorrect)", marginTop: 6 }}>
+              Reset failed — check your connection and try again.
+            </div>
+          )}
         </div>
 
         <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: 14 }}>
