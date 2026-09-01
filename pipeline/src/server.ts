@@ -52,6 +52,7 @@ import {
 import { hashPassword, verifyPassword, generateTemporaryPassword, MIN_PASSWORD_LENGTH } from "./passwords.js";
 import { isMailerConfigured, sendAdminCreatedAccountEmail, sendPasswordResetEmail, sendWelcomeEmail } from "./mailer.js";
 import { buildAuthUrl, exchangeCodeForIdentity, isGoogleOAuthConfigured, resolveGoogleAccountLink } from "./oauth.js";
+import { createLoginLockout } from "./loginLockout.js";
 import { randomBytes } from "node:crypto";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -149,6 +150,44 @@ const app = express();
 // goes straight to this process), so no X-Forwarded-* header is ever present on real LAN traffic
 // and req.protocol keeps resolving from the raw socket exactly as before.
 app.set("trust proxy", 1);
+
+// --- Security: baseline HTTP response headers, previously entirely absent (no CSP, no clickjacking
+//     protection, nothing). Hand-rolled rather than adding `helmet` -- five headers, matching this
+//     codebase's existing "native APIs over a new dependency" style (oauth.ts/passwords.ts).
+//     script-src still needs 'unsafe-inline' for index.html's one pre-paint theme-sync script (see
+//     that file's own comment on why it has to run synchronously before the bundle loads, so it
+//     can't be moved into a same-origin external file the normal way) -- hash-pinning that one
+//     script instead was considered, but the file has no server-side templating (a documented,
+//     deliberate gap -- see the same comment) to inject a per-request nonce, and a static hash goes
+//     silently stale the moment anyone edits that script without remembering to recompute it. Every
+//     *other* directive here is as strict as this app's actual resource use allows (Google Fonts is
+//     the only external origin loaded anywhere) -- this is a real, if incomplete, improvement over
+//     having no CSP at all, not a no-op. ---
+app.use((req, res, next) => {
+  res.setHeader(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com",
+      "img-src 'self' data:",
+      "connect-src 'self'",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "object-src 'none'",
+    ].join("; "),
+  );
+  res.setHeader("X-Frame-Options", "DENY"); // redundant with frame-ancestors on modern browsers, kept for older ones
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  // HSTS is meaningless (and browsers ignore it) over plain HTTP, so this is correctly inert for
+  // the LAN/localhost deployment and only takes effect for the real HTTPS Railway one -- same
+  // req.secure signal the session cookie's own Secure flag already relies on.
+  if (req.secure) res.setHeader("Strict-Transport-Security", "max-age=15552000");
+  next();
+});
 
 // --- Identity: POST /api/session, GET /api/me, POST /api/logout, POST /api/account/password[-setup],
 //     POST /api/password-reset/[request|confirm]. Email is the sole identity/lookup key (case/
@@ -256,38 +295,9 @@ function issueSessionCookie(req: express.Request, res: express.Response, token: 
   });
 }
 
-// --- Issue #46 brute-force guard: a lightweight in-memory lockout on repeated wrong-password
-//     attempts, keyed by normalized email rather than IP -- LAN clients behind the same router/
-//     NAT don't reliably differ by source IP, so an IP-keyed limiter would either lock out an
-//     entire household together or not distinguish them at all. In-memory (not persisted) is fine
-//     at this app's scale: a container restart clearing lockouts is an acceptable reset, not a
-//     security hole, for a trusted-LAN threat model. ---
-const MAX_LOGIN_ATTEMPTS = 5;
-const LOGIN_LOCKOUT_BASE_MS = 30_000;
-const loginAttempts = new Map<string, { failures: number; lockedUntil: number }>();
-
-/** Remaining lockout in whole seconds if `email` is currently locked out, or `undefined` if a
- *  login attempt can proceed right now. */
-function checkRateLimit(email: string): number | undefined {
-  const entry = loginAttempts.get(normalizeEmail(email));
-  if (!entry || entry.lockedUntil <= Date.now()) return undefined;
-  return Math.ceil((entry.lockedUntil - Date.now()) / 1000);
-}
-
-function recordFailedAttempt(email: string): void {
-  const key = normalizeEmail(email);
-  const entry = loginAttempts.get(key) ?? { failures: 0, lockedUntil: 0 };
-  entry.failures += 1;
-  if (entry.failures >= MAX_LOGIN_ATTEMPTS) {
-    const extraFailures = entry.failures - MAX_LOGIN_ATTEMPTS;
-    entry.lockedUntil = Date.now() + LOGIN_LOCKOUT_BASE_MS * 2 ** extraFailures;
-  }
-  loginAttempts.set(key, entry);
-}
-
-function recordSuccessfulAttempt(email: string): void {
-  loginAttempts.delete(normalizeEmail(email));
-}
+// Issue #46 brute-force guard / issue #131's unbounded-lockout fix -- see loginLockout.ts's own
+// header comment for the full reasoning, extracted there so its cap behavior has real unit tests.
+const { checkRateLimit, recordFailedAttempt, recordSuccessfulAttempt } = createLoginLockout();
 
 app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
   const body = req.body as
