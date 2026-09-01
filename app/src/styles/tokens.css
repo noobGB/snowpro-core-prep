@@ -53,6 +53,14 @@
   --radius-badge: 4px;
   --radius-control: 6px;
   --radius-card: 12px;
+
+  /* Issue #113: Google's own official "Continue with Google" button spec (Google Identity brand
+     guidelines) mandates specific colors per light/dark theme, not an app's own accent/surface
+     tokens -- these three are the dark-theme values from that spec, kept separate from the design
+     language's own tokens above for exactly that reason. */
+  --google-btn-bg: #131314;
+  --google-btn-border: #8e918f;
+  --google-btn-text: #e3e3e3;
 }
 
 /* Light mode — every value below was independently contrast-verified (WCAG AA) during the design
@@ -84,6 +92,10 @@
     --scrim: rgba(15, 16, 20, 0.45);
     --palette-highlight: #e2e5e9;
     --warning-tint: rgba(122, 93, 0, 0.12);
+
+    --google-btn-bg: #ffffff;
+    --google-btn-border: #747775;
+    --google-btn-text: #1f1f1f;
   }
 }
 
@@ -110,6 +122,10 @@
   --scrim: rgba(15, 16, 20, 0.45);
   --palette-highlight: #e2e5e9;
   --warning-tint: rgba(122, 93, 0, 0.12);
+
+  --google-btn-bg: #ffffff;
+  --google-btn-border: #747775;
+  --google-btn-text: #1f1f1f;
 }
 
 /* Explicit "dark" pick — no-op today (dark values live on bare :root), but kept as a real
