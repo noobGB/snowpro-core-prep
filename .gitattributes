@@ -1,0 +1,5 @@
+# Force LF regardless of a contributor's local core.autocrlf setting — a shell script checked out
+# with CRLF breaks inside a Linux container (the shebang becomes `#!/bin/sh\r`, "bad interpreter").
+# Scoped to *.sh only (issue #91's docker-entrypoint.sh) rather than repo-wide, to avoid an
+# unrelated mass line-ending diff across the rest of the project.
+*.sh text eol=lf

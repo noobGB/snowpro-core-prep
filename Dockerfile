@@ -3,7 +3,8 @@
 # Three stages, per the plan ("SnowPro Core Prep — Containerize"):
 #   1. build the frontend (vite build -> static index.html + hashed assets)
 #   2. install the pipeline/server's production-only dependencies
-#   3. runtime: copy both in, run as the non-root `node` user, boot into pipeline/src/server.ts
+#   3. runtime: copy both in, entrypoint fixes /data's ownership then drops to non-root `node`
+#      (issue #91), boot into pipeline/src/server.ts
 #
 # The pipeline's own output directory (SNOWPRO_CONTENT_OUTPUT=/app/content) is deliberately
 # separate from the built frontend's directory (SNOWPRO_DIST_DIR=/app/dist) — see
@@ -45,11 +46,19 @@ ENV NODE_ENV=production \
     SNOWPRO_DATA_DIR=/data \
     SNOWPRO_DIST_DIR=/app/dist
 
+# su-exec: the runtime user drop in docker-entrypoint.sh (issue #91) — lets the container start as
+# root just long enough to fix a freshly-mounted /data's ownership, then exec the real process as
+# node. Tiny (~2KB on Alpine), unlike gosu's larger glibc-compat footprint.
+RUN apk add --no-cache su-exec
+
 # /app itself (not recursively) must be node-writable too: writeOutput() creates its atomic-write
 # temp directory as a sibling of /app/content, directly under /app, before renaming it into place —
 # see pipeline/src/write/output.ts. Existing entries under /app (dist/, pipeline/) stay root-owned;
 # only the directory's own write permission changes, so the app code itself stays untamperable by
-# the runtime user.
+# the runtime user. /data's chown here only covers this build's own placeholder directory — the
+# real, load-bearing chown happens at container *start*, in docker-entrypoint.sh, since a volume
+# mounted later (a fresh cloud volume, or a freshly-created local bind-mount host folder) replaces
+# whatever's here at boot and can come up under a different UID than this build-time chown set.
 RUN mkdir -p /data /app/content \
     && chown -R node:node /data \
     && chown node:node /app /app/content
@@ -66,6 +75,13 @@ COPY pipeline/package.json pipeline/tsconfig.json ./pipeline/
 COPY pipeline/src ./pipeline/src
 COPY --from=app-builder /build/app/dist ./dist
 
-USER node
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# No USER directive here (issue #91) — the container now starts as root deliberately, so
+# docker-entrypoint.sh can chown a freshly-mounted /data before dropping to node via su-exec.
+# The app process itself still ends up running as node, same as before; only the brief startup
+# window (before exec su-exec) runs as root.
 EXPOSE 8080
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["/app/pipeline/node_modules/.bin/tsx", "/app/pipeline/src/server.ts"]
