@@ -387,6 +387,21 @@ same idempotent `ALTER TABLE` pattern as `password_hash`/`role`) — Google's re
 identity, never touches this app's database; a Google sign-in matching an existing password-based
 account's email links to that account (`linkGoogleAccount()`) rather than creating a duplicate.
 
+**Google OAuth doesn't work over a LAN private IP — discovered live, not from Google's docs
+first.** A real LAN client hit Google's own "Access blocked: Authorization Error ... device_id and
+device_name are required for private IP" at `http://192.168.1.8:8080/api/oauth/google/callback`.
+Google's authorization server rejects any `redirect_uri` whose host is an RFC 1918 private-use
+IPv4 address (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`) under the standard web-app
+Authorization Code flow entirely — it wants the device/limited-input-device grant type instead (a
+different OAuth flow this app has no reason to implement), regardless of how correctly
+`SNOWPRO_GOOGLE_*` is configured. `localhost`/`127.0.0.1`/`::1` are a documented exception (already
+confirmed working directly). `server.ts`'s `isPrivateNetworkHost(req.hostname)` detects this
+per-request (this same server serves LAN clients, `localhost`, and the public domain, so it can't
+be a static config check like `isGoogleOAuthConfigured()`) and both `GET /api/oauth/google/available`
+and `/start` account for it — the "Continue with Google" button hides itself for a LAN client the
+same way it already hides for an unconfigured deployment, rather than showing a button Google will
+always reject.
+
 **Welcome email on self-registration (issue #93).** The `!existing` branch of `POST /api/session`
 (brand-new account, name+password submitted together per #46 above) sends `mailer.ts`'s
 `sendWelcomeEmail()` after the account is created — fire-and-forget, same pattern as #59's reset

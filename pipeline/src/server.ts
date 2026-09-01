@@ -444,17 +444,46 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
 const OAUTH_STATE_COOKIE = "snowprep_oauth_state";
 const GOOGLE_CALLBACK_PATH = "/api/oauth/google/callback";
 
-/** Lets LoginGate.tsx hide the "Continue with Google" button entirely until this deployment
- *  actually has SNOWPRO_GOOGLE_* configured, rather than showing a button that 404s on click.
+/** Whether `host` (already port-stripped, e.g. `req.hostname`) is an RFC 1918 private-use IPv4
+ *  address (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`) -- discovered live, not from Google's
+ *  docs first: a real LAN client hit "Access blocked: Authorization Error ... device_id and
+ *  device_name are required for private IP" (Google's error, verbatim) when it reached
+ *  `/api/oauth/google/start` via `http://192.168.1.8:8080`. Google's OAuth authorization server
+ *  rejects a `redirect_uri` whose host is a private-use IP under the standard web-app
+ *  Authorization Code flow entirely -- it wants the device/limited-input-device grant type
+ *  instead (a different flow this app has no reason to implement), no matter how correctly
+ *  `SNOWPRO_GOOGLE_CLIENT_ID`/`SECRET` are configured. `localhost`/`127.0.0.1`/`::1` are
+ *  deliberately exempted -- Google documents `localhost` as an explicit exception, confirmed
+ *  working directly (Gaurav's own local test, before this was even discovered as an issue). */
+function isPrivateNetworkHost(host: string): boolean {
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1") return false;
+  return /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+}
+
+/** Lets LoginGate.tsx hide the "Continue with Google" button entirely -- until this deployment
+ *  actually has SNOWPRO_GOOGLE_* configured (rather than showing a button that 404s on click), and
+ *  also whenever the *current request itself* is arriving over a private-network LAN address
+ *  (rather than showing a button that Google itself will always reject, see
+ *  isPrivateNetworkHost()'s comment) -- unlike the config check, this one is necessarily
+ *  per-request, since the same server serves both LAN clients and the public domain/localhost.
  *  Deliberately unauthenticated (same reasoning as isMailerConfigured()'s own exposure, mailer.ts)
- *  -- a fact about this server's global config, not about any one account. */
-app.get("/api/oauth/google/available", (_req, res) => {
-  res.json({ available: isGoogleOAuthConfigured() });
+ *  -- a fact about this request/server, not about any one account. */
+app.get("/api/oauth/google/available", (req, res) => {
+  res.json({ available: isGoogleOAuthConfigured() && !isPrivateNetworkHost(req.hostname) });
 });
 
 app.get("/api/oauth/google/start", (req, res) => {
   if (!isGoogleOAuthConfigured()) {
     res.status(404).json({ error: "Google sign-in isn't configured on this server." });
+    return;
+  }
+  if (isPrivateNetworkHost(req.hostname)) {
+    res.status(400).json({
+      error:
+        "Google sign-in isn't available over a local network address -- Google's OAuth policy only " +
+        "allows this for a public domain or localhost. Use email/password instead, or access this " +
+        "app via localhost.",
+    });
     return;
   }
   // CSRF protection (mechanism described in oauth.ts's header comment, step 2/5): a random value

@@ -134,6 +134,9 @@ for accounts created before passwords did.
   replacement. Only appears once the operator sets `SNOWPRO_GOOGLE_CLIENT_ID`/
   `SNOWPRO_GOOGLE_CLIENT_SECRET` (see `.env.example`); a Google sign-in with the same email as an
   existing password-based account logs into that same account rather than creating a duplicate.
+  **Google's own OAuth policy doesn't allow this over a LAN IP address** (e.g.
+  `http://192.168.1.x:8080`) — the button only shows up when accessing via `localhost` or a real
+  public domain; on the LAN, use email+password instead.
 - Progress lives in one shared SQLite database on the host machine (`data/snowprep.sqlite`), one
   row per person — nobody can read or write anyone else's data.
 - **Forgot your password?** Click "Forgot password?" on the login screen — if the server has email
