@@ -402,6 +402,31 @@ and `/start` account for it — the "Continue with Google" button hides itself f
 same way it already hides for an unconfigured deployment, rather than showing a button Google will
 always reject.
 
+**First-time-visitor landing page (issue #121).** `LoginGate.tsx` used to be the *only* pre-login
+screen — a stranger reaching the deployed app from a shared link, the GitHub README, or a bare URL
+saw nothing but a "Who's studying?" form, no context on what the app does. `App.tsx`'s `AuthState`
+gained a `"landing"` state, rendering `components/LandingPage.tsx` (hero + feature highlights +
+the dashboard screenshot + two CTAs, copy mirroring README.md's own "Why this exists"/"Features"
+sections) ahead of the gate for exactly one case: a signed-out visitor on a **public** hostname who
+hasn't dismissed it before. `GET /api/me`'s 401 body now carries `isPublicHost` (reusing issue
+#119's `isPrivateNetworkHost(req.hostname)` — the very check that hides the Google button for LAN
+clients, now also deciding whether to show the pitch at all) — a LAN visitor already has context
+from whoever shared the address with them, so a marketing pitch is pure friction there and they go
+straight to `LoginGate` like before. Clicking either CTA sets a `localStorage` dismiss flag
+(`snowprep.landingDismissed`) and transitions straight to `"gate"` with no reload, so a returning
+signed-out visitor on the same browser never sees the pitch twice. The dashboard screenshot itself
+can't go through `app/public/` — that directory is repurposed as `vite.config.ts`'s `publicDir` to
+serve the content pipeline's own output (`../content`), and that directory gets wiped and rewritten
+by the pipeline on every boot (`write/output.ts`'s writer deletes and replaces its whole output
+dir) — so it lives at `src/assets/landing-dashboard.png` and a small inline Vite plugin
+(`copyLandingScreenshot()` in `vite.config.ts`) copies it to a fixed, un-hashed `dist/` root path
+at build time (`closeBundle`) and serves the same fixed path directly from source in `vite dev`
+(`configureServer`) — needed because `index.html`'s Open Graph `<meta property="og:image">` tag is
+literal text Vite doesn't rewrite, unlike a JS import it would hash. Same reasoning is why
+`app/index.html` also gained `description`/`og:*`/`twitter:*` meta tags in this pass — the site had
+none before, so a shared link unfurled with no preview text either, same underlying "zero context
+before the ask" problem one layer earlier.
+
 **Welcome email on self-registration (issue #93).** The `!existing` branch of `POST /api/session`
 (brand-new account, name+password submitted together per #46 above) sends `mailer.ts`'s
 `sendWelcomeEmail()` after the account is created — fire-and-forget, same pattern as #59's reset

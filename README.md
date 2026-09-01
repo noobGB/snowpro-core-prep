@@ -84,6 +84,10 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
   web app's Analytics and vice versa. See [`mcp-server/README.md`](mcp-server/README.md).
 - **⌘K/Ctrl+K search** — one command palette across pages, notes, and questions.
 - **Responsive** — a sidebar on desktop, a bottom-tab nav + "More" sheet under 900px wide.
+- **Landing page for first-time visitors** — a public deployment shows a one-screen pitch (feature
+  highlights + a dashboard screenshot) before the login gate, instead of dropping a stranger
+  straight onto a bare "Who's studying?" form. Only shown once per browser, and only on a public
+  hostname — anyone on the LAN, or a returning visitor, goes straight to the gate.
 - **Fully offline** — progress persists to a local SQLite database (via Docker, one row per
   logged-in person) or `localStorage` (without it); nothing ever leaves your machine or network.
 - **Settings** (gear icon, bottom of the sidebar) — four things live here:

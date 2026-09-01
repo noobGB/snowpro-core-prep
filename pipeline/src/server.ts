@@ -665,7 +665,12 @@ app.post("/api/password-reset/confirm", express.json({ limit: "10kb" }), (req, r
 app.get("/api/me", (req, res) => {
   const user = currentUser(req);
   if (!user) {
-    res.status(401).json({ error: "Not logged in." });
+    // Issue #121: isPublicHost tells the client whether this request arrived over a public
+    // hostname (real domain, or localhost) vs. a LAN private IP -- reuses isPrivateNetworkHost(),
+    // the same per-request check issue #119 added for the Google OAuth button. App.tsx shows the
+    // landing page only when this is true; a LAN visitor already has context from whoever shared
+    // the address with them, so skipping straight to the gate is the right call there too.
+    res.status(401).json({ error: "Not logged in.", isPublicHost: !isPrivateNetworkHost(req.hostname) });
     return;
   }
   // hasPassword (issue #46) tells SettingsPanel whether to offer "Set a password" (a legacy

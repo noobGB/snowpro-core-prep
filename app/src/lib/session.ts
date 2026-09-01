@@ -62,18 +62,25 @@ export function useSessionUser(): SessionUser | null {
 
 export type MeResult =
   | { authRequired: false }
-  | { authRequired: true; user: SessionUser | null };
+  | { authRequired: true; user: SessionUser | null; isPublicHost: boolean };
 
-/** Called once from App.tsx on boot to decide gate-screen vs. the real app. */
+/** Called once from App.tsx on boot to decide landing/gate-screen vs. the real app. `isPublicHost`
+ *  (issue #121) only matters when `user` is `null` -- it's the server's per-request
+ *  isPrivateNetworkHost() check (see server.ts), telling App.tsx whether this visitor arrived over
+ *  a public hostname (real domain or localhost, landing page eligible) or a LAN private IP (skip
+ *  straight to the gate, same reasoning as issue #119's Google-button hiding). */
 export async function fetchMe(): Promise<MeResult> {
   try {
     const res = await fetch("/api/me");
-    if (res.status === 401) return { authRequired: true, user: null };
+    if (res.status === 401) {
+      const body = (await res.json().catch(() => ({}))) as { isPublicHost?: boolean };
+      return { authRequired: true, user: null, isPublicHost: body.isPublicHost === true };
+    }
     if (!res.ok) return { authRequired: false };
     const user = (await res.json()) as SessionUser;
     currentUser = user;
     emit();
-    return { authRequired: true, user };
+    return { authRequired: true, user, isPublicHost: false };
   } catch {
     return { authRequired: false };
   }
