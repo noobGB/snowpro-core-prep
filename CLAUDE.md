@@ -633,16 +633,21 @@ Four GitHub Actions workflows, all repo-wide (not scoped to one package):
   root-owned and fail `server.ts`'s `verifyDataDirWritable()` boot check — a CI-only false negative,
   not a real bug, if that step is ever removed.
 - **`workflows/release.yml`** (issue #74) — fires on any `v*` tag push (both `git push --tags` and
-  `gh release create <tag>` create that ref). Builds the same `Dockerfile` as `docker-smoke` but
-  actually pushes the result to GHCR (`ghcr.io/noobgb/snowpro-core-prep`, lowercased since
-  Docker/OCI refs reject the account's real `noobGB` casing), tagged with both the pushed tag name
-  and `latest`. This is purely an *additional* way to run the app — cutting a release doesn't
-  change or replace the primary clone-and-build path in README.md's `### Option A`, it just means a
-  second machine can `docker pull` the already-built image instead of also needing this repo's full
-  source + a local build. The package inherits this repo's private visibility by default (GHCR
-  packages have their own visibility toggle, separate from the repo's) — a puller needs `docker
-  login ghcr.io` with a token that has `read:packages` scope against this repo, same as cloning the
-  repo itself needs read access.
+  `gh release create <tag>` create that ref). **First job, `ci` (issue #101): calls `ci.yml` as a
+  reusable workflow (`uses: ./.github/workflows/ci.yml`, enabled by `workflow_call:` in `ci.yml`'s
+  own triggers) and re-runs the full check suite against this exact tagged SHA.** `publish-image`
+  (`needs: ci`) only runs if that passes — before this, a tag pointing at a commit with failing or
+  still-running CI could be built and published with nothing stopping it; the only prior safeguard
+  was a manual "confirm CI green" step in `snowprep-deployment/RUNBOOK.md`. `publish-image` builds
+  the same `Dockerfile` as `docker-smoke` but actually pushes the result to GHCR
+  (`ghcr.io/noobgb/snowpro-core-prep`, lowercased since Docker/OCI refs reject the account's real
+  `noobGB` casing), tagged with both the pushed tag name and `latest`. This is purely an
+  *additional* way to run the app — cutting a release doesn't change or replace the primary
+  clone-and-build path in README.md's `### Option A`, it just means a second machine can `docker
+  pull` the already-built image instead of also needing this repo's full source + a local build.
+  Both the repo and the GHCR package are public as of 2026-09-01 (see
+  `snowprep-deployment/RUNBOOK.md`) — a puller needs no credentials, same as cloning the repo
+  itself needs none either.
 - **`workflows/claude.yml`** — the Claude Code GitHub Action (`anthropics/claude-code-action@v1`),
   responding to an `@claude` mention in a PR/issue comment or review — on demand only, never
   automatically. Its `claude_args`' `--system-prompt` tells it to follow this file's conventions

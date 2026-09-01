@@ -5,6 +5,9 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  # Issue #101: lets release.yml invoke this whole suite as a reusable workflow against the exact
+  # tagged commit, so a tag can't publish a GHCR image without CI actually passing on that SHA.
+  workflow_call:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
