@@ -130,6 +130,10 @@ for accounts created before passwords did.
 - **First-ever login** for an email asks for a name and a password together (name is just for
   greetings/the Profile section — never used to identify the account). **Every login after that**
   asks for email, then password.
+- **Or sign in with Google** — an additional option next to the email+password flow, not a
+  replacement. Only appears once the operator sets `SNOWPRO_GOOGLE_CLIENT_ID`/
+  `SNOWPRO_GOOGLE_CLIENT_SECRET` (see `.env.example`); a Google sign-in with the same email as an
+  existing password-based account logs into that same account rather than creating a duplicate.
 - Progress lives in one shared SQLite database on the host machine (`data/snowprep.sqlite`), one
   row per person — nobody can read or write anyone else's data.
 - **Forgot your password?** Click "Forgot password?" on the login screen — if the server has email
