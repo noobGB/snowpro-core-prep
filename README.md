@@ -117,9 +117,10 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
 ![Analytics](.github/screenshot-analytics.png)
 *Readiness weighted by real exam domain weights, plus pacing against the actual time budget.*
 
-![Login](.github/screenshot-login.png)
-*Email + password. Name and a password are only asked once, on your first-ever login; every login
-after that just needs the email and password.*
+![Home page](.github/screenshot-home.png)
+*What a public deployment shows a signed-out visitor — feature highlights alongside the actual
+login form, not a separate click-through screen. Email + password; name and a password are only
+asked once, on your first-ever login.*
 
 ## Multi-user (LAN)
 
@@ -196,9 +197,9 @@ docker compose up -d
 
 > **Running on a second machine without a local build.** Every tagged release publishes a
 > ready-to-run image to GHCR, so a machine that already has Docker but not this repo's full dev
-> toolchain can skip the clone-and-build step entirely:
+> toolchain can skip the clone-and-build step entirely — the repo and its GHCR image are both
+> public, so no `docker login` or GitHub token is needed, just:
 > ```bash
-> docker login ghcr.io -u <your-github-username>   # needs a PAT with read:packages -- this repo is private
 > docker pull ghcr.io/noobgb/snowpro-core-prep:latest
 > ```
 > then point `docker-compose.yml`'s `image:` at that tag instead of building locally, or `docker run`

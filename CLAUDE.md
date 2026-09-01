@@ -349,8 +349,12 @@ just assumed from the plan that specified it).
 
 **Password login (issue #46).** Hashed with `node:crypto`'s built-in `scrypt`
 (`pipeline/src/passwords.ts` — self-describing `scrypt$N$r$p$salt$hash` format, `timingSafeEqual`
-comparison), not argon2/bcrypt: this app's threat model is a trusted LAN with no internet exposure
-by design, not an offline GPU-cracking attacker, so a new native/WASM dependency wasn't worth it.
+comparison), not argon2/bcrypt: this choice was made under a trusted-LAN, no-internet-exposure
+threat model, when a new native/WASM dependency for argon2's stronger offline-cracking resistance
+wasn't worth it. **That assumption no longer fully holds** — the app is now also deployed publicly
+(Railway, `snowpro.gauravbarwalia.com`) — so scrypt's actual cost parameters and whether argon2 is
+now worth adopting is a live question to revisit, not settled history; this paragraph is kept
+accurate about the *original* reasoning, not a claim that the tradeoff is still correct today.
 `users.password_hash` is nullable and added via a `PRAGMA table_info`-guarded `ALTER TABLE` in
 `db.ts`'s `openDb()` (idempotent on every boot, matching the rest of that function). **The
 passwordless-to-password migration has no out-of-band identity proof** (no email capability in this app yet, at the time this migration path was built) —
@@ -760,7 +764,9 @@ Four GitHub Actions workflows, all repo-wide (not scoped to one package):
   the workflow files themselves, with minor/patch bumps grouped per package to keep PR volume down
   on a low-traffic repo.
 
-Branch protection is intentionally not configured — this is a private repo, and GitHub's branch
-protection rulesets require a paid plan or a public repo (confirmed via a 403 from the API); CI
-still reports pass/fail status on every PR/commit via the Checks tab, it just doesn't technically
-block merging.
+Branch protection is not configured today. It was originally skipped because this was a private
+repo and GitHub's branch protection rulesets required a paid plan or a public repo (confirmed via a
+403 from the API at the time) — that constraint no longer applies since the repo went public, so
+enabling required-status-checks-before-merge on `master` is now a free, live option worth actually
+turning on, not just a documented limitation. CI still reports pass/fail status on every PR/commit
+via the Checks tab regardless, it just doesn't technically block merging yet.
