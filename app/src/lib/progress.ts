@@ -228,9 +228,65 @@ export function updateProgress(next: ProgressState | ((prev: ProgressState) => P
   listeners.forEach((l) => l());
 }
 
-/** Settings' "reset all progress" action — replaces everything with a fresh default state. */
+/** Settings' "reset all progress" action — replaces everything with a fresh default state.
+ *  Superseded by resetProgressConfirmed() below for the actual Settings button (issue #107); kept
+ *  for any caller that only needs the fire-and-forget debounced-write behavior every other
+ *  updateProgress() call already has. */
 export function resetProgress(): void {
   updateProgress(defaultState());
+}
+
+/** Settings' "reset all progress" action, but actually confirmed persisted before the UI claims
+ *  success (issue #107) — resetProgress()/persist()'s normal debounced write silently discards
+ *  the change on a write conflict (409, "someone else wrote since our last read"), with only a
+ *  console.warn, no user-visible signal, and no retry -- Settings' Reset button was unconditionally
+ *  flipping to "Progress reset" the instant this function was *called*, regardless of whether the
+ *  write a full second later (the debounce) ever actually happened or succeeded. Reproduced live:
+ *  seeded real progress, clicked Reset, watched the button claim success while the server still
+ *  had the old data seconds later.
+ *
+ *  Retrying on conflict is always safe here specifically *because* the target state never depends
+ *  on what's currently stored -- it's always defaultState(), unlike a generic edit where blindly
+ *  retrying a stale write could silently clobber someone else's concurrent change. Mirrors
+ *  mcp-server/src/progressStore.ts's updateProgress() retry-on-conflict pattern, which already
+ *  solves this correctly on that side.
+ *
+ *  Returns whether the reset was actually confirmed persisted -- the caller must not claim success
+ *  until this resolves true. */
+export async function resetProgressConfirmed(maxAttempts = 3): Promise<boolean> {
+  if (saveTimer) {
+    // A reset supersedes any pending debounced write from an earlier edit -- don't let that stale
+    // write land after (or race with) this one.
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    setState(defaultState());
+    if (backend !== "http") {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      return true;
+    }
+    try {
+      const res = await fetch("/api/progress", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "If-Match": rev ?? "0" },
+        body: JSON.stringify(state),
+      });
+      if (res.status === 409) {
+        // Re-sync the revision and retry -- the state we're writing (defaultState()) doesn't
+        // change between attempts, so there's no "which change wins" question to get wrong here.
+        const fresh = await fetch("/api/progress");
+        rev = fresh.headers.get("ETag");
+        continue;
+      }
+      if (!res.ok) return false;
+      rev = res.headers.get("ETag");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 function subscribe(listener: () => void): () => void {
