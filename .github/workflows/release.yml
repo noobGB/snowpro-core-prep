@@ -12,8 +12,18 @@ permissions:
   packages: write
 
 jobs:
+  # Issue #101: re-runs the full ci.yml suite (typecheck/lint/test + docker-smoke boot test)
+  # against this exact tagged SHA, rather than trusting whatever ci.yml concluded whenever this
+  # commit was originally merged to master -- a tag can be cut against an older commit, and
+  # nothing else stops a red/still-running commit from being tagged. publish-image below only
+  # runs if this passes.
+  ci:
+    name: Re-run CI against the tagged commit
+    uses: ./.github/workflows/ci.yml
+
   publish-image:
     name: Build + push image to GHCR
+    needs: ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
