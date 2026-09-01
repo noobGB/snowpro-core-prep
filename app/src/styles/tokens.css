@@ -339,6 +339,20 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 .home-features {
   grid-area: features;
 }
+/* Fixed 2 columns rather than `repeat(auto-fit, minmax(...))` -- auto-fit reflows to however many
+   columns fit the container width, which leaves an orphan card alone on its own row whenever the
+   feature count isn't a multiple of whatever that count turns out to be. A flat 2-column grid
+   keeps every row symmetric for any even feature count, at any width above the phone breakpoint. */
+.home-feature-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+@media (min-width: 480px) {
+  .home-feature-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 
 /* A soft, low-opacity radial glow behind the hero heading -- color-mix() (not rgba(var(...))) so
    it tracks --accent correctly across both themes without a separate light-mode override. */
