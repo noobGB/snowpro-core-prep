@@ -51,7 +51,7 @@ import {
 } from "./db.js";
 import { hashPassword, verifyPassword, generateTemporaryPassword, MIN_PASSWORD_LENGTH } from "./passwords.js";
 import { isMailerConfigured, sendAdminCreatedAccountEmail, sendPasswordResetEmail, sendWelcomeEmail } from "./mailer.js";
-import { buildAuthUrl, exchangeCodeForIdentity, isGoogleOAuthConfigured } from "./oauth.js";
+import { buildAuthUrl, exchangeCodeForIdentity, isGoogleOAuthConfigured, resolveGoogleAccountLink } from "./oauth.js";
 import { randomBytes } from "node:crypto";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -523,8 +523,25 @@ app.get("/api/oauth/google/callback", async (req, res) => {
   // login already uses; the only new step is the google_sub fast-path lookup first.
   let user = findUserByGoogleSub(db, identity.sub);
   if (!user) {
-    user = findUserByEmail(db, identity.email);
-    if (!user) {
+    const existingByEmail = findUserByEmail(db, identity.email);
+    // Security (issue #129): see resolveGoogleAccountLink()'s own doc comment (oauth.ts) for the
+    // full reasoning -- an unverified self-registered account with a password set is refused here
+    // rather than silently taken over by whoever later proves Google ownership of that email.
+    const decision = resolveGoogleAccountLink(existingByEmail);
+    if (decision === "refuse") {
+      res
+        .status(409)
+        .send(
+          "An account already exists for this email with a password set. Sign in with that " +
+            "password instead (use “Forgot password?” if you don't know it) -- once " +
+            "signed in, Google sign-in can be added from Settings.",
+        );
+      return;
+    }
+    if (decision === "link" && existingByEmail) {
+      linkGoogleAccount(db, existingByEmail.id, identity.sub);
+      user = existingByEmail;
+    } else {
       const isFirstEverAccount = usersCount(db) === 0;
       // Same first-user-becomes-admin rule as the password-signup path above (issue #62) --
       // passwordHash omitted (stays NULL), exactly the existing "no local password" shape
@@ -533,7 +550,24 @@ app.get("/api/oauth/google/callback", async (req, res) => {
       // the password-signup route above does this -- TypeScript can't narrow a mutable `let`
       // inside the sendWelcomeEmail().catch() closure below, since the closure could in principle
       // run after a later reassignment; a `const` has no such ambiguity.
-      const newUser = upsertUserOnLogin(db, identity.email, identity.name, undefined, isFirstEverAccount ? "admin" : "user");
+      let newUser;
+      try {
+        newUser = upsertUserOnLogin(db, identity.email, identity.name, undefined, isFirstEverAccount ? "admin" : "user");
+      } catch (err) {
+        // Race: two concurrent first-time Google logins for the same brand-new email (double
+        // click, two tabs) can both pass the findUserByEmail() check above before either INSERT
+        // commits -- users.email's UNIQUE constraint (db.ts) throws for the loser. Unlike
+        // POST /api/session (fully synchronous, so this can't happen there -- see that route's own
+        // comment), this handler already awaited two Google HTTP calls first, leaving a real
+        // window open. Re-look-up and link instead of surfacing a raw 500, same recovery shape as
+        // setPasswordIfUnset()'s own race guard elsewhere in this file.
+        const winner = findUserByEmail(db, identity.email);
+        if (!winner) throw err; // Some other failure -- not the race we're recovering from.
+        linkGoogleAccount(db, winner.id, identity.sub);
+        issueSessionCookie(req, res, createSession(db, winner.id));
+        res.redirect("/");
+        return;
+      }
       if (isFirstEverAccount) {
         const migrated = migrateFlatFileProgress(db, newUser.id, OLD_PROGRESS_FILE);
         if (migrated) console.log(`✓ Migrated pre-upgrade progress.json into ${newUser.email}'s new account`);
@@ -543,9 +577,9 @@ app.get("/api/oauth/google/callback", async (req, res) => {
           console.error(`Failed to send welcome email to ${newUser.email}:`, err);
         });
       }
+      linkGoogleAccount(db, newUser.id, identity.sub);
       user = newUser;
     }
-    linkGoogleAccount(db, user.id, identity.sub);
   }
 
   issueSessionCookie(req, res, createSession(db, user.id));
