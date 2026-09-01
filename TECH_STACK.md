@@ -137,13 +137,18 @@ column (`data TEXT`), not normalized into relational columns — see `CLAUDE.md`
 section for why "no partial merges" is a deliberate rule, not a missing feature; SQLite here is
 about per-user *rows*, not about normalizing what's *inside* each row.
 
-**Password + session-cookie auth, no OAuth** — `pipeline/src/db.ts`'s `sessions` table plus an
-HTTP-only cookie handles sessions; `pipeline/src/passwords.ts` handles passwords via `node:crypto`'s
-built-in `scrypt` (self-describing `scrypt$N$r$p$salt$hash` format), not bcrypt/argon2 — this app's
-threat model (a trusted LAN, not internet-facing) doesn't warrant a new native/WASM dependency for
-argon2's stronger offline-cracking resistance. Email is the sole identity key; a name (and, since
-issue #46, a password) is asked once, on a genuinely new email, for display purposes only in the
-name's case.
+**Password + session-cookie auth, plus Google OAuth as an additional sign-in option (issue #113)**
+— `pipeline/src/db.ts`'s `sessions` table plus an HTTP-only cookie handles sessions;
+`pipeline/src/passwords.ts` handles passwords via `node:crypto`'s built-in `scrypt`
+(self-describing `scrypt$N$r$p$salt$hash` format), not bcrypt/argon2 — this project started under a
+trusted-LAN threat model that didn't warrant a new native/WASM dependency for argon2's stronger
+offline-cracking resistance; the app is now also deployed publicly (Railway,
+`snowpro.gauravbarwalia.com`), which is worth re-weighing that original tradeoff against, not an
+unexamined holdover. `pipeline/src/oauth.ts` implements Google's Authorization Code flow with
+native `fetch` (verifying via Google's own `tokeninfo` endpoint, not a local JWT/JWKS library) —
+same "native APIs over a new dependency" style as the password hashing choice above. Email is the
+sole identity key; a name (and, since issue #46, a password) is asked once, on a genuinely new
+email, for display purposes only in the name's case.
 
 **Outbound email — self-service password reset (issue #59), admin invites (#62), welcome email
 (#93)** — `pipeline/src/mailer.ts` calls Brevo's transactional HTTP API directly with Node's
