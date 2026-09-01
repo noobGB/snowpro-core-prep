@@ -226,10 +226,19 @@ function requireAdmin(req: express.Request, res: express.Response, next: express
  *  Scheme is `req.protocol`, not hardcoded — this app doesn't terminate TLS itself, but may run
  *  behind a TLS-terminating reverse proxy (e.g. a cloud host), in which case `app.set("trust
  *  proxy", 1)` above makes `req.protocol` reflect the real public scheme via `X-Forwarded-Proto`.
- *  On the local LAN deployment there's no such proxy, so this still just resolves to `http`. */
+ *  On the local LAN deployment there's no such proxy, so this still just resolves to `http`.
+ *
+ *  Issue #97: the `hostOverride` branch's `:${PORT}` append is correct ONLY for plain-HTTP LAN
+ *  use — confirmed as a real, live bug, not theoretical: with `SNOWPRO_HOST_NAME` set on Railway,
+ *  emailed reset links read `https://<domain>:8080/...`, and nothing on Railway's public HTTPS
+ *  edge listens on 8080 (that's the *internal* container port), so every such link timed out.
+ *  `PORT` is meaningful only on the plain-HTTP LAN path, where a client really does need the
+ *  non-standard port in the address to reach the server directly with no reverse proxy in front.
+ *  Behind a real TLS-terminating edge the public entry point is always the implicit standard port
+ *  for the scheme (443) — the internal `PORT` value must never leak into a public-facing URL. */
 function publicOrigin(req: express.Request): string {
   const hostOverride = process.env.SNOWPRO_HOST_NAME;
-  if (hostOverride) return `${req.protocol}://${hostOverride}:${PORT}`;
+  if (hostOverride) return req.protocol === "https" ? `https://${hostOverride}` : `${req.protocol}://${hostOverride}:${PORT}`;
   return `${req.protocol}://${req.get("host")}`;
 }
 
