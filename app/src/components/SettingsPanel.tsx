@@ -1,8 +1,8 @@
 /**
- * Settings — an Appearance (Light/Dark) control, progress backup/restore, reset all
- * progress behind a typed confirmation, and a read-only content-version line. Deliberately
- * does NOT have an exam-date field — that used to live here too, duplicating the Dashboard Exam
- * card's own date picker for no reason (a bare date input is nearly meaningless without the
+ * Settings — an Appearance (Light/Dark) control, progress backup/restore, and reset all
+ * progress behind a typed confirmation. Deliberately does NOT have an exam-date field — that used
+ * to live here too, duplicating the Dashboard Exam card's own date picker for no reason (a bare
+ * date input is nearly meaningless without the
  * days-left countdown right next to it, which only Dashboard has). Removed after a UX pass;
  * Dashboard is the one place to set it now. Mounted once at the App root (see CommandPalette's
  * own doc comment for the same pattern) and driven by settingsStore rather than parent-owned
@@ -11,7 +11,6 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { useContent } from "../lib/useContent";
 import { getProgress, getStorageBackend, resetProgress, updateProgress, useProgress, type ProgressState } from "../lib/progress";
 import { isoDate } from "../lib/planDates";
 import { closeSettings, useSettingsOpen } from "../lib/settingsStore";
@@ -70,7 +69,6 @@ function ThemeTab({ active, onClick, label }: { active: boolean; onClick: () => 
 export function SettingsPanel() {
   const open = useSettingsOpen();
   const { settings } = useProgress();
-  const { content } = useContent();
   const me = useSessionUser();
   const [resetInput, setResetInput] = useState("");
   const [resetDone, setResetDone] = useState(false);
@@ -370,12 +368,6 @@ export function SettingsPanel() {
               ? "Progress is saved to this server — it survives clearing browser data."
               : "Progress is saved in this browser only — clearing site data will erase it."}
           </div>
-          {content && (
-            <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-dim)", marginTop: 8 }}>
-              content v{content.bankVersion.replace(/^sha256:/, "").slice(0, 8)} · updated{" "}
-              {new Date(content.generatedAt).toLocaleDateString()}
-            </div>
-          )}
         </div>
       </div>
     </div>
