@@ -1,68 +1,71 @@
 /**
- * Outbound email for issue #59's forgot-password flow — this app's first email-sending capability
- * (see `pipeline/src/server.ts`'s `POST /api/password-reset/request`, and `CLAUDE.md`'s "Password
- * login" section for why one didn't exist before). Generic SMTP via `nodemailer` rather than a
- * specific provider's SDK: any SMTP relay works (initial deployment targets Brevo's free relay,
- * `smtp-relay.brevo.com:587`, chosen because it lets you verify a single sender address instead of
- * a whole domain — this app has neither), and switching providers later is only an env-var change.
+ * Outbound email via Brevo's transactional HTTP API (`POST https://api.brevo.com/v3/smtp/email`),
+ * not raw SMTP (issue #95). Originally built on `nodemailer`/generic SMTP — deliberately
+ * provider-agnostic, "any SMTP relay works, switching is only an env-var change" — switched
+ * because Railway (this app's primary public-hosting target, issue #85/#91) blocks all outbound
+ * SMTP ports (465/587/2525) below its Pro plan tier. Confirmed live, not assumed: a real
+ * password-reset attempt against the deployed instance failed with a raw SMTP connection timeout,
+ * before any auth was even attempted. Brevo's API runs over plain HTTPS (port 443), which no host
+ * blocks. This trades away the old "any SMTP relay" generality for self-hosters — a deliberate,
+ * accepted choice (see issue #95), not an oversight.
  *
- * All config comes from `SNOWPRO_SMTP_*` env vars, matching this repo's existing plain-env-var,
- * `SNOWPRO_`-prefixed convention (`docker-compose.yml`'s `environment:` block) — there's no
- * `.env.example`-driven default because a real SMTP account is inherently operator-specific.
+ * All config comes from `SNOWPRO_EMAIL_*` env vars, matching this repo's existing plain-env-var,
+ * `SNOWPRO_`-prefixed convention (`docker-compose.yml`'s `environment:` block).
  */
 
-import nodemailer, { type Transporter } from "nodemailer";
-
-interface SmtpConfig {
-  host: string;
-  port: number;
-  user: string;
-  pass: string;
+interface EmailConfig {
+  apiKey: string;
   from: string;
-  secure: boolean;
+  fromName: string;
 }
 
-function readConfig(): SmtpConfig | undefined {
-  const host = process.env.SNOWPRO_SMTP_HOST;
-  const user = process.env.SNOWPRO_SMTP_USER;
-  const pass = process.env.SNOWPRO_SMTP_PASS;
-  const from = process.env.SNOWPRO_SMTP_FROM;
-  if (!host || !user || !pass || !from) return undefined;
-  return {
-    host,
-    user,
-    pass,
-    from,
-    port: Number(process.env.SNOWPRO_SMTP_PORT ?? 587),
-    secure: process.env.SNOWPRO_SMTP_SECURE === "true",
-  };
+const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
+
+function readConfig(): EmailConfig | undefined {
+  const apiKey = process.env.SNOWPRO_EMAIL_API_KEY;
+  const from = process.env.SNOWPRO_EMAIL_FROM;
+  if (!apiKey || !from) return undefined;
+  return { apiKey, from, fromName: process.env.SNOWPRO_EMAIL_FROM_NAME ?? "SnowPro Core Prep" };
 }
 
-/** Whether `SNOWPRO_SMTP_*` is fully set — lets `POST /api/password-reset/request` fail with a
- *  clear operator-facing error up front instead of a confusing mid-request `sendMail()` throw. Safe
- *  to reveal to any caller: it's a fact about this server's global config, not about any one
- *  account, so it can't be used to enumerate users. */
+/** Whether `SNOWPRO_EMAIL_*` is fully set — lets `POST /api/password-reset/request` fail with a
+ *  clear operator-facing error up front instead of a confusing mid-request throw. Safe to reveal
+ *  to any caller: it's a fact about this server's global config, not about any one account, so it
+ *  can't be used to enumerate users. */
 export function isMailerConfigured(): boolean {
   return readConfig() !== undefined;
 }
 
-let transporter: Transporter | undefined;
+interface EmailMessage {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+}
 
-/** Built lazily (not at module load) so a server boot with no SMTP configured yet — the common case
- *  until an operator sets it up — never throws just from importing this module. */
-function getTransporter(): Transporter {
-  if (transporter) return transporter;
-  const config = readConfig();
-  if (!config) {
-    throw new Error("SMTP is not configured (SNOWPRO_SMTP_HOST/USER/PASS/FROM) — call isMailerConfigured() first.");
-  }
-  transporter = nodemailer.createTransport({
-    host: config.host,
-    port: config.port,
-    secure: config.secure,
-    auth: { user: config.user, pass: config.pass },
+/** The one place that actually calls Brevo. `config` is always pre-validated by the caller (each
+ *  exported function below does its own `readConfig()` check first) so this never has to handle
+ *  "not configured" itself — only real API-call failures (bad key, Brevo-side error, network). */
+async function sendViaBrevo(config: EmailConfig, message: EmailMessage): Promise<void> {
+  const res = await fetch(BREVO_API_URL, {
+    method: "POST",
+    headers: {
+      "api-key": config.apiKey,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      sender: { email: config.from, name: config.fromName },
+      to: [{ email: message.to }],
+      subject: message.subject,
+      textContent: message.text,
+      htmlContent: message.html,
+    }),
   });
-  return transporter;
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Brevo API request failed: ${res.status} ${res.statusText}${body ? ` — ${body}` : ""}`);
+  }
 }
 
 /** Sends the forgot-password link. `resetUrl` is built by the caller from the incoming request's
@@ -71,10 +74,9 @@ function getTransporter(): Transporter {
 export async function sendPasswordResetEmail(to: string, resetUrl: string): Promise<void> {
   const config = readConfig();
   if (!config) {
-    throw new Error("SMTP is not configured (SNOWPRO_SMTP_HOST/USER/PASS/FROM) — call isMailerConfigured() first.");
+    throw new Error("Email isn't configured (SNOWPRO_EMAIL_API_KEY/SNOWPRO_EMAIL_FROM) — call isMailerConfigured() first.");
   }
-  await getTransporter().sendMail({
-    from: config.from,
+  await sendViaBrevo(config, {
     to,
     subject: "Reset your SnowPro Core Prep password",
     text:
@@ -99,10 +101,9 @@ export async function sendPasswordResetEmail(to: string, resetUrl: string): Prom
 export async function sendWelcomeEmail(to: string, name: string, loginUrl: string): Promise<void> {
   const config = readConfig();
   if (!config) {
-    throw new Error("SMTP is not configured (SNOWPRO_SMTP_HOST/USER/PASS/FROM) — call isMailerConfigured() first.");
+    throw new Error("Email isn't configured (SNOWPRO_EMAIL_API_KEY/SNOWPRO_EMAIL_FROM) — call isMailerConfigured() first.");
   }
-  await getTransporter().sendMail({
-    from: config.from,
+  await sendViaBrevo(config, {
     to,
     subject: "Welcome to SnowPro Core Prep",
     text:
@@ -128,7 +129,7 @@ export async function sendWelcomeEmail(to: string, name: string, loginUrl: strin
  *  `sendPasswordResetEmail()`'s `resetUrl` is (`req.protocol`/`req.get("host")`, no fixed
  *  public-URL config) -- just the app's root, not a token-bearing link, since there's nothing to
  *  prove here that the temp password itself doesn't already prove. Throws the same way
- *  `sendPasswordResetEmail()` does if SMTP isn't configured -- `POST /api/admin/users` catches
+ *  `sendPasswordResetEmail()` does if email isn't configured -- `POST /api/admin/users` catches
  *  that itself and still reports the temp password back to the admin as a manual fallback, so this
  *  failing is never a dead end. */
 export async function sendAdminCreatedAccountEmail(
@@ -139,10 +140,9 @@ export async function sendAdminCreatedAccountEmail(
 ): Promise<void> {
   const config = readConfig();
   if (!config) {
-    throw new Error("SMTP is not configured (SNOWPRO_SMTP_HOST/USER/PASS/FROM) — call isMailerConfigured() first.");
+    throw new Error("Email isn't configured (SNOWPRO_EMAIL_API_KEY/SNOWPRO_EMAIL_FROM) — call isMailerConfigured() first.");
   }
-  await getTransporter().sendMail({
-    from: config.from,
+  await sendViaBrevo(config, {
     to,
     subject: "Your SnowPro Core Prep account",
     text:

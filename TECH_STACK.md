@@ -145,15 +145,21 @@ argon2's stronger offline-cracking resistance. Email is the sole identity key; a
 issue #46, a password) is asked once, on a genuinely new email, for display purposes only in the
 name's case.
 
-**`nodemailer` — self-service password reset (issue #59)** — `pipeline/src/mailer.ts` wraps
-`nodemailer`'s generic SMTP transport (config from `SNOWPRO_SMTP_*` env vars, see `.env.example`)
-to email a one-time reset link, backed by a new `password_resets` table (`db.ts`) with a 1-hour
-expiry. Generic SMTP rather than a provider-specific SDK deliberately: any relay works (initial
-deployment targets Brevo's free tier), and switching providers later is an env-var change, not a
-code change. Node has no built-in SMTP client, which is the one thing that keeps this app from
-being 100% dependency-free on its identity/auth path. The operator manually clearing an account's
-`password_hash` via direct DB access is still available as a fallback for an account with no email
-access at all, but is no longer the only recovery path.
+**Outbound email — self-service password reset (issue #59), admin invites (#62), welcome email
+(#93)** — `pipeline/src/mailer.ts` calls Brevo's transactional HTTP API directly with Node's
+built-in `fetch` (config from `SNOWPRO_EMAIL_*` env vars, see `.env.example`), backed by a new
+`password_resets` table (`db.ts`) with a 1-hour expiry for the reset flow. **Not SMTP, and not
+always this way** — originally built on `nodemailer`'s generic SMTP transport specifically so any
+relay would work and switching providers was an env-var change, not a code change. Switched
+(issue #95) after a real, live-confirmed failure: Railway, this app's primary public-hosting
+target, blocks all outbound SMTP ports below its Pro plan tier, so a real password-reset attempt
+against the deployed instance failed with a raw connection timeout. Brevo's API runs over plain
+HTTPS, which no host blocks — at the cost of the old provider-agnostic generality, now tied to
+Brevo specifically. Net effect on the dependency graph: this actually made the identity/auth path
+*more* dependency-free, not less — `nodemailer` (and its type package) are gone, `fetch` needs
+nothing installed. The operator manually clearing an account's `password_hash` via direct DB
+access is still available as a fallback for an account with no email access at all, but is no
+longer the only recovery path.
 
 **`tsx`** — runs TypeScript files directly (`tsx src/server.ts`) without a separate "compile to
 JS first" step. Used for both the CLI (`npm run build:content`) and, notably, as the **actual
