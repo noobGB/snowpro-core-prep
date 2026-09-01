@@ -48,7 +48,7 @@ import {
   type UserRow,
 } from "./db.js";
 import { hashPassword, verifyPassword, generateTemporaryPassword, MIN_PASSWORD_LENGTH } from "./passwords.js";
-import { isMailerConfigured, sendAdminCreatedAccountEmail, sendPasswordResetEmail } from "./mailer.js";
+import { isMailerConfigured, sendAdminCreatedAccountEmail, sendPasswordResetEmail, sendWelcomeEmail } from "./mailer.js";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DATA_DIR = path.resolve(process.env.SNOWPRO_DATA_DIR ?? "/data");
@@ -344,6 +344,14 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
     if (isFirstEverAccount) {
       const migrated = migrateFlatFileProgress(db, user.id, OLD_PROGRESS_FILE);
       if (migrated) console.log(`✓ Migrated pre-upgrade progress.json into ${user.email}'s new account`);
+    }
+    // Fire-and-forget, same pattern as the password-reset email below — no secret to convey, no
+    // reason to make the response wait on an SMTP round trip or to report delivery back to the
+    // client.
+    if (isMailerConfigured()) {
+      sendWelcomeEmail(user.email, user.name, `${publicOrigin(req)}/`).catch((err: unknown) => {
+        console.error(`Failed to send welcome email to ${user.email}:`, err);
+      });
     }
     issueSessionCookie(req, res, createSession(db, user.id));
     res.json({ status: "known", email: user.email, name: user.name });
