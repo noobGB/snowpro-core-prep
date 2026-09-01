@@ -132,6 +132,23 @@ jobs:
           exit 1
       - name: Smoke-test HTTP 200
         run: curl --fail -sS http://localhost:8080/ -o /dev/null
+      # A bare 200 on / only proves the server boots and serves static files -- it says nothing
+      # about whether the actual auth surface (this app's core feature) still works. A regression
+      # that broke POST /api/session or the OAuth-availability check while still returning 200 on
+      # / would previously sail straight through this job. These exercise the real routes with the
+      # exact shapes the frontend depends on.
+      - name: Smoke-test POST /api/session (new-email path)
+        run: |
+          body=$(curl --fail -sS -X POST http://localhost:8080/api/session \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"ci-smoke-test@example.invalid"}')
+          echo "$body"
+          echo "$body" | jq -e '.status == "new"'
+      - name: Smoke-test GET /api/oauth/google/available
+        run: |
+          body=$(curl --fail -sS http://localhost:8080/api/oauth/google/available)
+          echo "$body"
+          echo "$body" | jq -e 'has("available") and (.available == false)'
       - name: Dump container logs on failure
         if: failure()
         run: docker compose logs
