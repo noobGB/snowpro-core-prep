@@ -17,11 +17,21 @@ function copyLandingScreenshot(): Plugin {
       copyFileSync(screenshotPath, path.resolve(import.meta.dirname, "dist/landing-dashboard.png"));
     },
     // `vite dev` never runs closeBundle -- serve the same fixed path directly from source so
-    // LandingPage.tsx's <img src="/landing-dashboard.png"> also renders during local iteration.
+    // HomePage.tsx's <img src="/landing-dashboard.png"> also renders during local iteration.
     configureServer(server) {
       server.middlewares.use("/landing-dashboard.png", (_req, res) => {
+        const stream = createReadStream(screenshotPath);
+        // Without this, a missing/deleted source file throws an unhandled ENOENT that crashes the
+        // whole dev server process (not just this one request) -- confirmed reproducible via
+        // `rm src/assets/landing-dashboard.png && npm run dev`, hit the URL. 404 instead, matching
+        // how the production path (express.static in server.ts) already fails on a missing file.
+        stream.on("error", (err) => {
+          console.error(`Failed to serve /landing-dashboard.png from ${screenshotPath}:`, err);
+          if (!res.headersSent) res.writeHead(404);
+          res.end();
+        });
         res.setHeader("Content-Type", "image/png");
-        createReadStream(screenshotPath).pipe(res);
+        stream.pipe(res);
       });
     },
   };

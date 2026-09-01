@@ -91,7 +91,12 @@ const labelStyle: React.CSSProperties = {
 // WCAG AA contrast (per the 2026-08-18 audit), so nothing new should add to that debt.
 const hintStyle: React.CSSProperties = { margin: "0 0 8px", fontSize: 12, lineHeight: 1.4, color: "var(--text-muted)" };
 
-export function AuthForm() {
+/** `headingLevel` defaults to "h1" for standalone `LoginGate` (its own page, this heading IS the
+ *  page's top-level heading) -- `HomePage.tsx` passes "h2" instead, since it already renders its
+ *  own `&lt;h1&gt;` for the hero and two `&lt;h1&gt;`s on one screen is a real heading-hierarchy/
+ *  screen-reader-navigation bug, not just a style nit (axe's `page-has-heading-one`/
+ *  `heading-order` rules both flag it). */
+export function AuthForm({ headingLevel = "h1" }: { headingLevel?: "h1" | "h2" } = {}) {
   const [email, setEmail] = useState("");
   const [mode, setMode] = useState<Mode>("email");
   const [name, setName] = useState("");
@@ -269,14 +274,19 @@ export function AuthForm() {
         <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--text-dim)", marginBottom: 8 }}>
           COF-C03
         </div>
-        <h1 style={{ margin: mode === "email" ? "0 0 22px" : "0 0 6px", fontSize: 22, fontWeight: 500, letterSpacing: "-0.012em", color: "var(--text-heading)" }}>
-          {mode === "new" && "What should we call you?"}
-          {mode === "claim" && "Set a password to protect this account"}
-          {mode === "password" && "Password"}
-          {mode === "forgot" && "Reset your password"}
-          {mode === "must_change_password" && "Set your password"}
-          {mode === "email" && "Who's studying?"}
-        </h1>
+        {(() => {
+          const Heading = headingLevel;
+          return (
+            <Heading style={{ margin: mode === "email" ? "0 0 22px" : "0 0 6px", fontSize: 22, fontWeight: 500, letterSpacing: "-0.012em", color: "var(--text-heading)" }}>
+              {mode === "new" && "What should we call you?"}
+              {mode === "claim" && "Set a password to protect this account"}
+              {mode === "password" && "Password"}
+              {mode === "forgot" && "Reset your password"}
+              {mode === "must_change_password" && "Set your password"}
+              {mode === "email" && "Who's studying?"}
+            </Heading>
+          );
+        })()}
         {mode === "claim" && (
           <p style={{ margin: "0 0 18px", fontSize: 13, lineHeight: 1.5, color: "var(--text-muted)" }}>
             You&rsquo;ve been using this account without a password &mdash; set one now to keep

@@ -258,7 +258,7 @@ export function Runner() {
 
   if (set.kind === "mock" && !mockStarted) {
     return (
-      <div style={{ maxWidth: 640, margin: "10vh auto 0" }}>
+      <main style={{ maxWidth: 640, margin: "10vh auto 0" }}>
         <div style={{ background: "var(--card)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-card)", padding: 32 }}>
           <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--text-dim)", marginBottom: 12 }}>
             {set.title}
@@ -288,7 +288,7 @@ export function Runner() {
             </button>
           </div>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -318,7 +318,16 @@ export function Runner() {
   };
 
   return (
-    <div>
+    <main>
+      {/* Runner.tsx had no heading or landmark at all before this -- App.tsx deliberately routes
+          /session/:setId outside AppShell/its <main> (spec: "nothing competes with the
+          questions"), which also means this is the ONLY landmark structure this, the single
+          highest-dwell-time screen in the app, gets. Visually hidden since "Q3/50 · 2 answered"
+          right below already conveys this to sighted users -- this is purely so a screen reader
+          has something to land on/announce. */}
+      <h1 className="sr-only">
+        Question {currentIndex + 1} of {questions.length} — {set.title}
+      </h1>
       <div
         style={{
           position: "sticky",
@@ -495,7 +504,7 @@ export function Runner() {
           })}
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 

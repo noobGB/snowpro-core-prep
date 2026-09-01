@@ -138,6 +138,23 @@
   box-sizing: border-box;
 }
 
+/* Standard visually-hidden pattern -- content stays in the accessibility tree (screen readers,
+   heading/landmark navigation) without taking up layout space or being visible to sighted users.
+   `clip-path` (not the older `clip: rect()`) plus `white-space: nowrap` is the current
+   recommended form (avoids the element affecting scroll bounds that `overflow:hidden` boxes with
+   a huge negative position can sometimes trigger). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 html,
 body {
   margin: 0;
@@ -324,9 +341,20 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 .home-hero {
   grid-area: hero;
+  /* .home-hero-glow's negative z-index needs a local stacking context to paint above --canvas but
+     below the heading/paragraph -- position: relative alone doesn't create one, so without this
+     the glow escaped to the document root and painted underneath the page's own opaque
+     background, rendering nothing at all (confirmed via a pixel diff, not just eyeballing it). */
+  isolation: isolate;
 }
 .home-form {
   grid-area: form;
+  /* AuthForm's own card has a fixed width (360px, see LoginGate.tsx's cardStyle) -- without this,
+     the grid's default justify-items:stretch stretches this cell but the fixed-width card inside
+     just sits flush against its left edge, leaving an unbalanced gap on the right instead of the
+     centered look LoginGate's own standalone (fully centered) usage has. */
+  display: flex;
+  justify-content: center;
 }
 .home-screenshot {
   grid-area: screenshot;
