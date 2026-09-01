@@ -184,7 +184,7 @@ export function SettingsPanel() {
 
         {me && (
           <div style={{ marginBottom: 18 }}>
-            <label style={{ display: "block", fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>Profile</label>
+            <label style={{ display: "block", fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>Account</label>
             {/* Both read-only — name and email are shown so someone who forgets which identity
                 they're signed in as can check, but neither is user-editable in this app: email is
                 the identity/lookup key (server.ts's normalizeEmail()), and name-editing (issue
@@ -192,25 +192,8 @@ export function SettingsPanel() {
                 affordance — see DOCS_MAP.md/CLAUDE.md for the removal. */}
             <div style={{ fontSize: 14, color: "var(--text-body)", marginBottom: 2 }}>{me.name}</div>
             <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14 }}>{me.email}</div>
-            <button
-              type="button"
-              disabled={signingOut}
-              onClick={signOut}
-              style={{
-                width: "100%",
-                background: "transparent",
-                border: "1px solid var(--hairline)",
-                borderRadius: 6,
-                color: "var(--text-muted)",
-                fontSize: 13,
-                padding: "9px 0",
-                cursor: signingOut ? "default" : "pointer",
-              }}
-            >
-              {signingOut ? "Signing out…" : "Sign out"}
-            </button>
 
-            <div style={{ borderTop: "1px solid var(--hairline)", marginTop: 14, paddingTop: 14 }}>
+            <div>
               {!pwOpen && (
                 <button
                   type="button"
@@ -380,6 +363,37 @@ export function SettingsPanel() {
             </div>
           )}
         </div>
+
+        {/* Sign out lives here, last before the footer note, deliberately -- not up in Account
+            next to identity info. It's a rare, session-ending action (session cookies are
+            400-day, per lib/session.ts), not an account-management one, so it belongs at the end
+            of the menu (the conventional "File > Exit" position -- iOS Settings, Slack, GitHub all
+            put the literal sign-out control last, behind its own divider, even though identity
+            info itself shows near the top). Kept in the same neutral/muted styling as every other
+            non-destructive button here, not Reset's red treatment -- signing out doesn't touch
+            data (see the footer note right below, which now reassures on exactly this point right
+            where someone is about to click). */}
+        {me && (
+          <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: 14, marginBottom: 18 }}>
+            <button
+              type="button"
+              disabled={signingOut}
+              onClick={signOut}
+              style={{
+                width: "100%",
+                background: "transparent",
+                border: "1px solid var(--hairline)",
+                borderRadius: 6,
+                color: "var(--text-muted)",
+                fontSize: 13,
+                padding: "9px 0",
+                cursor: signingOut ? "default" : "pointer",
+              }}
+            >
+              {signingOut ? "Signing out…" : "Sign out"}
+            </button>
+          </div>
+        )}
 
         <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: 14 }}>
           <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>
