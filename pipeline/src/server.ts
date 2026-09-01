@@ -683,12 +683,27 @@ app.patch(
 //     act) at the HTTP-contract level — db.ts's writeProgressRow() closes the lower-level race with
 //     a real BEGIN IMMEDIATE transaction, but two independent PUTs racing this same route can still
 //     each read a stale revision before either writes, same as before. Acceptable given this app's
-//     actual write cadence (human/LLM-paced, not concurrent high-frequency writers). ---
+//     actual write cadence (human/LLM-paced, not concurrent high-frequency writers).
+//
+//     Issue #107 follow-up: the revision is ALSO echoed as a `rev` field in the JSON body (both
+//     routes), not just the ETag header. Confirmed live against the public Railway deployment: once
+//     a response is large enough for Railway's edge to gzip it (any real browser negotiates this by
+//     default via Accept-Encoding), the ETag response header does not reliably survive that
+//     transformation -- reproduced directly with curl --compressed vs. plain curl against the same
+//     account: identical request, but the ETag header is simply absent once Content-Encoding: gzip
+//     is applied. This happens entirely at Railway's edge (this app has no compression middleware
+//     of its own -- grep confirms), so it can't be fixed from here; the header is kept for any
+//     environment/proxy where it does survive (e.g. no such issue exists talking to
+//     `localhost:8080` directly, no compressing proxy in front), but the body-carried `rev` is the
+//     one the client actually trusts (progress.ts). Request headers (the PUT's own `If-Match`) are
+//     unaffected either way -- compression only touches outgoing responses, never incoming requests
+//     -- so only the *response*-carried revision needed this fallback. ---
 app.get("/api/progress", requireSession, (_req, res) => {
   const user = (res.locals as { user: UserRow }).user;
   const row = getProgressRow(db, user.id);
-  res.set("ETag", row?.updatedAt ?? "0");
-  res.json(row ? JSON.parse(row.data) : defaultProgressState());
+  const rev = row?.updatedAt ?? "0";
+  res.set("ETag", rev);
+  res.json({ ...(row ? JSON.parse(row.data) : defaultProgressState()), rev });
 });
 
 app.put("/api/progress", requireSession, express.json({ limit: "2mb" }), (req, res) => {
@@ -704,7 +719,7 @@ app.put("/api/progress", requireSession, express.json({ limit: "2mb" }), (req, r
   }
   try {
     const newRev = writeProgressRow(db, user.id, JSON.stringify(req.body), ifMatch);
-    res.set("ETag", newRev).status(204).end();
+    res.set("ETag", newRev).status(200).json({ rev: newRev });
   } catch (err) {
     if (err instanceof ProgressConflictError) {
       res.status(409).json({

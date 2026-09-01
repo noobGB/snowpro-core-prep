@@ -135,9 +135,14 @@ async function hydrateFromServer(): Promise<void> {
   try {
     const res = await fetch("/api/progress");
     if (!res.ok) return; // no such route (e.g. `vite dev`, or opened as plain static files)
-    const server = await res.json();
+    const { rev: bodyRev, ...server } = await res.json();
     backend = "http";
-    rev = res.headers.get("ETag");
+    // Prefer the body-carried revision (issue #107) — Railway's edge doesn't reliably preserve the
+    // ETag response header once a response is large enough to get gzip-compressed (confirmed live:
+    // curl --compressed vs. plain curl against the identical request, ETag simply absent once
+    // Content-Encoding: gzip applies — see server.ts's GET /api/progress comment for the full
+    // finding). The header is still read as a fallback for any environment where it does survive.
+    rev = bodyRev ?? res.headers.get("ETag");
     setState({ ...defaultState(), ...server });
   } catch {
     // network error / opened as plain files — stay on localStorage
@@ -166,7 +171,10 @@ async function persist(): Promise<void> {
         return;
       }
       if (!res.ok) throw new Error(`PUT /api/progress → ${res.status}`);
-      rev = res.headers.get("ETag");
+      // See hydrateFromServer()'s comment (issue #107) for why the body-carried rev, not the
+      // header, is the one actually trusted.
+      const body = await res.json().catch(() => null);
+      rev = body?.rev ?? res.headers.get("ETag");
     } catch (err) {
       console.error("progress PUT failed", err);
     }
@@ -260,27 +268,40 @@ export async function resetProgressConfirmed(maxAttempts = 3): Promise<boolean> 
     clearTimeout(saveTimer);
     saveTimer = null;
   }
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  if (backend !== "http") {
     setState(defaultState());
-    if (backend !== "http") {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      return true;
-    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    return true;
+  }
+  // Deliberately does NOT call setState(defaultState()) until a write is actually confirmed --
+  // an earlier version of this function did it unconditionally on every attempt, which cleared
+  // every reactive view of local state (Dashboard, Analytics, ...) before the write had even been
+  // attempted, let alone confirmed. Caught live on a real account: "most of the data got reset but
+  // Analytics remained the same" while the button was *simultaneously* reporting failure -- the
+  // local optimistic clear and the real server outcome had nothing to do with each other. Nothing
+  // about the visible app state should change until this function is actually about to return true.
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const res = await fetch("/api/progress", {
         method: "PUT",
         headers: { "Content-Type": "application/json", "If-Match": rev ?? "0" },
-        body: JSON.stringify(state),
+        body: JSON.stringify(defaultState()),
       });
       if (res.status === 409) {
         // Re-sync the revision and retry -- the state we're writing (defaultState()) doesn't
         // change between attempts, so there's no "which change wins" question to get wrong here.
+        // Body-carried rev, not the header -- see hydrateFromServer()'s comment (issue #107): this
+        // exact retry loop is what first exposed the header being unreliable, since a stale/wrong
+        // header value here means every retry re-sends the same wrong If-Match and 409s forever.
         const fresh = await fetch("/api/progress");
-        rev = fresh.headers.get("ETag");
+        const freshBody = await fresh.json().catch(() => null);
+        rev = freshBody?.rev ?? fresh.headers.get("ETag");
         continue;
       }
       if (!res.ok) return false;
-      rev = res.headers.get("ETag");
+      const body = await res.json().catch(() => null);
+      rev = body?.rev ?? res.headers.get("ETag");
+      setState(defaultState());
       return true;
     } catch {
       return false;
