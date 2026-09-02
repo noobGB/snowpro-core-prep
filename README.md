@@ -7,8 +7,10 @@ a folder of markdown notes into domain notes, practice questions, timed mock exa
 day-by-day plan, and analytics. No cloud service, no telemetry — everything stays on your machine
 (or your [local network](#multi-user-lan)).
 
-![Dashboard](.github/screenshot-dashboard.png)
-*Exam countdown, weighted readiness, and today's plan tasks — all in one view.*
+![Home page](.github/screenshot-home.png)
+*What a public deployment shows a signed-out visitor — feature highlights alongside the actual
+login form, not a separate click-through screen. Email + password; name and a password are only
+asked once, on your first-ever login.*
 
 > **This is an independent, unofficial personal project — not affiliated with, endorsed by, or
 > sponsored by Snowflake Inc.** "Snowflake" and "SnowPro" are trademarks of Snowflake Inc.; they're
@@ -131,7 +133,10 @@ useful for a human doing the same.
 *Wrong answers explained first, each with a direct link back to the note that covers it.*
 
 <details>
-<summary>More screenshots — Practice runner, Flashcards, Study plan, Analytics, Home page</summary>
+<summary>More screenshots — Dashboard, Practice runner, Flashcards, Study plan, Analytics</summary>
+
+![Dashboard](.github/screenshot-dashboard.png)
+*Exam countdown, weighted readiness, and today's plan tasks — all in one view.*
 
 ![Practice runner](.github/screenshot-runner.png)
 *One question per screen, arrow-key navigation, flag-for-review, and a jump palette.*
@@ -144,11 +149,6 @@ useful for a human doing the same.
 
 ![Analytics](.github/screenshot-analytics.png)
 *Readiness weighted by real exam domain weights, plus pacing against the actual time budget.*
-
-![Home page](.github/screenshot-home.png)
-*What a public deployment shows a signed-out visitor — feature highlights alongside the actual
-login form, not a separate click-through screen. Email + password; name and a password are only
-asked once, on your first-ever login.*
 
 </details>
 
