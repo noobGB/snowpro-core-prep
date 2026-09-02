@@ -17,6 +17,7 @@ import { closePalette, openPalette } from "../lib/paletteStore";
 import { closeSettings, openSettings } from "../lib/settingsStore";
 import { modKeyLabel } from "../lib/platform";
 import { useSessionUser } from "../lib/session";
+import { Logo } from "./Logo";
 
 interface NavItem {
   label: string;
@@ -67,15 +68,7 @@ export function Sidebar() {
       }}
     >
       <Link to="/" style={{ display: "flex", alignItems: "center", gap: 9, padding: "4px 8px 14px" }}>
-        <div
-          style={{
-            width: 16,
-            height: 16,
-            border: "1.5px solid var(--accent)",
-            borderRadius: 3,
-            transform: "rotate(45deg)",
-          }}
-        />
+        <Logo size={16} />
         <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-heading)", letterSpacing: "-0.01em" }}>
           SnowPro Core Prep
         </span>
