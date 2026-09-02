@@ -9,6 +9,8 @@
 
 export type QuestionType = "single" | "multi";
 
+export type MockDifficulty = "easy" | "medium" | "hard";
+
 export interface QuestionOption {
   key: string; // "A".."E"
   text: string;
@@ -53,6 +55,7 @@ export interface QuestionSet {
   timed: boolean;
   durationMin?: number; // present for kind "mock"
   domainSplit?: Record<string, number>; // present for kind "mock"
+  difficulty?: MockDifficulty; // present for kind "mock" -- editorial, see mockExam.ts's MOCK_DIFFICULTY
 }
 
 export interface Flashcard {

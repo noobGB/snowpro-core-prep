@@ -101,7 +101,13 @@ export function runPipeline(config: PipelineConfig): PipelineResult {
     const allQuestionsSoFar = [...domainQuestions, ...mockOnlyQuestions];
     mockSets.push(
       buildMockSet(
-        { mockFileNumber, title: meta.title, durationMin: meta.durationMin, questionIdsInOrder: result.questionIdsInOrder },
+        {
+          mockFileNumber,
+          title: meta.title,
+          durationMin: meta.durationMin,
+          difficulty: meta.difficulty,
+          questionIdsInOrder: result.questionIdsInOrder,
+        },
         allQuestionsSoFar,
       ),
     );

@@ -25,6 +25,34 @@ function remainingLabel(startedAt: string, durationMin: number): string {
   return `${m} minute${m === 1 ? "" : "s"} left`;
 }
 
+const DIFFICULTY_COLOR: Record<string, string> = {
+  easy: "var(--status-correct)",
+  medium: "var(--status-warning)",
+  hard: "var(--status-incorrect)",
+};
+
+function DifficultyBadge({ difficulty }: { difficulty: string }) {
+  const color = DIFFICULTY_COLOR[difficulty] ?? "var(--text-dim)";
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        fontSize: 11,
+        fontWeight: 600,
+        textTransform: "uppercase",
+        letterSpacing: "0.04em",
+        color,
+        border: `1px solid ${color}`,
+        borderRadius: 4,
+        padding: "2px 6px",
+      }}
+    >
+      {difficulty}
+    </span>
+  );
+}
+
 export function MockExams() {
   const { content, error } = useContent();
   const progress = useProgress();
@@ -74,7 +102,10 @@ export function MockExams() {
             <div key={set.id} style={{ background: "var(--card)", border: "1px solid var(--hairline)", borderRadius: "var(--radius-card)", padding: 20 }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
                 <div>
-                  <div style={{ fontSize: 17, fontWeight: 500, color: "var(--text-heading)", marginBottom: 6 }}>{set.title}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <div style={{ fontSize: 17, fontWeight: 500, color: "var(--text-heading)" }}>{set.title}</div>
+                    {set.difficulty && <DifficultyBadge difficulty={set.difficulty} />}
+                  </div>
                   <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text-dim)" }}>
                     {set.questionIds.length}Q{split ? ` · ${split}` : ""}
                   </div>

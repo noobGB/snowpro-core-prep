@@ -6,7 +6,7 @@
  */
 
 import { classifyFiles } from "../discovery.js";
-import type { Domain, Question, QuestionSet } from "../types.js";
+import type { Domain, MockDifficulty, Question, QuestionSet } from "../types.js";
 import { domainSetId, mockSetId } from "../util/ids.js";
 
 function isDomainAuthored(question: Question): boolean {
@@ -35,6 +35,7 @@ export interface MockSetInput {
   mockFileNumber: number;
   title: string;
   durationMin: number;
+  difficulty: MockDifficulty;
   questionIdsInOrder: string[];
 }
 
@@ -54,6 +55,7 @@ export function buildMockSet(input: MockSetInput, allQuestions: Question[]): Que
     questionIds: input.questionIdsInOrder,
     timed: true,
     durationMin: input.durationMin,
+    difficulty: input.difficulty,
     domainSplit,
   };
 }
