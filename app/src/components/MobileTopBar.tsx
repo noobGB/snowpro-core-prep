@@ -3,6 +3,7 @@
 
 import { Link } from "react-router-dom";
 import { openPalette } from "../lib/paletteStore";
+import { Logo } from "./Logo";
 
 export function MobileTopBar() {
   return (
@@ -21,7 +22,7 @@ export function MobileTopBar() {
       }}
     >
       <Link to="/" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ width: 14, height: 14, border: "1.5px solid var(--accent)", borderRadius: 3, transform: "rotate(45deg)" }} />
+        <Logo size={14} />
         <span style={{ fontSize: 14, fontWeight: 500, color: "var(--text-heading)" }}>SnowPro Core Prep</span>
       </Link>
       <button
