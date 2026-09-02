@@ -781,9 +781,13 @@ Four GitHub Actions workflows, all repo-wide (not scoped to one package):
   the workflow files themselves, with minor/patch bumps grouped per package to keep PR volume down
   on a low-traffic repo.
 
-Branch protection is not configured today. It was originally skipped because this was a private
-repo and GitHub's branch protection rulesets required a paid plan or a public repo (confirmed via a
-403 from the API at the time) — that constraint no longer applies since the repo went public, so
-enabling required-status-checks-before-merge on `master` is now a free, live option worth actually
-turning on, not just a documented limitation. CI still reports pass/fail status on every PR/commit
-via the Checks tab regardless, it just doesn't technically block merging yet.
+**Branch protection is enabled on `master`** (as of 2026-09-02) — all four CI jobs (`pipeline`,
+`app`, `mcp-server`, `docker build + boot smoke test`) are required status checks before a PR can
+merge, and force-push/deletion are both blocked. This was skipped for a long stretch because the
+repo was private and GitHub's branch protection rulesets required a paid plan or a public repo
+(confirmed via a 403 from the API at the time); once the repo went public that constraint no longer
+applied, and it was turned on via `gh api repos/noobGB/snowpro-core-prep/branches/master/protection`
+(no UI equivalent used — same effect as the Settings → Branches page). `enforce_admins` is
+deliberately `false` and no PR-review count is required — this is still a solo repo, and the point
+is enforcing the CI-green gate that was already manual discipline, not adding a reviewer
+bottleneck Gaurav would just be blocking on himself.
