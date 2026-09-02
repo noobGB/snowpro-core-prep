@@ -144,10 +144,12 @@ for accounts created before passwords did.
   public domain; on the LAN, use email+password instead.
 - Progress lives in one shared SQLite database on the host machine (`data/snowprep.sqlite`), one
   row per person — nobody can read or write anyone else's data.
-- **Forgot your password?** Click "Forgot password?" on the login screen — if the server has email
-  set up (`SNOWPRO_EMAIL_*`, see `.env.example`), you'll get a reset link valid for 1 hour. If the
-  operator hasn't configured email, they can still clear your password directly in the database as
-  a fallback (the same way the account was created in the first place).
+- **Forgot your password?** Click "Forgot password?" on the login screen — if the server has both
+  email (`SNOWPRO_EMAIL_*`) and `SNOWPRO_HOST_NAME` set (see `.env.example` — the latter is
+  required for this specific email, not just optional, so the reset link can't be built from a
+  spoofable request header), you'll get a reset link valid for 1 hour. If the operator hasn't
+  configured both, they can still clear your password directly in the database as a fallback (the
+  same way the account was created in the first place).
 - **Admin**: the first-ever account on a fresh install becomes an admin automatically and gets an
   extra **Admin** page (Sidebar) listing every user — add a new one (they're emailed a temporary
   password and set their own on first login), remove one, or promote/demote between admin and

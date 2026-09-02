@@ -285,6 +285,29 @@ function publicOrigin(req: express.Request): string {
   return `${req.protocol}://${req.get("host")}`;
 }
 
+/** Security (issue #139): `publicOrigin()`'s Host-header fallback above is a deliberate, accepted
+ *  design for the admin-invite flow (see this function's own header comment) -- an authenticated
+ *  admin's own current request address is genuinely the right address to use for someone they
+ *  just invited, since it's the LAN address they're proven to be reachable on right now. It is
+ *  NOT safe for a link embedded in an email triggered by an *unauthenticated* request, where the
+ *  request's email target and its Host header can be two completely independent attacker-chosen
+ *  values -- an attacker (anyone able to reach this server, not necessarily its real intended
+ *  users) can POST a real victim's email with a spoofed `Host` header and get the server to mail
+ *  that victim a password-reset (or welcome) link pointing at an attacker-chosen domain. This
+ *  helper is used at exactly those unauthenticated, attacker-triggerable-for-an-arbitrary-victim
+ *  call sites (password reset, welcome emails) -- `null` means "don't trust this request's Host
+ *  header for a link going into someone else's inbox," and callers skip sending rather than
+ *  build one anyway. `SNOWPRO_HOST_NAME` was always available as a manual override; this makes it
+ *  a *requirement* for these specific email flows rather than an optional nicety, trading a little
+ *  zero-config LAN convenience (an operator who never sets it now needs to for these emails to
+ *  send at all) for closing a real spoofing vector. OAuth's own use of `publicOrigin()`
+ *  (`redirect_uri`) is deliberately NOT restricted the same way -- Google independently validates
+ *  the `redirect_uri` against what's registered in Cloud Console and simply rejects a mismatch, so
+ *  that call site already has a real backstop this one doesn't. */
+function trustedPublicOrigin(req: express.Request): string | null {
+  return process.env.SNOWPRO_HOST_NAME ? publicOrigin(req) : null;
+}
+
 function issueSessionCookie(req: express.Request, res: express.Response, token: string): void {
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
@@ -354,9 +377,14 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
     // reason to make the response wait on an SMTP round trip or to report delivery back to the
     // client.
     if (isMailerConfigured()) {
-      sendWelcomeEmail(user.email, user.name, `${publicOrigin(req)}/`).catch((err: unknown) => {
-        console.error(`Failed to send welcome email to ${user.email}:`, err);
-      });
+      const origin = trustedPublicOrigin(req);
+      if (origin) {
+        sendWelcomeEmail(user.email, user.name, `${origin}/`).catch((err: unknown) => {
+          console.error(`Failed to send welcome email to ${user.email}:`, err);
+        });
+      } else {
+        console.warn(`Skipped welcome email to ${user.email}: SNOWPRO_HOST_NAME isn't set (see trustedPublicOrigin()'s doc comment).`);
+      }
     }
     issueSessionCookie(req, res, createSession(db, user.id));
     res.json({ status: "known", email: user.email, name: user.name });
@@ -583,9 +611,14 @@ app.get("/api/oauth/google/callback", async (req, res) => {
         if (migrated) console.log(`✓ Migrated pre-upgrade progress.json into ${newUser.email}'s new account`);
       }
       if (isMailerConfigured()) {
-        sendWelcomeEmail(newUser.email, newUser.name, `${publicOrigin(req)}/`).catch((err: unknown) => {
-          console.error(`Failed to send welcome email to ${newUser.email}:`, err);
-        });
+        const origin = trustedPublicOrigin(req);
+        if (origin) {
+          sendWelcomeEmail(newUser.email, newUser.name, `${origin}/`).catch((err: unknown) => {
+            console.error(`Failed to send welcome email to ${newUser.email}:`, err);
+          });
+        } else {
+          console.warn(`Skipped welcome email to ${newUser.email}: SNOWPRO_HOST_NAME isn't set (see trustedPublicOrigin()'s doc comment).`);
+        }
       }
       linkGoogleAccount(db, newUser.id, identity.sub);
       user = newUser;
@@ -677,11 +710,19 @@ app.post("/api/password-reset/request", express.json({ limit: "10kb" }), (req, r
   }
   const user = findUserByEmail(db, email);
   if (user) {
-    const token = createPasswordResetToken(db, user.id, PASSWORD_RESET_TOKEN_TTL_MS);
-    const resetUrl = `${publicOrigin(req)}/reset-password?token=${token}`;
-    sendPasswordResetEmail(user.email, resetUrl).catch((err: unknown) => {
-      console.error(`Failed to send password reset email to ${user.email}:`, err);
-    });
+    const origin = trustedPublicOrigin(req);
+    if (!origin) {
+      // Same enumeration-safety reasoning as above applies here too -- this must not change the
+      // response shape or add a timing difference vs. the "no such account" path, so it's a plain
+      // skip, not an early return with a different response.
+      console.warn(`Skipped password-reset email to ${user.email}: SNOWPRO_HOST_NAME isn't set (see trustedPublicOrigin()'s doc comment).`);
+    } else {
+      const token = createPasswordResetToken(db, user.id, PASSWORD_RESET_TOKEN_TTL_MS);
+      const resetUrl = `${origin}/reset-password?token=${token}`;
+      sendPasswordResetEmail(user.email, resetUrl).catch((err: unknown) => {
+        console.error(`Failed to send password reset email to ${user.email}:`, err);
+      });
+    }
   }
   res.json(GENERIC_RESPONSE);
 });
