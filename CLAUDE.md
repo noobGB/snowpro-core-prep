@@ -107,6 +107,23 @@ than silently baking a broken link into an email. `SNOWPRO_HOST_NAME` remains av
 as a fully optional, manual override for anyone who wants to force a specific value later — never
 automatic, never guessed.
 
+**Issue #139 narrows this to the admin-invite case only — the reset/welcome emails above no longer
+trust the live request's `Host` header at all.** All three of them are triggered by an
+*unauthenticated* request (self-registration, Google self-registration, forgot-password), where the
+request's target email and its `Host` header are two completely independent attacker-chosen values
+— unlike the admin-invite case (an authenticated admin using their own proven-reachable address),
+anyone able to reach this server can `POST` a real victim's email with a spoofed `Host` header and
+get the server to mail *that victim* a link (a live password-reset token, for the reset case)
+pointing at an attacker-chosen domain. `trustedPublicOrigin(req)` returns `publicOrigin(req)` only
+when `SNOWPRO_HOST_NAME` is actually set, `null` otherwise — the three unauthenticated call sites
+skip sending (logging a clear warning) rather than build a link from the untrusted header.
+`SNOWPRO_HOST_NAME` goes from "optional nicety" to "required for these three emails to send at
+all" for a deployment that hasn't set it — a real trade-off against zero-config LAN convenience,
+made deliberately rather than the alternative (validate/allowlist the header's format instead of
+requiring the env var). OAuth's own `redirect_uri` (built the same way) is deliberately **not**
+restricted the same way — Google independently validates it against what's registered in Cloud
+Console and simply rejects a mismatch, a real backstop this one doesn't have.
+
 **Issue #85: scheme is `req.protocol`, not hardcoded `http://`, and the session cookie's `Secure`
 flag now follows `req.secure`.** Both were previously always plain-HTTP-only, matching the LAN-only
 threat model this app originally assumed. `app.set("trust proxy", 1)` (set once, near the top of
