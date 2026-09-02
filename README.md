@@ -2,11 +2,13 @@
 
 [![CI](https://github.com/noobGB/snowpro-core-prep/actions/workflows/ci.yml/badge.svg)](https://github.com/noobGB/snowpro-core-prep/actions/workflows/ci.yml)
 
-A local, offline-first study app for the Snowflake **SnowPro Core (COF-C03)** certification —
-turns a folder of markdown notes into a full study tool: domain notes, practice questions, timed
-mock exams, flashcards, a day-by-day plan, and analytics. No cloud service, no telemetry — your
-content and everyone's progress stay on your machine (or your local network — see
-[Multi-user](#multi-user-lan)).
+A local, offline-first study app for the Snowflake **SnowPro Core (COF-C03)** certification — turns
+a folder of markdown notes into domain notes, practice questions, timed mock exams, flashcards, a
+day-by-day plan, and analytics. No cloud service, no telemetry — everything stays on your machine
+(or your [local network](#multi-user-lan)).
+
+![Dashboard](.github/screenshot-dashboard.png)
+*Exam countdown, weighted readiness, and today's plan tasks — all in one view.*
 
 > **This is an independent, unofficial personal project — not affiliated with, endorsed by, or
 > sponsored by Snowflake Inc.** "Snowflake" and "SnowPro" are trademarks of Snowflake Inc.; they're
@@ -14,14 +16,6 @@ content and everyone's progress stay on your machine (or your local network — 
 > practice questions in this repo are original, independently authored, and verified against
 > Snowflake's own publicly available exam guide and documentation — not sourced from any Snowflake
 > or SnowPro-branded material.
-
-> **🤖 If you're an AI coding agent working in this repo, read [`CLAUDE.md`](CLAUDE.md) first** —
-> architecture, file layout, data flow, and known gotchas, written specifically for that. The rest
-> of this README (below) is written for humans: what the app does, how to run it, how to use it.
-> Want to open an issue or a PR? See [`CONTRIBUTING.md`](CONTRIBUTING.md).
-
-![Dashboard](.github/screenshot-dashboard.png)
-*Exam countdown, weighted readiness, and today's plan tasks — all in one view.*
 
 ## Why this exists
 
@@ -41,6 +35,36 @@ pass line 750/1000), but the content pipeline itself doesn't know anything Snowf
 replace the markdown with your own following the same shape and it works for a different exam
 entirely. See [Adding or editing content](#adding-or-editing-content) below.
 
+## Architecture
+
+![SnowPro Study Platform architecture — animated system diagram](docs/architecture-flow.gif)
+
+- **`pipeline/`** — a Node/TypeScript content pipeline. Parses `SnowPro_Notes_and_Questions/` into
+  `content.json` (+ per-domain notes JSON + a search index), validates cross-references, and fails
+  loudly with a grouped error report rather than serving partial/broken content.
+- **`app/`** — a Vite + React 19 + TypeScript SPA. No backend framework — identity (login/session)
+  and progress persistence are a small set of HTTP routes (`pipeline/src/server.ts`) backed by a
+  mounted SQLite database, with an automatic `localStorage` fallback when that backend isn't
+  present.
+- **`Dockerfile`** — a three-stage build (frontend, pipeline production deps, runtime) that runs
+  the content pipeline at container boot, before the server binds — so a bad markdown file is
+  caught at start-up, not on first page load.
+- **`mcp-server/`** — a standalone MCP server (not part of the Docker image) exposing quiz
+  sessions and progress as tools for an MCP host. Imports `app/`'s and `pipeline/`'s scoring and
+  content logic directly rather than reimplementing it, and reads/writes the same
+  `data/snowprep.sqlite` the container does (always against one fixed "owner" account, see
+  [Multi-user](#multi-user-lan) above), so it's a second front door onto identical state, not a
+  parallel system.
+
+Open [`docs/architecture.drawio`](docs/architecture.drawio) in [draw.io](https://app.diagrams.net/)
+to edit the diagram, or see the static [`docs/architecture.drawio.png`](docs/architecture.drawio.png)
+/ flowing [`docs/architecture-flow.svg`](docs/architecture-flow.svg) if your viewer doesn't animate
+GIFs.
+
+See [`CLAUDE.md`](CLAUDE.md) for the full architecture writeup (parser internals, the progress
+storage adapter, known gotchas) — written for AI coding agents working in this repo, but equally
+useful for a human doing the same.
+
 ## Features
 
 - **Domain notes** — a proper reading view (table of contents, scrollspy, "quiz me on this
@@ -49,10 +73,11 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
   untimed, no configuration step. Every wrong answer automatically joins a **missed-question
   notebook** (Practice page → filter toggle) — click **Retry these** to start a fresh session
   containing just those questions.
-- **Mock exams** — full-length, timed, matching the real exam's question count and domain split.
-  A pre-start screen states the rules (no pause, auto-submits at zero) before the clock starts.
-  Closing the tab doesn't stop the clock, but does leave it resumable — only one in-progress mock
-  at a time.
+- **Mock exams** — full-length, timed, matching the real exam's question count and domain split,
+  each one tagged with a difficulty (Easy/Medium/Hard) so you know what you're committing 115
+  minutes to before you start. A pre-start screen states the rules (no pause, auto-submits at zero)
+  before the clock starts. Closing the tab doesn't stop the clock, but does leave it resumable —
+  only one in-progress mock at a time.
 - **One question per screen** (shared by Practice and Mock) — Prev/Next, arrow-key navigation,
   flag-for-review, and a jump palette showing answered/flagged/current at a glance, closer to how
   the real exam interface paces you than a long scrolling quiz page.
@@ -102,11 +127,14 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
     Wipes every attempt, flashcard grade, and checklist back to a blank slate. **There is no
     undo** — Export first if there's any chance you'll want this data back.
 
-![Practice runner](.github/screenshot-runner.png)
-*One question per screen, arrow-key navigation, flag-for-review, and a jump palette.*
-
 ![Results & review](.github/screenshot-results.png)
 *Wrong answers explained first, each with a direct link back to the note that covers it.*
+
+<details>
+<summary>More screenshots — Practice runner, Flashcards, Study plan, Analytics, Home page</summary>
+
+![Practice runner](.github/screenshot-runner.png)
+*One question per screen, arrow-key navigation, flag-for-review, and a jump palette.*
 
 ![Flashcards](.github/screenshot-flashcards.png)
 *A knew-it/missed-it rating biases which cards resurface first next session.*
@@ -121,6 +149,8 @@ entirely. See [Adding or editing content](#adding-or-editing-content) below.
 *What a public deployment shows a signed-out visitor — feature highlights alongside the actual
 login form, not a separate click-through screen. Email + password; name and a password are only
 asked once, on your first-ever login.*
+
+</details>
 
 ## Multi-user (LAN)
 
@@ -239,6 +269,10 @@ Same content, driven conversationally instead of clicked through. Useful for any
 itself can't do: open-ended explanations, being quizzed out loud, generating new practice
 questions targeted at your actual weak spots, or working through the hands-on Snowflake setup log
 with something that can actually run commands alongside you.
+
+> 🤖 Any AI coding agent working in this repo (not just Claude Code) should read
+> [`CLAUDE.md`](CLAUDE.md) first — architecture, file layout, data flow, and known gotchas, written
+> specifically for that. Opening an issue or a PR instead? See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ```bash
 git clone <this-repo-url> snowpro-core-prep
@@ -436,36 +470,6 @@ The dev server falls back to `localStorage` for progress (no container, no `/api
 cd pipeline && npm test              # 30 tests, vitest
 cd app && npx tsc --noEmit           # typecheck
 ```
-
-## Architecture
-
-![SnowPro Study Platform architecture — animated system diagram](docs/architecture-flow.gif)
-
-- **`pipeline/`** — a Node/TypeScript content pipeline. Parses `SnowPro_Notes_and_Questions/` into
-  `content.json` (+ per-domain notes JSON + a search index), validates cross-references, and fails
-  loudly with a grouped error report rather than serving partial/broken content.
-- **`app/`** — a Vite + React 19 + TypeScript SPA. No backend framework — identity (login/session)
-  and progress persistence are a small set of HTTP routes (`pipeline/src/server.ts`) backed by a
-  mounted SQLite database, with an automatic `localStorage` fallback when that backend isn't
-  present.
-- **`Dockerfile`** — a three-stage build (frontend, pipeline production deps, runtime) that runs
-  the content pipeline at container boot, before the server binds — so a bad markdown file is
-  caught at start-up, not on first page load.
-- **`mcp-server/`** — a standalone MCP server (not part of the Docker image) exposing quiz
-  sessions and progress as tools for an MCP host. Imports `app/`'s and `pipeline/`'s scoring and
-  content logic directly rather than reimplementing it, and reads/writes the same
-  `data/snowprep.sqlite` the container does (always against one fixed "owner" account, see
-  [Multi-user](#multi-user-lan) above), so it's a second front door onto identical state, not a
-  parallel system.
-
-Open [`docs/architecture.drawio`](docs/architecture.drawio) in [draw.io](https://app.diagrams.net/)
-to edit the diagram, or see the static [`docs/architecture.drawio.png`](docs/architecture.drawio.png)
-/ flowing [`docs/architecture-flow.svg`](docs/architecture-flow.svg) if your viewer doesn't animate
-GIFs.
-
-See [`CLAUDE.md`](CLAUDE.md) for the full architecture writeup (parser internals, the progress
-storage adapter, known gotchas) — written for AI coding agents working in this repo, but equally
-useful for a human doing the same.
 
 ## Tech stack
 
