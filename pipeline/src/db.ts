@@ -359,6 +359,15 @@ export function linkGoogleAccount(db: Db, userId: number, sub: string): void {
   db.prepare("UPDATE users SET google_sub = ? WHERE id = ?").run(sub, userId);
 }
 
+// 400 days is Chrome's own hard cap on Set-Cookie Max-Age (a longer value gets silently clamped to
+// this) — used deliberately as a long-lived "remember this device" session, matching the
+// no-password design's whole point: logging in once shouldn't need repeating every browser
+// restart. Exported so server.ts's cookie Max-Age and resolveSession()'s server-side expiry check
+// below share the exact same value and can't drift apart — a session that's expired server-side
+// but whose cookie somehow still exists client-side (a very long-running tab, a manually copied
+// cookie) must behave identically to one whose cookie itself already expired.
+export const SESSION_MAX_AGE_MS = 400 * 24 * 60 * 60 * 1000;
+
 /** Session tokens: 32 random bytes (256 bits), hex-encoded — plenty to be unguessable, and a plain
  *  string so it drops straight into an HTTP-only cookie with no encoding concerns. */
 export function createSession(db: Db, userId: number): string {
@@ -371,10 +380,21 @@ export function createSession(db: Db, userId: number): string {
   return token;
 }
 
-/** Resolves a session cookie's token to its user, or `undefined` if the token is missing/unknown
- *  (an expired-by-deletion or never-existed session — there's no separate expiry column; a session
- *  lives until `deleteSession()` removes it via `POST /api/logout`). */
-export function resolveSession(db: Db, token: string): UserRow | undefined {
+/** Resolves a session cookie's token to its user, or `undefined` if the token is missing/unknown,
+ *  or (issue #142) older than `maxAgeMs` (defaults to `SESSION_MAX_AGE_MS`, matching the cookie's
+ *  own lifetime). Previously a session lived forever once issued — there was no expiry at all
+ *  server-side, only explicit deletion (`POST /api/logout`, a password change). A stale session
+ *  found past its own age limit is deleted here too, not just ignored, so it doesn't linger in the
+ *  table forever past its stated lifetime. Checked as a cheap, separate lookup first (the `token`
+ *  primary-key index makes this trivial) so the age check never has to touch or reshape the main
+ *  user-lookup query/its `RawUserRow` typing below. */
+export function resolveSession(db: Db, token: string, maxAgeMs: number = SESSION_MAX_AGE_MS): UserRow | undefined {
+  const session = db.prepare("SELECT created_at FROM sessions WHERE token = ?").get(token) as { created_at: string } | undefined;
+  if (!session) return undefined;
+  if (Date.now() - new Date(session.created_at).getTime() > maxAgeMs) {
+    deleteSession(db, token);
+    return undefined;
+  }
   const row = db
     .prepare(
       `SELECT users.id AS id, users.email AS email, users.name AS name, users.created_at AS createdAt,

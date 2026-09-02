@@ -185,6 +185,44 @@ describe("sessions", () => {
     deleteSession(db, t1);
     expect(resolveSession(db, t2)).toMatchObject({ id: user.id }); // signing out one device doesn't sign out another
   });
+
+  // Issue #142: sessions previously never expired server-side at all, only by explicit deletion --
+  // a leaked/stale token would stay valid forever regardless of the cookie's own stated lifetime.
+  describe("expiry (issue #142)", () => {
+    it("a session younger than maxAgeMs resolves normally", () => {
+      const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+      const token = createSession(db, user.id);
+      expect(resolveSession(db, token, 1000 * 60 * 60)).toMatchObject({ id: user.id }); // 1 hour max age, session is brand new
+    });
+
+    it("a session older than maxAgeMs is treated as not logged in", () => {
+      const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+      const token = createSession(db, user.id);
+      // Backdate it directly -- createSession() always stamps "now", so this is the only way to
+      // get a session that's already old without mocking Date/waiting for real time to pass.
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      db.prepare("UPDATE sessions SET created_at = ? WHERE token = ?").run(twoHoursAgo, token);
+      expect(resolveSession(db, token, 1000 * 60 * 60)).toBeUndefined(); // 1 hour max age, session is 2 hours old
+    });
+
+    it("resolving an expired session also deletes it, rather than leaving it to linger", () => {
+      const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+      const token = createSession(db, user.id);
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      db.prepare("UPDATE sessions SET created_at = ? WHERE token = ?").run(twoHoursAgo, token);
+      resolveSession(db, token, 1000 * 60 * 60);
+      const row = db.prepare("SELECT * FROM sessions WHERE token = ?").get(token);
+      expect(row).toBeUndefined();
+    });
+
+    it("defaults to SESSION_MAX_AGE_MS (400 days) when maxAgeMs isn't passed -- a session from yesterday is still valid", () => {
+      const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+      const token = createSession(db, user.id);
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      db.prepare("UPDATE sessions SET created_at = ? WHERE token = ?").run(yesterday, token);
+      expect(resolveSession(db, token)).toMatchObject({ id: user.id });
+    });
+  });
 });
 
 describe("progress row read/write", () => {
