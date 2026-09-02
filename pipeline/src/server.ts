@@ -38,6 +38,7 @@ import {
   normalizeEmail,
   openDb,
   resolveSession,
+  SESSION_MAX_AGE_MS,
   setPassword,
   setPasswordIfUnset,
   setUserRole,
@@ -53,6 +54,7 @@ import { hashPassword, verifyPassword, generateTemporaryPassword, MIN_PASSWORD_L
 import { isMailerConfigured, sendAdminCreatedAccountEmail, sendPasswordResetEmail, sendWelcomeEmail } from "./mailer.js";
 import { buildAuthUrl, exchangeCodeForIdentity, isGoogleOAuthConfigured, resolveGoogleAccountLink } from "./oauth.js";
 import { createLoginLockout } from "./loginLockout.js";
+import { createRegistrationLimiter } from "./registrationLimit.js";
 import { randomBytes } from "node:crypto";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -65,10 +67,8 @@ const OLD_PROGRESS_FILE = path.join(DATA_DIR, "progress.json");
 const DB_FILE = path.join(DATA_DIR, "snowprep.sqlite");
 const PROBE_FILE = path.join(DATA_DIR, ".snowprep-write-probe");
 const SESSION_COOKIE = "snowprep_session";
-// 400 days is Chrome's own hard cap on Set-Cookie Max-Age (a longer value gets silently clamped
-// to this) — used here deliberately as a long-lived "remember this device" cookie, matching the
-// no-password design's whole point: logging in once shouldn't need repeating every browser restart.
-const SESSION_COOKIE_MAX_AGE_MS = 400 * 24 * 60 * 60 * 1000;
+// SESSION_MAX_AGE_MS (db.ts) is the single source of truth for this -- shared between the cookie's
+// own Max-Age below and resolveSession()'s server-side expiry check, so the two can't drift apart.
 
 /** Must match app/src/lib/progress.ts's defaultState() shape exactly — the two sides of the
  *  GET /api/progress contract have to agree byte-for-byte on what "empty" looks like. */
@@ -314,13 +314,17 @@ function issueSessionCookie(req: express.Request, res: express.Response, token: 
     sameSite: "lax",
     secure: req.secure,
     path: "/",
-    maxAge: SESSION_COOKIE_MAX_AGE_MS,
+    maxAge: SESSION_MAX_AGE_MS,
   });
 }
 
 // Issue #46 brute-force guard / issue #131's unbounded-lockout fix -- see loginLockout.ts's own
 // header comment for the full reasoning, extracted there so its cap behavior has real unit tests.
 const { checkRateLimit, recordFailedAttempt, recordSuccessfulAttempt } = createLoginLockout();
+// Issue #142: caps how fast new accounts can be created from one source -- see
+// registrationLimit.ts's own header comment for why this is IP-keyed (registration, unlike login
+// lockout, isn't a per-person concern).
+const registrationLimiter = createRegistrationLimiter();
 
 app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
   const body = req.body as
@@ -364,11 +368,16 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
       res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
       return;
     }
+    if (registrationLimiter.isRateLimited(req.ip ?? "")) {
+      res.status(429).json({ error: "Too many accounts created recently from this network. Please try again in a few minutes." });
+      return;
+    }
     const isFirstEverAccount = usersCount(db) === 0;
     // Issue #62: the very first account on a fresh database becomes admin automatically -- the
     // live-database equivalent (a pre-existing account with no admin yet) is handled once, at boot,
     // by db.ts's addRoleColumnIfMissing() migration, not here.
     const user = upsertUserOnLogin(db, email, name, hashPassword(password), isFirstEverAccount ? "admin" : "user");
+    registrationLimiter.recordSignup(req.ip ?? "");
     if (isFirstEverAccount) {
       const migrated = migrateFlatFileProgress(db, user.id, OLD_PROGRESS_FILE);
       if (migrated) console.log(`✓ Migrated pre-upgrade progress.json into ${user.email}'s new account`);
