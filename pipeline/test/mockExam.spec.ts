@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import { ErrorCollector } from "../src/errors.js";
-import { parseMockExam } from "../src/parsers/mockExam.js";
+import { parseMockExam, parseMockMeta } from "../src/parsers/mockExam.js";
 import type { Question } from "../src/types.js";
 
 const domainPool: Question[] = [
@@ -88,5 +88,20 @@ B. Bar
     expect(collector.hasErrors).toBe(true);
     expect(collector.all[0]!.kind).toBe("unresolved-domain");
     expect(result.questionIdsInOrder).toEqual([]);
+  });
+});
+
+describe("parseMockMeta", () => {
+  it("assigns the confirmed 1-2 easy / 3 medium / 4-5 hard progression", () => {
+    const raw = mockFile("");
+    expect(parseMockMeta(raw, 1).difficulty).toBe("easy");
+    expect(parseMockMeta(raw, 2).difficulty).toBe("easy");
+    expect(parseMockMeta(raw, 3).difficulty).toBe("medium");
+    expect(parseMockMeta(raw, 4).difficulty).toBe("hard");
+    expect(parseMockMeta(raw, 5).difficulty).toBe("hard");
+  });
+
+  it("falls back to medium for any mock number beyond the documented five", () => {
+    expect(parseMockMeta(mockFile(""), 6).difficulty).toBe("medium");
   });
 });

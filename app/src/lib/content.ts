@@ -7,6 +7,8 @@
 
 export type QuestionType = "single" | "multi";
 
+export type MockDifficulty = "easy" | "medium" | "hard";
+
 export interface QuestionOption {
   key: string;
   text: string;
@@ -49,6 +51,7 @@ export interface QuestionSet {
   timed: boolean;
   durationMin?: number;
   domainSplit?: Record<string, number>;
+  difficulty?: MockDifficulty;
 }
 
 export interface Flashcard {

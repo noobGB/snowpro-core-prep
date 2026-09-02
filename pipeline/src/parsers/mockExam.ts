@@ -10,7 +10,7 @@
  */
 
 import type { ErrorCollector } from "../errors.js";
-import type { Question } from "../types.js";
+import type { MockDifficulty, Question } from "../types.js";
 import { mockOnlyQuestionId } from "../util/ids.js";
 import { normalizeStem } from "../util/stem.js";
 import { parseQuestionFile } from "./questionCore.js";
@@ -94,9 +94,25 @@ export function parseMockExam(
 const DURATION_RE = /(\d+)\s*minutes/i;
 const STATED_SPLIT_RE = /Domain\s*(\d)[^:]*:\s*(\d+)/g;
 
+/** Editorial difficulty per mock, not derivable from file content -- there's no per-question
+ *  difficulty signal anywhere in the source markdown. Only Mock 5 has a documented difficulty
+ *  claim (06_Practice_Exam_Tracker.md / SnowPro_Notes_and_Questions/CLAUDE.md: "deliberately the
+ *  hardest ... leaning into comparative, easy-to-confuse pairs"); 1-4 are unlabeled in the source
+ *  content, so this progression (confirmed with Gaurav directly, not inferred) treats the series
+ *  as building up: 1-2 easy, 3 medium, 4-5 hard. A mock number beyond the five that exist today
+ *  falls back to "medium" rather than guessing either extreme. */
+const MOCK_DIFFICULTY: Record<number, MockDifficulty> = {
+  1: "easy",
+  2: "easy",
+  3: "medium",
+  4: "hard",
+  5: "hard",
+};
+
 export interface MockMeta {
   title: string;
   durationMin: number;
+  difficulty: MockDifficulty;
   /** domainId -> count, parsed from the mock's own intro prose ("Domain 1 (...): 31, ..."),
    *  kept only for validate.ts's cross-check against the pipeline's own computed split — never
    *  used as the source of truth for domainSplit itself. */
@@ -106,6 +122,7 @@ export interface MockMeta {
 export function parseMockMeta(raw: string, mockFileNumber: number): MockMeta {
   const durationMatch = raw.match(DURATION_RE);
   const durationMin = durationMatch ? Number(durationMatch[1]) : 115;
+  const difficulty = MOCK_DIFFICULTY[mockFileNumber] ?? "medium";
 
   // Scoped to the intro section (before the first standalone `---`) only. STATED_SPLIT_RE's
   // `[^:]*` can span newlines, so searching the full file risks a false match: a question stem
@@ -125,6 +142,7 @@ export function parseMockMeta(raw: string, mockFileNumber: number): MockMeta {
   return {
     title: `Mock Exam ${mockFileNumber}`,
     durationMin,
+    difficulty,
     statedDomainSplit: found ? statedDomainSplit : null,
   };
 }
