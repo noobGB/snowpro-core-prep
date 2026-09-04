@@ -23,6 +23,7 @@ import {
   completeMustChangePassword,
   completePasswordReset,
   countAdmins,
+  createGuestUser,
   createPasswordResetToken,
   createSession,
   createUserByAdmin,
@@ -31,19 +32,23 @@ import {
   findUserByEmail,
   findUserByGoogleSub,
   findUserById,
+  ensureConfiguredAdmins,
   getProgressRow,
+  guestUsersCount,
+  humanUsersCount,
   linkGoogleAccount,
   listAllUsers,
   migrateFlatFileProgress,
   normalizeEmail,
   openDb,
+  parseAdminEmails,
+  reapGuests,
   resolveSession,
   SESSION_MAX_AGE_MS,
   setPassword,
   setPasswordIfUnset,
   setUserRole,
   upsertUserOnLogin,
-  usersCount,
   writeProgressRow,
   ProgressConflictError,
   type Db,
@@ -55,6 +60,8 @@ import { isMailerConfigured, sendAdminCreatedAccountEmail, sendPasswordResetEmai
 import { buildAuthUrl, exchangeCodeForIdentity, isGoogleOAuthConfigured, resolveGoogleAccountLink } from "./oauth.js";
 import { createLoginLockout } from "./loginLockout.js";
 import { createRegistrationLimiter } from "./registrationLimit.js";
+import { createGuestLimiter } from "./guestLimit.js";
+import { resolveGuestConfig } from "./guestMode.js";
 import { randomBytes } from "node:crypto";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -308,13 +315,20 @@ function trustedPublicOrigin(req: express.Request): string | null {
   return process.env.SNOWPRO_HOST_NAME ? publicOrigin(req) : null;
 }
 
-function issueSessionCookie(req: express.Request, res: express.Response, token: string): void {
+/** `maxAgeMs` defaults to the normal 400-day session. Guest sessions pass their own TTL instead --
+ *  see POST /api/auth/guest for why a cookie outliving the row it points at is worse than useless. */
+function issueSessionCookie(
+  req: express.Request,
+  res: express.Response,
+  token: string,
+  maxAgeMs: number = SESSION_MAX_AGE_MS,
+): void {
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: req.secure,
     path: "/",
-    maxAge: SESSION_MAX_AGE_MS,
+    maxAge: maxAgeMs,
   });
 }
 
@@ -325,6 +339,60 @@ const { checkRateLimit, recordFailedAttempt, recordSuccessfulAttempt } = createL
 // registrationLimit.ts's own header comment for why this is IP-keyed (registration, unlike login
 // lockout, isn't a per-person concern).
 const registrationLimiter = createRegistrationLimiter();
+// Issue #160: separate limiter for the guest endpoint, which is unauthenticated -- see
+// guestLimit.ts for why it needs a global bucket on top of the per-IP window.
+const guestLimiter = createGuestLimiter();
+const guestConfig = resolveGuestConfig();
+
+/** Issue #159: accounts declared admin out of band, so administrator rights don't depend on who
+ *  happened to sign up first. Read once at boot -- changing it is a deploy/restart, matching every
+ *  other SNOWPRO_* variable. */
+const CONFIGURED_ADMIN_EMAILS = parseAdminEmails(process.env.SNOWPRO_ADMIN_EMAILS);
+
+/** Promotes any already-existing declared admins. Runs at boot so setting the variable takes effect
+ *  on the next restart even for an account created long ago; the signup paths below handle the
+ *  account that doesn't exist yet. Grant-only -- see `ensureConfiguredAdmins()`. */
+function applyConfiguredAdmins(): void {
+  if (CONFIGURED_ADMIN_EMAILS.length === 0) return;
+  const promoted = ensureConfiguredAdmins(db, CONFIGURED_ADMIN_EMAILS);
+  if (promoted.length > 0) console.log(`✓ Promoted to admin via SNOWPRO_ADMIN_EMAILS: ${promoted.join(", ")}`);
+}
+
+/** The role a brand-new account should get.
+ *
+ *  Replaces the previous `usersCount(db) === 0` rule at both signup call sites (password and
+ *  Google). Two changes: a declared admin wins outright, and the fallback counts only *human*
+ *  accounts. The second matters because an anonymous visitor can now create a `users` row by
+ *  clicking "Explore the demo" -- without it, one guest arriving before the operator's own first
+ *  signup would permanently lock the operator out of /admin on a fresh instance. */
+function roleForNewAccount(email: string): UserRole {
+  if (CONFIGURED_ADMIN_EMAILS.includes(normalizeEmail(email))) return "admin";
+  return humanUsersCount(db) === 0 ? "admin" : "user";
+}
+
+/** Deletes (or, in log mode, reports) demo guests idle past the TTL.
+ *
+ *  Runs at boot -- catching a container that was down for a week -- and then on an interval.
+ *  `.unref()` so the timer never holds the process open against the SIGTERM/SIGINT graceful
+ *  shutdown handler. Deliberately NOT run on the request path: a DELETE sweep there would add
+ *  latency to a hot path and hand an attacker control over when it fires. */
+const GUEST_REAP_INTERVAL_MS = 6 * 60 * 60_000;
+function reapGuestsNow(): void {
+  if (!guestConfig.enabled) return;
+  try {
+    const dryRun = guestConfig.reapMode === "log";
+    const { ids } = reapGuests(db, { ttlMs: guestConfig.ttlMs, dryRun });
+    if (ids.length === 0) return;
+    console.log(
+      dryRun
+        ? `[guest reaper: log mode] would delete ${ids.length} idle guest account(s). Set SNOWPRO_GUEST_REAP=delete to enact.`
+        : `✓ Reaped ${ids.length} idle guest account(s)`,
+    );
+  } catch (err: unknown) {
+    // A failed reap must never take the site down -- it's housekeeping, and the next tick retries.
+    console.error("Guest reaper failed:", err);
+  }
+}
 
 app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
   const body = req.body as
@@ -372,11 +440,12 @@ app.post("/api/session", express.json({ limit: "10kb" }), (req, res) => {
       res.status(429).json({ error: "Too many accounts created recently from this network. Please try again in a few minutes." });
       return;
     }
-    const isFirstEverAccount = usersCount(db) === 0;
-    // Issue #62: the very first account on a fresh database becomes admin automatically -- the
-    // live-database equivalent (a pre-existing account with no admin yet) is handled once, at boot,
-    // by db.ts's addRoleColumnIfMissing() migration, not here.
-    const user = upsertUserOnLogin(db, email, name, hashPassword(password), isFirstEverAccount ? "admin" : "user");
+    // Issue #62/#159: a declared admin (SNOWPRO_ADMIN_EMAILS) wins; otherwise the first *human*
+    // account on a fresh database becomes admin. See roleForNewAccount() for why "human" and not
+    // "any row". The live-database equivalent (a pre-existing account with no admin yet) is handled
+    // once, at boot, by db.ts's addRoleColumnIfMissing() migration and applyConfiguredAdmins().
+    const isFirstEverAccount = humanUsersCount(db) === 0;
+    const user = upsertUserOnLogin(db, email, name, hashPassword(password), roleForNewAccount(email));
     registrationLimiter.recordSignup(req.ip ?? "");
     if (isFirstEverAccount) {
       const migrated = migrateFlatFileProgress(db, user.id, OLD_PROGRESS_FILE);
@@ -589,8 +658,8 @@ app.get("/api/oauth/google/callback", async (req, res) => {
       linkGoogleAccount(db, existingByEmail.id, identity.sub);
       user = existingByEmail;
     } else {
-      const isFirstEverAccount = usersCount(db) === 0;
-      // Same first-user-becomes-admin rule as the password-signup path above (issue #62) --
+      const isFirstEverAccount = humanUsersCount(db) === 0;
+      // Same declared-admin-then-first-human rule as the password-signup path above (#62/#159) --
       // passwordHash omitted (stays NULL), exactly the existing "no local password" shape
       // SettingsPanel/LoginGate already handle for legacy accounts (see the plan's design notes).
       // A `const` here (not reassigning the outer `let user` directly) deliberately, matching how
@@ -599,7 +668,7 @@ app.get("/api/oauth/google/callback", async (req, res) => {
       // run after a later reassignment; a `const` has no such ambiguity.
       let newUser;
       try {
-        newUser = upsertUserOnLogin(db, identity.email, identity.name, undefined, isFirstEverAccount ? "admin" : "user");
+        newUser = upsertUserOnLogin(db, identity.email, identity.name, undefined, roleForNewAccount(identity.email));
       } catch (err) {
         // Race: two concurrent first-time Google logins for the same brand-new email (double
         // click, two tabs) can both pass the findUserByEmail() check above before either INSERT
@@ -756,6 +825,64 @@ app.post("/api/password-reset/confirm", express.json({ limit: "10kb" }), (req, r
   res.status(204).end();
 });
 
+/** Issue #160: mints an ephemeral demo account and signs the browser in, so a visitor arriving from
+ *  a shared link can use the real app without registering.
+ *
+ *  404 when disabled, matching the Google OAuth routes' convention ("the feature does not exist"
+ *  rather than "you may not"), and consistent with `/api/me` reporting `guestAvailable: false` so
+ *  the UI never renders a button that fails.
+ *
+ *  Idempotent for a browser that already holds a guest session: returns 200 without minting a
+ *  second row. This kills the double-click and refresh amplifiers outright and makes the endpoint
+ *  safe to call from a React effect, which matters more than it sounds -- it is the difference
+ *  between one row per visitor and one row per impatient click. */
+app.post("/api/auth/guest", (req, res) => {
+  if (!guestConfig.enabled) {
+    res.status(404).json({ error: "Guest mode is not enabled on this instance." });
+    return;
+  }
+
+  const existing = currentUser(req);
+  if (existing?.isGuest) {
+    res.json({ email: existing.email, name: existing.name, isGuest: true });
+    return;
+  }
+  if (existing) {
+    // A real account is already signed in; silently replacing their session with a guest one would
+    // be a genuinely destructive surprise.
+    res.status(409).json({ error: "You're already signed in." });
+    return;
+  }
+
+  const ip = req.ip ?? "";
+  const verdict = guestLimiter.check(ip);
+  if (verdict !== "ok") {
+    // Logged distinctly: a global refusal means the whole instance is at its ceiling, which is an
+    // incident signal, while a per-IP refusal is routine and needs no attention.
+    if (verdict === "global-limited") console.warn("Guest creation refused: global rate ceiling reached.");
+    res.status(429).json({ error: "The demo is busy right now. Please try again in a moment." });
+    return;
+  }
+
+  // Capacity check, with an opportunistic reap first: better to reclaim genuinely dead rows than to
+  // turn a real visitor away. Refusing beats evicting -- evicting could drop someone mid-exam.
+  if (guestUsersCount(db) >= guestConfig.maxLive) {
+    reapGuestsNow();
+    if (guestUsersCount(db) >= guestConfig.maxLive) {
+      res.status(503).json({ error: "The demo is at capacity right now — create a free account to continue." });
+      return;
+    }
+  }
+
+  const guest = createGuestUser(db);
+  guestLimiter.record(ip);
+  // Cookie lifetime is the guest TTL, not SESSION_MAX_AGE_MS's 400 days: once the row is reaped the
+  // token refers to nothing, and leaving a browser holding it for a year would mean a confusing
+  // "signed in but broken" state instead of a clean signed-out one.
+  issueSessionCookie(req, res, createSession(db, guest.id), guestConfig.ttlMs);
+  res.json({ email: guest.email, name: guest.name, isGuest: true });
+});
+
 app.get("/api/me", (req, res) => {
   const user = currentUser(req);
   if (!user) {
@@ -764,13 +891,27 @@ app.get("/api/me", (req, res) => {
     // the same per-request check issue #119 added for the Google OAuth button. App.tsx shows the
     // landing page only when this is true; a LAN visitor already has context from whoever shared
     // the address with them, so skipping straight to the gate is the right call there too.
-    res.status(401).json({ error: "Not logged in.", isPublicHost: !isPrivateNetworkHost(req.hostname) });
+    res.status(401).json({
+      error: "Not logged in.",
+      isPublicHost: !isPrivateNetworkHost(req.hostname),
+      // Rides on this existing 401 body rather than a separate /available route (as Google OAuth
+      // needed): App.tsx already fetches exactly this, so it costs no extra round trip on the cold
+      // visitor's critical path. Also false on a LAN host -- a guest row on a self-hosted box is
+      // litter with no conversion upside, and the visitor was invited by the operator anyway.
+      guestAvailable: guestConfig.enabled && !isPrivateNetworkHost(req.hostname),
+    });
     return;
   }
   // hasPassword (issue #46) tells SettingsPanel whether to offer "Set a password" (a legacy
   // account still on the claim path) or "Change password" (already protected). role (issue #62)
   // tells Sidebar.tsx whether to show the Admin nav link.
-  res.json({ email: user.email, name: user.name, hasPassword: user.passwordHash !== null, role: user.role });
+  res.json({
+    email: user.email,
+    name: user.name,
+    hasPassword: user.passwordHash !== null,
+    role: user.role,
+    isGuest: user.isGuest,
+  });
 });
 
 app.post("/api/logout", (req, res) => {
@@ -975,6 +1116,21 @@ app.use(
 app.get(/^\/(?!api\/).*/, (_req, res) => {
   res.sendFile(path.join(DIST_DIR, "index.html"));
 });
+
+// Issue #159: promote any declared admins that already have accounts. Before listen(), so an
+// operator can never race a request against their own privileges being applied.
+applyConfiguredAdmins();
+
+// Issue #160. Boot sweep catches a container that was down longer than the TTL, then a periodic
+// one. .unref() so this timer never keeps the process alive against the shutdown handler below.
+if (guestConfig.enabled) {
+  console.log(
+    `✓ Guest demo mode ENABLED (ttl ${Math.round(guestConfig.ttlMs / 86_400_000)}d, ` +
+      `max ${guestConfig.maxLive} live, reaper in ${guestConfig.reapMode} mode)`,
+  );
+  reapGuestsNow();
+  setInterval(reapGuestsNow, GUEST_REAP_INTERVAL_MS).unref();
+}
 
 const httpServer = app.listen(PORT, () => {
   console.log(`✓ Serving on http://0.0.0.0:${PORT}  (content: ${config.outputDir}, data: ${DATA_DIR})`);

@@ -37,4 +37,22 @@ services:
       # redirect URI of http://localhost:8080/api/oauth/google/callback for local dev.
       SNOWPRO_GOOGLE_CLIENT_ID: ${SNOWPRO_GOOGLE_CLIENT_ID:-}
       SNOWPRO_GOOGLE_CLIENT_SECRET: ${SNOWPRO_GOOGLE_CLIENT_SECRET:-}
+      # Issue #159: accounts that should always be admin, comma-separated. Optional -- left unset,
+      # the first human account created on a fresh database becomes admin as before. Set it on a
+      # PUBLIC deployment: without it, admin goes to whoever signs up first, which after a fresh
+      # deploy can be a stranger rather than you. Grant-only, so a typo here can never demote an
+      # existing admin and lock you out.
+      SNOWPRO_ADMIN_EMAILS: ${SNOWPRO_ADMIN_EMAILS:-}
+      # Issue #160: "Explore the demo" -- lets a visitor use the real app without registering, on a
+      # throwaway account reaped after SNOWPRO_GUEST_TTL_DAYS of inactivity. DEFAULT OFF: it adds an
+      # unauthenticated endpoint that writes to the database, which a self-hosted LAN box gains
+      # nothing from. Turn it on for a public deployment where signup friction costs you visitors.
+      # Also the fast kill switch -- flipping this off and restarting beats waiting on a release.
+      SNOWPRO_ENABLE_GUEST: ${SNOWPRO_ENABLE_GUEST:-}
+      SNOWPRO_GUEST_TTL_DAYS: ${SNOWPRO_GUEST_TTL_DAYS:-}
+      SNOWPRO_GUEST_MAX_LIVE: ${SNOWPRO_GUEST_MAX_LIVE:-}
+      # "log" (default) reports what the reaper WOULD delete without deleting it; "delete" enacts.
+      # Ship a new deployment in log mode for one release and read the logs before switching -- this
+      # is the only thing in the app that removes user rows on its own.
+      SNOWPRO_GUEST_REAP: ${SNOWPRO_GUEST_REAP:-}
     restart: unless-stopped
