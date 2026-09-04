@@ -27,26 +27,25 @@
          server-side templating, see the theme-sync script's own comment above on why) -- hardcoded
          to the public deployment's own domain, since that's the only host a shared link actually
          points at; a LAN/localhost visitor never triggers a link-unfurl in the first place. -->
-    <meta property="og:image" content="https://snowpro.gauravbarwalia.com/landing-dashboard.png" />
-    <!-- Explicit dimensions: LinkedIn and Slack render a large-image card more reliably when they
-         don't have to fetch the file to learn its aspect ratio, and LinkedIn is where this link
-         actually gets shared. These are the real dimensions of landing-dashboard.png (1280x860);
-         declaring anything else would be worse than declaring nothing. Note 1280x860 is 1.49:1
-         against the 1.91:1 those cards are cut for, so it gets centre-cropped -- a purpose-built
-         1200x630 OG image is tracked separately, not faked here. -->
-    <meta property="og:image:width" content="1280" />
-    <meta property="og:image:height" content="860" />
-    <!-- Mirrors the same screenshot's alt text in HomePage.tsx. Keep the two identical: they
-         describe one image, and there's no mechanism stopping them drifting apart except this. -->
-    <meta property="og:image:alt" content="Dashboard: exam countdown, weighted readiness, and today's plan tasks in one view." />
+    <meta property="og:image" content="https://snowpro.gauravbarwalia.com/og-card.png" />
+    <!-- Issue #158: 1200x630 is exactly the 1.91:1 ratio LinkedIn, Slack and X cut
+         summary_large_image cards at, so the platform never crops or scales this. It replaces
+         landing-dashboard.png, which at 1280x860 (1.49:1) was centre-cropped into a composition
+         nobody chose. Declaring the dimensions also lets those platforms lay out the card without
+         fetching the file first.
+         Generated from marketing/og/og-card.html -- regenerate with `cd marketing/video && npm run og`
+         rather than editing the PNG, so the card can't drift from the product's own wording. -->
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="SnowPro Core Prep — pass the SnowPro Core exam, free and open source. Timed mock exams, weighted readiness, and an adaptive study plan." />
     <!-- twitter:site/twitter:creator are deliberately absent -- there's no handle to point them at,
          and a card tag naming a handle that doesn't exist is worse than omitting it. The
          summary_large_image card renders fine without them. -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="SnowPro Core Prep" />
     <meta name="twitter:description" content="Everything you need to pass the Snowflake SnowPro Core (COF-C03) exam — timed mock exams, a readiness score weighted by the real exam's domain weights, flashcards, and a day-by-day study plan." />
-    <meta name="twitter:image" content="https://snowpro.gauravbarwalia.com/landing-dashboard.png" />
-    <meta name="twitter:image:alt" content="Dashboard: exam countdown, weighted readiness, and today's plan tasks in one view." />
+    <meta name="twitter:image" content="https://snowpro.gauravbarwalia.com/og-card.png" />
+    <meta name="twitter:image:alt" content="SnowPro Core Prep — pass the SnowPro Core exam, free and open source. Timed mock exams, weighted readiness, and an adaptive study plan." />
     <script>
       // Pre-paint theme sync — avoids a flash of dark UI before React mounts and App.tsx's effect
       // runs. Only "light" needs handling here: "dark"/"system"/missing/invalid data all already
@@ -119,7 +118,7 @@
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
             "license": "https://opensource.org/licenses/MIT",
             "codeRepository": "https://github.com/noobGB/snowpro-core-prep",
-            "screenshot": "https://snowpro.gauravbarwalia.com/landing-dashboard.png",
+            "screenshot": "https://snowpro.gauravbarwalia.com/og-card.png",
             "author": { "@id": "https://snowpro.gauravbarwalia.com/#gaurav" },
             "featureList": [
               "Timed mock exams",

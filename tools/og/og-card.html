@@ -1,0 +1,98 @@
+<!doctype html>
+<!--
+  Source for the 1200x630 Open Graph card (issue #158).
+
+  Rendered to PNG by render-og.mjs, which screenshots this file at exactly 1200x630 in Playwright.
+  It is HTML rather than a Figma export on purpose: the card carries the product name, tagline and
+  brand colours, all of which change, and a design that can be re-rendered by running a script does
+  not rot the way an exported bitmap nobody can edit does.
+
+  THE CONSTRAINT THAT DRIVES THE LAYOUT: this image is displayed at roughly 500px wide in a LinkedIn
+  feed, not at 1200. Everything here is sized so it survives that. The headline is deliberately
+  short and heavy; the tagline is one line; the screenshot is bled off the right edge rather than
+  shrunk to fit, because a legible fragment reads better at thumbnail size than a complete but tiny
+  image. Check any change at 500px wide before deciding it looks good at full size.
+
+  Colours are copied from app/src/styles/tokens.css's dark theme rather than imported -- this file is
+  rendered by a headless browser with no access to the app's CSS bundle, and the pipeline can't know
+  its hashed filename. Keep them in sync by hand if the brand colours change.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  @font-face { font-family: "InterLocal"; src: local("Inter"); }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background: #08090a;
+    color: #ffffff;
+    font-family: "Inter", "InterLocal", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    position: relative;
+  }
+  /* Matches tokens.css's .home-hero-glow treatment, so the card and the real home page look like
+     the same product rather than two designs that merely share a colour. */
+  .glow {
+    position: absolute; top: -180px; left: -140px; width: 760px; height: 760px;
+    background: radial-gradient(circle, rgba(43, 212, 217, 0.16), transparent 62%);
+    pointer-events: none;
+  }
+  .left {
+    width: 660px; flex-shrink: 0;
+    padding: 64px 0 64px 68px;
+    display: flex; flex-direction: column; justify-content: center;
+    position: relative; z-index: 1;
+  }
+  .kicker {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 19px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #2bd4d9; margin-bottom: 26px;
+  }
+  h1 {
+    font-size: 62px; line-height: 1.06; font-weight: 600; letter-spacing: -0.028em;
+    margin-bottom: 26px;
+  }
+  h1 .accent { color: #2bd4d9; }
+  p.tagline { font-size: 25px; line-height: 1.45; color: #8a8f98; max-width: 560px; }
+  .badges { display: flex; gap: 10px; margin-top: 38px; }
+  .badge {
+    font-size: 17px; font-weight: 500; color: #ffffff;
+    border: 1px solid #23252a; background: #161718;
+    border-radius: 999px; padding: 8px 18px;
+  }
+  /* Bled off the right edge, not scaled to fit: at feed-thumbnail size a large legible fragment
+     reads as "this is a real app", where a whole shrunken screenshot reads as noise. */
+  .right { flex: 1; position: relative; overflow: hidden; }
+  .right img {
+    position: absolute; top: 50%; left: 26px; transform: translateY(-50%);
+    width: 860px; border-radius: 14px 0 0 14px;
+    border: 1px solid #23252a; border-right: none;
+    box-shadow: -24px 0 70px rgba(0, 0, 0, 0.55);
+  }
+  /* Feathers the screenshot into the background so the hard bleed edge doesn't look like a crop
+     accident on platforms that letterbox rather than fill. */
+  .fade {
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, #08090a 0%, rgba(8, 9, 10, 0.55) 12%, transparent 34%);
+  }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="left">
+    <div class="kicker">COF-C03 · SnowPro Core</div>
+    <h1>Pass the SnowPro&nbsp;Core exam.<br><span class="accent">Free and open source.</span></h1>
+    <p class="tagline">Timed mock exams, readiness weighted by the real domain weights, and a plan that adapts to your exam date.</p>
+    <div class="badges">
+      <div class="badge">No signup to try</div>
+      <div class="badge">Self-hostable</div>
+      <div class="badge">MIT</div>
+    </div>
+  </div>
+  <div class="right">
+    <img src="../../app/src/assets/landing-dashboard.png" alt="">
+    <div class="fade"></div>
+  </div>
+</body>
+</html>

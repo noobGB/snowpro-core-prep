@@ -1,0 +1,13 @@
+{
+  "name": "snowprep-og-card",
+  "private": true,
+  "type": "module",
+  "description": "Renders the Open Graph card (app/src/assets/og-card.png) from og-card.html. Its own package, deliberately: this needs Playwright and a browser download, which has no business in the three packages CI installs on every run.",
+  "scripts": {
+    "setup": "npm install && npx playwright install chromium",
+    "og": "node render-og.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.56.0"
+  }
+}

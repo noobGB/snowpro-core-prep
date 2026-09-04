@@ -15,6 +15,10 @@ import path from "node:path";
 // correct here so local dev matches what the deployment actually serves.
 const ROOT_ASSETS: Array<{ src: string; urlPath: string; contentType: string }> = [
   { src: "src/assets/landing-dashboard.png", urlPath: "/landing-dashboard.png", contentType: "image/png" },
+  // Issue #158: the Open Graph card. Separate from landing-dashboard.png on purpose -- that one is
+  // rendered in-page by HomePage.tsx at its natural 1280x860, which is a different job from a
+  // social card cut at 1.91:1. Regenerate with `cd marketing/video && npm run og`.
+  { src: "src/assets/og-card.png", urlPath: "/og-card.png", contentType: "image/png" },
   { src: "public/favicon.svg", urlPath: "/favicon.svg", contentType: "image/svg+xml" },
   { src: "public/favicon.ico", urlPath: "/favicon.ico", contentType: "image/x-icon" },
   // Issue #153: /robots.txt previously fell through to the SPA catch-all in server.ts, so a
