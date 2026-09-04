@@ -8,7 +8,7 @@ and well-scoped PRs do get looked at. If you're an AI coding agent working in th
 
 ## Reporting a bug
 
-Open an [issue](issues/new) with:
+Open an [issue](https://github.com/noobGB/snowpro-core-prep/issues/new/choose) with:
 
 - What you expected to happen vs. what actually happened
 - Steps to reproduce (which page, what you clicked/typed)

@@ -1,16 +1,29 @@
 # SnowPro Core Prep
 
 [![CI](https://github.com/noobGB/snowpro-core-prep/actions/workflows/ci.yml/badge.svg)](https://github.com/noobGB/snowpro-core-prep/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/noobGB/snowpro-core-prep?sort=semver)](https://github.com/noobGB/snowpro-core-prep/releases)
+[![Container image](https://img.shields.io/badge/ghcr.io-snowpro--core--prep-2496ed?logo=docker&logoColor=white)](https://github.com/noobGB/snowpro-core-prep/pkgs/container/snowpro-core-prep)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+### ▶ [Try it live — snowpro.gauravbarwalia.com](https://snowpro.gauravbarwalia.com)
+
+No signup: the home page has an **Explore the demo** button that gives you the real app on a
+throwaway account. Same code as the image below, running on a small Railway instance.
 
 A local, offline-first study app for the Snowflake **SnowPro Core (COF-C03)** certification — turns
 a folder of markdown notes into domain notes, practice questions, timed mock exams, flashcards, a
 day-by-day plan, and analytics. No cloud service, no telemetry — everything stays on your machine
-(or your [local network](#multi-user-lan)).
+(or your [local network](#multi-user-lan)). There's a
+[hosted demo](https://snowpro.gauravbarwalia.com) if you'd rather look before cloning, and a
+[plain-HTML exam guide](https://snowpro.gauravbarwalia.com/guide/) covering the COF-C03 domains and
+weights.
 
 ![Home page](.github/screenshot-home.png)
 *What a public deployment shows a signed-out visitor — feature highlights alongside the actual
 login form, not a separate click-through screen. Email + password; name and a password are only
-asked once, on your first-ever login.*
+asked once, on your first-ever login. See it for real at
+[snowpro.gauravbarwalia.com](https://snowpro.gauravbarwalia.com), or skip the form entirely with
+"Explore the demo".*
 
 > **This is an independent, unofficial personal project — not affiliated with, endorsed by, or
 > sponsored by Snowflake Inc.** "Snowflake" and "SnowPro" are trademarks of Snowflake Inc.; they're

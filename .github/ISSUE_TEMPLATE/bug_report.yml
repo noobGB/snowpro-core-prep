@@ -1,0 +1,50 @@
+name: Bug report
+description: Something behaves differently than it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. The most useful thing you can give me is **what you did, what happened,
+        and what you expected instead** — everything below is in service of that.
+
+        A wrong or misleading practice question counts as a bug, and is the kind I most want to hear
+        about. Include the question's id (shown in the review screen) if you have it.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, and what did the app do?
+      placeholder: I started Mock 3, flagged question 12, and the timer reset when I came back to it.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+  - type: dropdown
+    id: how-running
+    attributes:
+      label: How are you running it?
+      options:
+        - The hosted demo (snowpro.gauravbarwalia.com)
+        - Docker Compose, locally
+        - The prebuilt GHCR image
+        - npm run dev (no container)
+        - The MCP server
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The release tag or image tag, if you know it. Skip if you're on the hosted demo.
+      placeholder: v1.3.16
+  - type: textarea
+    id: logs
+    attributes:
+      label: Container logs, if relevant
+      description: Output of `docker compose logs`. This is rendered as a code block, so no backticks needed.
+      render: shell

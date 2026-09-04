@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest something the app should do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you hitting?
+      description: >
+        Describe the situation rather than the solution. "I keep losing track of which domains I've
+        actually drilled" tells me more than "add a progress bar", and often has a better answer than
+        the one either of us thought of first.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What did you have in mind?
+      description: Optional — a rough idea is fine.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This is about studying for SnowPro Core specifically
+        - label: This would help anyone pointing the pipeline at a different certification
