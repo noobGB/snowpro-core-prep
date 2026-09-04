@@ -10,10 +10,17 @@ import path from "node:path";
 // OG tag's, which Vite doesn't rewrite the way it would a JS import, and the two favicon <link>
 // tags), so each is copied by hand at the end of the build instead of going through Vite's normal
 // asset pipeline.
+// `contentType` below is consumed ONLY by configureServer (the `vite dev` path). In production
+// express.static(DIST_DIR) infers the type from the file extension instead -- it still has to be
+// correct here so local dev matches what the deployment actually serves.
 const ROOT_ASSETS: Array<{ src: string; urlPath: string; contentType: string }> = [
   { src: "src/assets/landing-dashboard.png", urlPath: "/landing-dashboard.png", contentType: "image/png" },
   { src: "public/favicon.svg", urlPath: "/favicon.svg", contentType: "image/svg+xml" },
   { src: "public/favicon.ico", urlPath: "/favicon.ico", contentType: "image/x-icon" },
+  // Issue #153: /robots.txt previously fell through to the SPA catch-all in server.ts, so a
+  // crawler asking for crawl directives got index.html back with a 200 and Content-Type
+  // text/html -- a false positive that looks fine in a browser and is useless to a robot.
+  { src: "public/robots.txt", urlPath: "/robots.txt", contentType: "text/plain; charset=utf-8" },
 ];
 
 function copyRootAssets(): Plugin {
