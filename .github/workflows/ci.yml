@@ -187,6 +187,39 @@ jobs:
           body=$(curl -sS http://localhost:8080/api/me)
           echo "$body"
           echo "$body" | jq -e '.guestAvailable == true'
+      # Generated crawlable pages. writeOutput() wraps rendering in a try/catch so a failure can
+      # never take the container down on boot -- which means a broken generator would otherwise fail
+      # SILENTLY, with the site up and /guide/ quietly 404ing. These steps are what turns that into
+      # a red build instead of a discovery weeks later.
+      - name: Smoke-test the generated /guide/ pages
+        run: |
+          ct=$(curl -sS -o /tmp/guide.html -w '%{content_type}' http://localhost:8080/guide/)
+          echo "content-type: $ct"
+          case "$ct" in text/html*) ;; *) echo "::error::/guide/ served $ct, want text/html"; exit 1;; esac
+          grep -q "SnowPro Core (COF-C03) exam guide" /tmp/guide.html \
+            || { echo "::error::/guide/ did not contain its own heading — generator likely skipped"; exit 1; }
+          # Proves it is a REAL file rather than the SPA shell: the shell has an empty #root and
+          # none of this content.
+          grep -q 'id="root"' /tmp/guide.html \
+            && { echo "::error::/guide/ returned the SPA shell, not the generated page"; exit 1; }
+          grep -q "<table" /tmp/guide.html || { echo "::error::/guide/ is missing the domain-weight table"; exit 1; }
+
+          # One domain page, to prove the per-domain set generated too.
+          curl --fail -sS http://localhost:8080/guide/5-data-collaboration/ -o /tmp/d5.html
+          grep -q "Data Collaboration" /tmp/d5.html || { echo "::error::domain page missing its title"; exit 1; }
+      - name: Smoke-test sitemap.xml and llms.txt are real files, not the SPA shell
+        run: |
+          # These previously 200'd with text/html because the SPA catch-all answered them -- a false
+          # positive that a status-code-only check would still pass. Assert the content type.
+          for path in sitemap.xml llms.txt robots.txt; do
+            ct=$(curl -sS -o /tmp/f -w '%{content_type}' "http://localhost:8080/$path")
+            echo "$path -> $ct"
+            case "$ct" in
+              text/html*) echo "::error::/$path fell through to the SPA shell"; exit 1;;
+            esac
+          done
+          curl -sS http://localhost:8080/sitemap.xml | grep -q "<urlset" || { echo "::error::sitemap.xml is not a sitemap"; exit 1; }
+          curl -sS http://localhost:8080/llms.txt | grep -q "SnowPro Core Prep" || { echo "::error::llms.txt is empty or wrong"; exit 1; }
       - name: Dump container logs on failure
         if: failure()
         run: docker compose logs
