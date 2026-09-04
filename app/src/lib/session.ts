@@ -287,6 +287,55 @@ export async function startGuestSession(): Promise<PasswordActionResult> {
   }
 }
 
+/** Turns the current demo guest into a permanent account, in place (issue #160's conversion path).
+ *
+ *  CONTRACT this expects from `POST /api/account/upgrade` (server side not written yet):
+ *   - Request:  `{ email: string, name: string, password: string }`, JSON, cookie-authenticated.
+ *   - 200:      the full, updated user object — the same shape `GET /api/me` returns
+ *               (`{email, name, hasPassword: true, role, isGuest: false}`). Returning the whole
+ *               user (not `{ok: true}`) is what lets this function swap the in-memory store
+ *               atomically instead of guessing at the new values.
+ *   - 409:      `{error}` — that email already belongs to someone. `db.ts`'s `upgradeGuest()`
+ *               already returns `null` for exactly this case; it must NOT merge two accounts.
+ *   - 400:      `{error}` — validation (bad email, password under 8 chars, blank name).
+ *   - 401/403:  `{error}` — no session, or the session isn't a guest (a real account has nothing
+ *               to upgrade).
+ *   - 429:      `{error}` — rate limited, same shape as the other public write endpoints.
+ *  The server must also re-issue the session cookie with the normal 400-day `SESSION_MAX_AGE_MS`
+ *  on success. The guest cookie was deliberately minted with only the guest TTL (see
+ *  `POST /api/auth/guest`), and a converted account whose cookie silently expires in 7 days would
+ *  be a worse bug than the one that TTL prevents.
+ *
+ *  UNLIKE `login()`/`logout()`/`startGuestSession()`, the caller must NOT reload. This is the same
+ *  `user_id` before and after (the whole point of `upgradeGuest()`'s in-place UPDATE), so
+ *  progress.ts's module-level backend/rev state — the only reason those three reload — is still
+ *  correct. Emitting the new user instead lets every `useSessionUser()` consumer re-render live:
+ *  the guest banner disappears and the mock exams unlock in place, which is a far better
+ *  conversion moment than a full page reload that dumps the user back on the dashboard. */
+export async function upgradeToAccount(
+  email: string,
+  name: string,
+  password: string,
+): Promise<PasswordActionResult> {
+  try {
+    const res = await fetch("/api/account/upgrade", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, name, password }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      return { ok: false, error: body.error ?? `Couldn't create the account (${res.status}).` };
+    }
+    const user = (await res.json()) as SessionUser;
+    currentUser = user;
+    emit();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error." };
+  }
+}
+
 /** SettingsPanel's "Sign out": clears the server-side session, then the caller must
  *  `window.location.reload()` (same reasoning as login() above, in reverse — a clean reload is
  *  what resets progress.ts's in-memory state so the next person on this shared machine doesn't

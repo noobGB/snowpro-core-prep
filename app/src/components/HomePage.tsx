@@ -33,7 +33,6 @@
  */
 
 import { AuthForm } from "./LoginGate";
-import { GuestDemoButton } from "./GuestDemoButton";
 
 interface HomePageProps {
   /** Issue #160: whether this instance offers "Explore the demo" (SNOWPRO_ENABLE_GUEST, and never
@@ -121,11 +120,13 @@ export function HomePage({ guestAvailable = false }: HomePageProps) {
             </p>
           </div>
 
+          {/* The demo affordance is passed INTO AuthForm, not mounted beside it. `.home-form` is a
+              flex row whose one job is centering AuthForm's fixed-width card; a second child there
+              becomes a second flex item and crushes the card (measured: 360px -> 175px, heading and
+              email placeholder clipped, demo block stranded in the right margin). See
+              GuestDemoButton.tsx's header comment. */}
           <div className="home-form">
-            <AuthForm headingLevel="h2" />
-            {/* Below the form, not above: a returning daily user's eyes should still land on the
-                password field first. The demo is for the first-time visitor, who is reading. */}
-            {guestAvailable && <GuestDemoButton />}
+            <AuthForm headingLevel="h2" guestAvailable={guestAvailable} />
           </div>
 
           {/* Its own grid item (not nested in .home-hero) so tokens.css can place it after the

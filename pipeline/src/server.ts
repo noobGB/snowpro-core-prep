@@ -48,6 +48,7 @@ import {
   setPassword,
   setPasswordIfUnset,
   setUserRole,
+  upgradeGuest,
   upsertUserOnLogin,
   writeProgressRow,
   ProgressConflictError,
@@ -881,6 +882,89 @@ app.post("/api/auth/guest", (req, res) => {
   // "signed in but broken" state instead of a clean signed-out one.
   issueSessionCookie(req, res, createSession(db, guest.id), guestConfig.ttlMs);
   res.json({ email: guest.email, name: guest.name, isGuest: true });
+});
+
+/** Issue #164: promotes the current demo guest into a permanent account, in place.
+ *
+ *  The whole point of guests being real `users` rows: this is one UPDATE. The progress row is keyed
+ *  by `user_id` and is never touched, so a visitor keeps every attempt, flashcard grade and plan
+ *  tick they accumulated during the demo. No copy, no merge, no migration step that could fail
+ *  halfway.
+ *
+ *  Rate-limited by the *registration* limiter rather than the guest one, because that is what this
+ *  actually is -- a new permanent account being created. Using the guest limiter would let someone
+ *  mint accounts at the guest rate, which is the looser of the two.
+ *
+ *  The session cookie deliberately survives: the row's id doesn't change, so the existing session
+ *  keeps pointing at the same (now permanent) account and the user stays signed in with no
+ *  re-login. Its Max-Age was set to the guest TTL when it was issued, so it's reissued here at the
+ *  normal session lifetime -- otherwise a converted account would be silently signed out on the
+ *  day the guest cookie would have expired. */
+app.post("/api/account/upgrade", requireSession, express.json({ limit: "10kb" }), (req, res) => {
+  const user = (res.locals as { user: UserRow }).user;
+  if (!user.isGuest) {
+    res.status(409).json({ error: "This is already a permanent account." });
+    return;
+  }
+
+  const body = req.body as { email?: unknown; name?: unknown; password?: unknown } | null;
+  const email = typeof body?.email === "string" ? body.email.trim() : "";
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  const password = typeof body?.password === "string" ? body.password : "";
+
+  if (!EMAIL_RE.test(email)) {
+    res.status(400).json({ error: "Enter a valid email address." });
+    return;
+  }
+  if (name.length === 0 || name.length > 80) {
+    res.status(400).json({ error: "Enter a name (up to 80 characters)." });
+    return;
+  }
+  if (password.length < MIN_PASSWORD_LENGTH || password.length > 200) {
+    res.status(400).json({ error: `Password must be ${MIN_PASSWORD_LENGTH}-200 characters.` });
+    return;
+  }
+  if (registrationLimiter.isRateLimited(req.ip ?? "")) {
+    res.status(429).json({ error: "Too many accounts created recently from this network. Please try again in a few minutes." });
+    return;
+  }
+
+  // Returns null when the address already belongs to someone else. Deliberately NOT merged into
+  // that account: combining two sets of progress has real conflict semantics and guessing at them
+  // silently would be the wrong kind of helpful.
+  const upgraded = upgradeGuest(db, user.id, { email, name, passwordHash: hashPassword(password) });
+  if (!upgraded) {
+    res.status(409).json({ error: "That email already has an account — sign out and sign in to it instead." });
+    return;
+  }
+  registrationLimiter.recordSignup(req.ip ?? "");
+
+  // Promote if this address is a declared admin (#159) -- the same rule the signup paths apply, so
+  // converting a guest can't be a back door around it in either direction.
+  applyConfiguredAdmins();
+  const finalUser = findUserById(db, upgraded.id) ?? upgraded;
+
+  const token = getCookie(req, SESSION_COOKIE);
+  if (token) issueSessionCookie(req, res, token);
+
+  if (isMailerConfigured()) {
+    const origin = trustedPublicOrigin(req);
+    if (origin) {
+      sendWelcomeEmail(finalUser.email, finalUser.name, `${origin}/`).catch((err: unknown) => {
+        console.error(`Failed to send welcome email to ${finalUser.email}:`, err);
+      });
+    } else {
+      console.warn(`Skipped welcome email to ${finalUser.email}: SNOWPRO_HOST_NAME isn't set (see trustedPublicOrigin()'s doc comment).`);
+    }
+  }
+
+  res.json({
+    email: finalUser.email,
+    name: finalUser.name,
+    hasPassword: true,
+    role: finalUser.role,
+    isGuest: false,
+  });
 });
 
 app.get("/api/me", (req, res) => {

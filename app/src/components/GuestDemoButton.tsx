@@ -2,19 +2,26 @@
  * "Explore the demo" (issue #160) — the entry point that lets a visitor arriving from a shared link
  * use the real app without registering first.
  *
- * Rendered by HomePage.tsx into the form column, beneath AuthForm. That placement is deliberate:
- * the split-screen layout puts the form top-right at >=900px and second in DOM order below that
- * (see HomePage.tsx's own layout comment), so the form column is the one place that is in the
- * primary eye path *and* the primary reading order at every breakpoint. A second CTA up in the hero
- * was considered and rejected — two buttons for one action splits the decision and doubles the copy
- * that has to stay in sync.
+ * Rendered by `AuthForm` (LoginGate.tsx) INSIDE the sign-in card, in the alternatives block below
+ * the primary Continue button, next to "Continue with Google" and sharing that block's single
+ * "or" divider. It is not a standalone element and deliberately owns no outer spacing, divider or
+ * width of its own — the card owns all three.
  *
- * Deliberately its own component rather than another branch inside AuthForm: AuthForm is shared
- * with LoginGate, which is the LAN path. Keeping this separate means the LAN gate cannot grow a
- * demo button by accident — a guest row on a self-hosted box is litter with no conversion upside,
- * and that visitor was invited by the operator anyway. The server agrees independently
- * (`guestAvailable` is false on a private-network host), so this is belt and braces, not the only
- * guard.
+ * That containment is load-bearing, not cosmetic. The first cut mounted this as a sibling of
+ * `<AuthForm/>` inside HomePage's `.home-form` grid cell — but `.home-form` is `display: flex`
+ * (its documented job is centering AuthForm's fixed-width card inside a wider grid column), so a
+ * second child became a second flex item on the same ROW: both shrank, the 360px sign-in card was
+ * crushed to 175px with its heading and email placeholder clipped, and this block ended up
+ * floating in the right margin with its own "or" divider stranded in dead space. Measured, not
+ * eyeballed. Living inside the card makes that class of bug structurally impossible at every
+ * breakpoint, and removes the second, competing "or" divider at the same time.
+ *
+ * Still its own component rather than a branch inside AuthForm's JSX: AuthForm is shared with
+ * LoginGate, which is the LAN path. AuthForm only renders this when its caller passes
+ * `guestAvailable`, and only HomePage does — a guest row on a self-hosted box is litter with no
+ * conversion upside, and that visitor was invited by the operator anyway. The server agrees
+ * independently (`guestAvailable` is false on a private-network host), so this is belt and braces,
+ * not the only guard.
  */
 
 import { useState } from "react";
@@ -40,30 +47,18 @@ export function GuestDemoButton() {
   }
 
   return (
-    <div style={{ marginTop: 20 }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          margin: "0 0 16px",
-          color: "var(--text-dim)",
-          fontSize: 12,
-        }}
-      >
-        <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} aria-hidden="true" />
-        or
-        <span style={{ flex: 1, height: 1, background: "var(--hairline)" }} aria-hidden="true" />
-      </div>
-
+    <div data-testid="guest-demo">
       <button
         type="button"
         onClick={handleClick}
         disabled={busy}
+        aria-describedby="guest-demo-hint"
         style={{
           width: "100%",
-          padding: "11px 16px",
-          borderRadius: 8,
+          boxSizing: "border-box",
+          padding: "0 12px",
+          minHeight: 40,
+          borderRadius: 6,
           border: "1px solid var(--hairline)",
           background: "transparent",
           color: "var(--text-heading)",
@@ -76,13 +71,15 @@ export function GuestDemoButton() {
         {busy ? "Starting the demo…" : "Explore the demo — no signup"}
       </button>
 
-      <p style={{ margin: "10px 0 0", fontSize: 12, lineHeight: 1.5, color: "var(--text-dim)" }}>
-        The full app with real questions. Your progress is saved and you can turn it into an account
-        whenever you like. Mock exams need a free account.
+      {/* --text-muted, not --text-dim: this is body copy at 12px, and --text-dim is calibrated for
+          labels/chips. Kept to two short sentences -- the card is 360px wide and this sits under
+          a third button, so a paragraph here reads as fine print nobody finishes. */}
+      <p id="guest-demo-hint" style={{ margin: "8px 0 0", fontSize: 12, lineHeight: 1.5, color: "var(--text-muted)" }}>
+        The real app, with real questions. Turn it into an account any time and keep what you did.
       </p>
 
       {error && (
-        <p role="alert" style={{ margin: "10px 0 0", fontSize: 13, color: "var(--danger, #ff6b6b)" }}>
+        <p role="alert" style={{ margin: "8px 0 0", fontSize: 12, lineHeight: 1.5, color: "var(--status-incorrect)" }}>
           {error}
         </p>
       )}

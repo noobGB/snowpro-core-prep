@@ -30,7 +30,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               column so it lines up with the page rather than spanning under the sidebar. It still
               inherits the property that matters -- Runner bypasses AppShell entirely, so a guest
               never sees this during an exam. Renders null for a normal account. */}
-          <GuestBanner onCreateAccount={openSettings} />
+          {/* Wrapped, not passed by reference: openSettings takes an intent, and onClick would
+              hand it the MouseEvent instead -- which isn't a type error (an optional param is
+              assignable to () => void) but silently opens Settings in "default" intent, leaving
+              the conversion form collapsed. That defeats the entire point of this CTA. */}
+          <GuestBanner onCreateAccount={() => openSettings("upgrade")} />
           {children}
         </main>
       </div>

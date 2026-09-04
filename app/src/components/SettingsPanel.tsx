@@ -13,14 +13,33 @@
 import { useEffect, useRef, useState } from "react";
 import { getProgress, getStorageBackend, resetProgressConfirmed, updateProgress, useProgress, type ProgressState } from "../lib/progress";
 import { isoDate } from "../lib/planDates";
-import { closeSettings, useSettingsOpen } from "../lib/settingsStore";
-import { changePassword, logout, setInitialPassword, useSessionUser } from "../lib/session";
+import { closeSettings, useSettingsIntent, useSettingsOpen } from "../lib/settingsStore";
+import { changePassword, logout, setInitialPassword, upgradeToAccount, useSessionUser } from "../lib/session";
 import { PasswordInput } from "./PasswordInput";
 
 const RESET_PHRASE = "RESET";
 // Mirrors LoginGate.tsx's own copy of this constant and pipeline/src/passwords.ts's
 // MIN_PASSWORD_LENGTH -- client-side is just an early check, the server re-validates regardless.
 const MIN_PASSWORD_LENGTH = 8;
+// Same pattern LoginGate.tsx and server.ts's POST /api/session both use -- kept identical rather
+// than relying on the browser's looser native type="email" validation.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const panelLabelStyle: React.CSSProperties = { display: "block", fontSize: 12, color: "var(--text-dim)", marginBottom: 6 };
+
+const panelInputStyle: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  background: "var(--card)",
+  border: "1px solid var(--hairline)",
+  borderRadius: 6,
+  color: "var(--text-body)",
+  fontSize: 13,
+  padding: "8px 10px",
+  minHeight: 36,
+};
+
+const fieldLabelStyle: React.CSSProperties = { display: "block", fontSize: 12, color: "var(--text-dim)", marginBottom: 4 };
 
 /** A loose but real check — enough to reject an unrelated JSON file without hand-writing a full
  *  schema validator for what's still just a local backup/restore feature. */
@@ -66,10 +85,229 @@ function ThemeTab({ active, onClick, label }: { active: boolean; onClick: () => 
   );
 }
 
+/**
+ * The Account section for a demo guest — a conversion surface, not an account-details readout.
+ *
+ * Everything the normal Account section shows is wrong here and was actively harmful before this:
+ *  - The email. A guest's address is a generated `guest-<32 hex>@guest.invalid` (db.ts's
+ *    `createGuestUser`). It is an internal key, not an identity, and showing it to the one user
+ *    who cannot act on it is machine noise wrapped across two lines of a 320px panel.
+ *  - "Change password". A guest row carries a deliberately unusable random hash, so the control
+ *    could not succeed even if the user found their way through it. An affordance that cannot
+ *    work is worse than a missing one.
+ *
+ * What replaces them is the single thing a guest can actually do here, framed as a gain (keep what
+ * you already did) rather than a threat (you will lose it) -- the standing 7-day fact still gets
+ * stated plainly, once, because a visitor surprised by a deletion is a worse outcome than one who
+ * was told; it just isn't the headline.
+ */
+function GuestAccountSection({ autoExpand, onConverted }: { autoExpand: boolean; onConverted: () => void }) {
+  const [expanded, setExpanded] = useState(autoExpand);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  // Focus lands in the first field the moment the form appears -- whether it opened because the
+  // user clicked the button below or because they arrived from a conversion CTA elsewhere and the
+  // form was already expanded for them. Without this the second case leaves focus on the panel's
+  // close button, one Tab away from a form the user explicitly asked for.
+  useEffect(() => {
+    if (expanded) requestAnimationFrame(() => nameRef.current?.focus());
+  }, [expanded]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (saving) return;
+    setError(null);
+    if (name.trim().length === 0) {
+      setError("Let us know what to call you.");
+      return;
+    }
+    if (!EMAIL_RE.test(email.trim())) {
+      setError("That doesn't look like a valid email address.");
+      return;
+    }
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+      return;
+    }
+    if (password !== confirm) {
+      setError("Passwords don't match.");
+      return;
+    }
+    setSaving(true);
+    const result = await upgradeToAccount(email.trim(), name.trim(), password);
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    // No reload -- see upgradeToAccount()'s doc comment. The session store has already emitted the
+    // real user, so the guest banner and the mock-exam gate have unlocked behind this panel.
+    onConverted();
+  };
+
+  return (
+    <div style={{ marginBottom: 18 }} data-testid="guest-account-section">
+      <span style={panelLabelStyle}>Account</span>
+      <div style={{ fontSize: 14, color: "var(--text-body)", marginBottom: 2 }}>You&rsquo;re exploring the demo</div>
+      <p style={{ margin: "0 0 12px", fontSize: 12, lineHeight: 1.5, color: "var(--text-muted)" }}>
+        Create a free account to keep your progress and unlock mock exams. Everything you&rsquo;ve
+        done so far comes with you. Without one, this demo is deleted after 7 days of inactivity.
+      </p>
+
+      {!expanded && (
+        <button
+          type="button"
+          onClick={() => {
+            setExpanded(true);
+            setError(null);
+          }}
+          style={{
+            width: "100%",
+            background: "var(--accent)",
+            border: "none",
+            borderRadius: 6,
+            color: "var(--canvas)",
+            fontSize: 13,
+            fontWeight: 500,
+            padding: "9px 0",
+            minHeight: 36,
+            cursor: "pointer",
+          }}
+        >
+          Create a free account
+        </button>
+      )}
+
+      {expanded && (
+        <form onSubmit={submit}>
+          {/* Real <label htmlFor> on every field rather than placeholder-only labelling: this is an
+              account-creation form, so a screen reader must announce each field by name, and a
+              placeholder disappears the moment someone starts typing. */}
+          <div style={{ marginBottom: 8 }}>
+            <label style={fieldLabelStyle} htmlFor="upgrade-name">
+              Name
+            </label>
+            <input
+              ref={nameRef}
+              id="upgrade-name"
+              type="text"
+              autoComplete="name"
+              maxLength={100}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={panelInputStyle}
+            />
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <label style={fieldLabelStyle} htmlFor="upgrade-email">
+              Email
+            </label>
+            <input
+              id="upgrade-email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              style={panelInputStyle}
+            />
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <label style={fieldLabelStyle} htmlFor="upgrade-password">
+              Password
+            </label>
+            <PasswordInput
+              id="upgrade-password"
+              autoComplete="new-password"
+              minLength={MIN_PASSWORD_LENGTH}
+              maxLength={200}
+              value={password}
+              onChange={setPassword}
+              placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+              style={panelInputStyle}
+            />
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <label style={fieldLabelStyle} htmlFor="upgrade-password-confirm">
+              Confirm password
+            </label>
+            <PasswordInput
+              id="upgrade-password-confirm"
+              autoComplete="new-password"
+              maxLength={200}
+              value={confirm}
+              onChange={setConfirm}
+              style={panelInputStyle}
+            />
+          </div>
+
+          {error && (
+            <div role="alert" style={{ fontSize: 12, lineHeight: 1.5, color: "var(--status-incorrect)", marginBottom: 8 }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="submit"
+              disabled={saving}
+              style={{
+                flex: 1,
+                background: "var(--accent)",
+                border: "none",
+                borderRadius: 6,
+                color: "var(--canvas)",
+                fontSize: 13,
+                fontWeight: 500,
+                padding: "8px 0",
+                minHeight: 36,
+                cursor: saving ? "default" : "pointer",
+                opacity: saving ? 0.7 : 1,
+              }}
+            >
+              {saving ? "Creating…" : "Create account"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setExpanded(false);
+                setError(null);
+                setPassword("");
+                setConfirm("");
+              }}
+              style={{ flex: 1, background: "transparent", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-muted)", fontSize: 13, padding: "8px 0", minHeight: 36, cursor: "pointer" }}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export function SettingsPanel() {
   const open = useSettingsOpen();
+  // "upgrade" means a guest conversion CTA opened this panel (GuestBanner, MockExams' gate), so
+  // the account form should already be expanded rather than one more click away.
+  const intent = useSettingsIntent();
   const { settings } = useProgress();
   const me = useSessionUser();
+  // Drives the guest-specific sign-out treatment below. Reads from the live session store rather
+  // than a prop, so it flips to false the moment upgradeToAccount() converts the account and the
+  // one-way-door warning stops applying without needing a reload.
+  const isGuest = me?.isGuest === true;
+  const [justConverted, setJustConverted] = useState(false);
+  // Sign-out is unrecoverable for a guest (no password, no reachable email -- the cookie is the
+  // only key), so it gets a click-again-to-confirm step that a real account's sign-out doesn't
+  // need. Same pattern Admin.tsx already uses for its destructive actions.
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const [resetInput, setResetInput] = useState("");
   const [resetDone, setResetDone] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -182,7 +420,27 @@ export function SettingsPanel() {
           </button>
         </div>
 
-        {me && (
+        {me?.isGuest && !justConverted && (
+          <GuestAccountSection autoExpand={intent === "upgrade"} onConverted={() => setJustConverted(true)} />
+        )}
+
+        {justConverted && me && (
+          // Deliberately a distinct success state rather than silently swapping in the normal
+          // Account section: the conversion is the moment this whole feature exists for, and it
+          // happens with no page reload, so without an explicit acknowledgment the only feedback
+          // is a banner vanishing somewhere behind the panel.
+          <div style={{ marginBottom: 18 }} role="status">
+            <span style={panelLabelStyle}>Account</span>
+            <div style={{ fontSize: 14, color: "var(--text-body)", marginBottom: 2 }}>{me.name}</div>
+            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>{me.email}</div>
+            <p style={{ margin: 0, fontSize: 12, lineHeight: 1.5, color: "var(--text-muted)" }}>
+              You&rsquo;re all set — your progress is saved to this account, and mock exams are
+              unlocked.
+            </p>
+          </div>
+        )}
+
+        {me && !me.isGuest && !justConverted && (
           <div style={{ marginBottom: 18 }}>
             <label style={{ display: "block", fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>Account</label>
             {/* Both read-only — name and email are shown so someone who forgets which identity
@@ -375,23 +633,56 @@ export function SettingsPanel() {
             where someone is about to click). */}
         {me && (
           <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: 14, marginBottom: 18 }}>
+            {/* For a real account, sign-out is reversible: come back, type your password. For a
+                guest it is a one-way door -- there is no password and the generated address can't
+                receive mail, so the session cookie is the only key to that progress, and clicking
+                this destroys it. Error prevention over an error message: name the consequence in
+                the label and require a second, deliberate click. */}
+            {isGuest && confirmingSignOut && (
+              <p style={{ margin: "0 0 8px", fontSize: 12, lineHeight: 1.5, color: "var(--status-incorrect)" }}>
+                This ends the demo for good. There&rsquo;s no password to sign back in with, so
+                everything you&rsquo;ve done here is gone. Create a free account first to keep it.
+              </p>
+            )}
             <button
               type="button"
               disabled={signingOut}
-              onClick={signOut}
+              onClick={() => {
+                if (isGuest && !confirmingSignOut) {
+                  setConfirmingSignOut(true);
+                  return;
+                }
+                signOut();
+              }}
               style={{
                 width: "100%",
                 background: "transparent",
-                border: "1px solid var(--hairline)",
+                border: `1px solid ${isGuest && confirmingSignOut ? "var(--status-incorrect)" : "var(--hairline)"}`,
                 borderRadius: 6,
-                color: "var(--text-muted)",
+                color: isGuest && confirmingSignOut ? "var(--status-incorrect)" : "var(--text-muted)",
                 fontSize: 13,
                 padding: "9px 0",
+                minHeight: 36,
                 cursor: signingOut ? "default" : "pointer",
               }}
             >
-              {signingOut ? "Signing out…" : "Sign out"}
+              {signingOut
+                ? "Signing out…"
+                : isGuest
+                  ? confirmingSignOut
+                    ? "Yes, discard the demo and sign out"
+                    : "End demo and sign out"
+                  : "Sign out"}
             </button>
+            {isGuest && confirmingSignOut && (
+              <button
+                type="button"
+                onClick={() => setConfirmingSignOut(false)}
+                style={{ width: "100%", marginTop: 8, background: "transparent", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-muted)", fontSize: 13, padding: "9px 0", minHeight: 36, cursor: "pointer" }}
+              >
+                Keep exploring
+              </button>
+            )}
           </div>
         )}
 

@@ -135,7 +135,7 @@ export function MockExams() {
                   <div style={{ textAlign: "right" }}>
                     <button
                       type="button"
-                      onClick={openSettings}
+                      onClick={() => openSettings("upgrade")}
                       style={{ display: "inline-flex", alignItems: "center", background: "transparent", color: "var(--text-heading)", border: "1px solid var(--hairline)", borderRadius: 6, padding: "9px 16px", minHeight: 40, fontSize: 13, fontWeight: 500, cursor: "pointer" }}
                     >
                       Create a free account

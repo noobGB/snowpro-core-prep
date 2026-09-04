@@ -47,7 +47,7 @@ import {
   writeProgressRow,
   type Db,
 } from "../src/db.js";
-import { hashPassword } from "../src/passwords.js";
+import { hashPassword, verifyPassword } from "../src/passwords.js";
 
 /** Same rationale as progressStore.spec.ts's sleepSync(): writeProgressRow()'s revision is an
  *  ISO timestamp with millisecond precision, so two writes issued back-to-back in the same test
@@ -758,6 +758,13 @@ describe("guest accounts", () => {
     // NOT null: a null hash would drop the row into POST /api/session's "claim a password" branch,
     // letting anyone who saw the guest's email take over the account.
     expect(g.passwordHash).not.toBeNull();
+    // ...but also not a real scrypt hash. verifyPassword() rejects a malformed stored value before
+    // deriving anything, so this is unusable by construction AND free -- which matters because this
+    // row is minted by an unauthenticated endpoint and scryptSync would block the event loop on
+    // every demo click. Assert it can never verify, against the empty string and its own stored text.
+    expect(verifyPassword("", g.passwordHash!)).toBe(false);
+    expect(verifyPassword(g.passwordHash!, g.passwordHash!)).toBe(false);
+    expect(verifyPassword("password123", g.passwordHash!)).toBe(false);
 
     const g2 = createGuestUser(db);
     expect(g2.email).not.toBe(g.email);
