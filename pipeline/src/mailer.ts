@@ -21,11 +21,24 @@ interface EmailConfig {
 
 const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
 
+/** Fallback sender display name. Brevo REJECTS a send whose sender has no name
+ *  (`{"code":"missing_parameter","message":"sender name is missing"}`, HTTP 400), so this is not
+ *  cosmetic -- without it every email fails, including password reset, which leaves anyone who
+ *  forgets their password with no recovery path at all. */
+const DEFAULT_FROM_NAME = "SnowPro Core Prep";
+
 function readConfig(): EmailConfig | undefined {
   const apiKey = process.env.SNOWPRO_EMAIL_API_KEY;
   const from = process.env.SNOWPRO_EMAIL_FROM;
   if (!apiKey || !from) return undefined;
-  return { apiKey, from, fromName: process.env.SNOWPRO_EMAIL_FROM_NAME ?? "SnowPro Core Prep" };
+  // Empty-and-whitespace-checked, NOT `?? DEFAULT_FROM_NAME`. `??` only falls back on
+  // null/undefined, and docker-compose.yml passes `SNOWPRO_EMAIL_FROM_NAME: ${SNOWPRO_EMAIL_FROM_NAME:-}`
+  // -- which sets the variable to an EMPTY STRING when it isn't in .env, not to unset. So `??`
+  // handed Brevo `name: ""` and every single send 400'd while isMailerConfigured() still reported
+  // true. Confirmed from real container logs, not deduced. Same reason `!apiKey`/`!from` above use
+  // `!` rather than a null check.
+  const fromName = process.env.SNOWPRO_EMAIL_FROM_NAME?.trim();
+  return { apiKey, from, fromName: fromName ? fromName : DEFAULT_FROM_NAME };
 }
 
 /** Whether `SNOWPRO_EMAIL_*` is fully set — lets `POST /api/password-reset/request` fail with a

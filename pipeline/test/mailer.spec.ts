@@ -109,6 +109,36 @@ describe("sendPasswordResetEmail", () => {
     expect(lastRequestBody()).toMatchObject({ sender: { name: "Custom Sender" } });
   });
 
+  it("falls back to a real sender name when SNOWPRO_EMAIL_FROM_NAME is an EMPTY string", async () => {
+    // The regression this exists for, found in production container logs: docker-compose.yml passes
+    // `SNOWPRO_EMAIL_FROM_NAME: ${SNOWPRO_EMAIL_FROM_NAME:-}`, which sets the variable to "" rather
+    // than leaving it unset. The old `?? "SnowPro Core Prep"` only falls back on null/undefined, so
+    // Brevo received `name: ""` and rejected EVERY send with
+    // {"code":"missing_parameter","message":"sender name is missing"} -- while isMailerConfigured()
+    // still cheerfully reported true. Password reset was silently dead.
+    process.env.SNOWPRO_EMAIL_API_KEY = "xkeysib-test";
+    process.env.SNOWPRO_EMAIL_FROM = "noreply@example.com";
+    process.env.SNOWPRO_EMAIL_FROM_NAME = "";
+    const { sendPasswordResetEmail } = await importMailer();
+
+    await sendPasswordResetEmail("alice@example.com", "https://host/reset-password?token=abc");
+
+    const sender = (lastRequestBody() as { sender: { name: string } }).sender;
+    expect(sender.name.length).toBeGreaterThan(0);
+  });
+
+  it("falls back when SNOWPRO_EMAIL_FROM_NAME is only whitespace", async () => {
+    process.env.SNOWPRO_EMAIL_API_KEY = "xkeysib-test";
+    process.env.SNOWPRO_EMAIL_FROM = "noreply@example.com";
+    process.env.SNOWPRO_EMAIL_FROM_NAME = "   ";
+    const { sendPasswordResetEmail } = await importMailer();
+
+    await sendPasswordResetEmail("alice@example.com", "https://host/reset-password?token=abc");
+
+    const sender = (lastRequestBody() as { sender: { name: string } }).sender;
+    expect(sender.name.trim().length).toBeGreaterThan(0);
+  });
+
   it("throws when Brevo's API responds with a non-2xx status", async () => {
     process.env.SNOWPRO_EMAIL_API_KEY = "xkeysib-test";
     process.env.SNOWPRO_EMAIL_FROM = "noreply@example.com";
