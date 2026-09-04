@@ -19,9 +19,6 @@
 import Database from "better-sqlite3";
 import { existsSync, readFileSync, renameSync } from "node:fs";
 import { randomBytes } from "node:crypto";
-// Only used to give guest rows an unusable-but-real password hash (see createGuestUser). passwords.ts
-// imports nothing from here, so this doesn't create a cycle.
-import { hashPassword } from "./passwords.js";
 
 export type Db = InstanceType<typeof Database>;
 
@@ -591,16 +588,27 @@ export function createUserByAdmin(db: Db, email: string, name: string, passwordH
  *  Two details that matter for security, not tidiness:
  *   - `@guest.invalid` uses the RFC 2606 reserved TLD, which is guaranteed never to resolve. If a
  *     future code path ever tries to email a guest, it cannot reach a real person.
- *   - `password_hash` is a real hash of random bytes, NOT `null`. `null` would put the row into
+ *   - `password_hash` is an unusable sentinel, NOT `null`. `null` would put the row into
  *     `POST /api/session`'s legacy "claim a password for this account" branch (`setPasswordIfUnset`),
- *     so anyone who learned a guest's email -- which is visible to that guest in the UI -- could
- *     claim the account. With an unusable hash there is no path in except the session cookie, and
- *     no path out except `upgradeGuest()`.
+ *     so anyone who learned a guest's email could claim the account. With an unusable value there is
+ *     no path in except the session cookie, and no path out except `upgradeGuest()`.
+ *
+ *     The sentinel is deliberately NOT a real scrypt hash of random bytes, which was the first cut.
+ *     `verifyPassword()` rejects any stored value that isn't 6 `$`-separated fields led by its algo
+ *     tag, and it does so BEFORE deriving anything -- so this is unusable by construction, with no
+ *     key derivation to run. That matters here specifically: this row is created by an
+ *     unauthenticated endpoint built for launch traffic, and scryptSync is deliberately expensive
+ *     (~100ms+), synchronous, and would block the event loop on every single demo click. A guest
+ *     needs a password that can never match, not a password that is expensive to guess -- there is
+ *     no plaintext to protect, because none exists.
  *  `role` is hardcoded 'user' and never derived from any first-account rule. */
 export function createGuestUser(db: Db): UserRow {
   const email = `guest-${randomBytes(16).toString("hex")}@guest.invalid`;
   const createdAt = new Date().toISOString();
-  const passwordHash = hashPassword(randomBytes(32).toString("hex"));
+  // "guest-unusable" is not passwords.ts's ALGO tag and this has 2 fields rather than 6, so
+  // verifyPassword() returns false immediately. Randomised anyway so the column is never a single
+  // repeated constant across every guest row.
+  const passwordHash = `guest-unusable$${randomBytes(32).toString("hex")}`;
   const info = db
     .prepare(
       `INSERT INTO users (email, name, created_at, password_hash, role, must_change_password, is_guest)

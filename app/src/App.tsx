@@ -48,6 +48,9 @@ export default function App() {
   // lib/session.ts's own doc comment for the full reasoning.
   const [authState, setAuthState] = useState<AuthState>("loading");
   const [isPublicHost, setIsPublicHost] = useState(false);
+  // Issue #160: whether this instance offers "Explore the demo". Comes from the same /api/me 401
+  // body as isPublicHost, so it costs no extra request on the cold visitor's critical path.
+  const [guestAvailable, setGuestAvailable] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,6 +61,7 @@ export default function App() {
         return;
       }
       setIsPublicHost(result.isPublicHost);
+      setGuestAvailable(result.guestAvailable);
       setAuthState("gate");
     });
     return () => {
@@ -81,7 +85,7 @@ export default function App() {
   if (window.location.pathname === "/reset-password") return <ResetPasswordPage />;
 
   if (authState === "loading") return null; // brief -- a same-origin fetch, not worth a spinner
-  if (authState === "gate") return isPublicHost ? <HomePage /> : <LoginGate />;
+  if (authState === "gate") return isPublicHost ? <HomePage guestAvailable={guestAvailable} /> : <LoginGate />;
 
   return (
     <>

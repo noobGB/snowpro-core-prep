@@ -43,6 +43,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { login, requestPasswordReset, type LoginResult } from "../lib/session";
+import { GuestDemoButton } from "./GuestDemoButton";
 import { PasswordInput } from "./PasswordInput";
 
 // Same pattern pipeline/src/server.ts's POST /api/session enforces server-side (its own EMAIL_RE
@@ -60,7 +61,13 @@ type Mode = "email" | "new" | "claim" | "password" | "forgot" | "must_change_pas
 
 const cardStyle: React.CSSProperties = {
   width: 360,
-  maxWidth: "calc(100vw - 32px)",
+  // `100%`, not the `calc(100vw - 32px)` this used to be. Both mounts wrap this card in a flex
+  // container, so a percentage resolves against that container's content box and is correct for
+  // each: LoginGate's full-screen wrapper (100vw minus its own 16px padding, i.e. exactly what the
+  // old calc() hardcoded) AND HomePage's `.home-form` grid cell, which is narrower than the
+  // viewport because the page has its own 24px gutters -- there the viewport-relative calc()
+  // resolved 16px too wide and overflowed.
+  maxWidth: "100%",
   background: "var(--raised)",
   border: "1px solid var(--hairline)",
   borderRadius: 12,
@@ -91,12 +98,35 @@ const labelStyle: React.CSSProperties = {
 // WCAG AA contrast (per the 2026-08-18 audit), so nothing new should add to that debt.
 const hintStyle: React.CSSProperties = { margin: "0 0 8px", fontSize: 12, lineHeight: 1.4, color: "var(--text-muted)" };
 
-/** `headingLevel` defaults to "h1" for standalone `LoginGate` (its own page, this heading IS the
- *  page's top-level heading) -- `HomePage.tsx` passes "h2" instead, since it already renders its
- *  own `&lt;h1&gt;` for the hero and two `&lt;h1&gt;`s on one screen is a real heading-hierarchy/
- *  screen-reader-navigation bug, not just a style nit (axe's `page-has-heading-one`/
- *  `heading-order` rules both flag it). */
-export function AuthForm({ headingLevel = "h1" }: { headingLevel?: "h1" | "h2" } = {}) {
+/** The single "or" rule separating the primary email/password action from the alternative ways in
+ *  (Google, the demo). Rendered ONCE for the whole alternatives block rather than once per option
+ *  -- two stacked "or" rules on a 360px card reads as a rendering fault, and that is literally
+ *  what shipped when the demo block carried its own. */
+function AlternativesDivider() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0" }} aria-hidden="true">
+      <div style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
+      <span style={{ fontSize: 11, color: "var(--text-dim)" }}>or</span>
+      <div style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
+    </div>
+  );
+}
+
+interface AuthFormProps {
+  /** Defaults to "h1" for standalone `LoginGate` (its own page, this heading IS the page's
+   *  top-level heading) -- `HomePage.tsx` passes "h2" instead, since it already renders its own
+   *  `<h1>` for the hero and two `<h1>`s on one screen is a real heading-hierarchy/screen-reader-
+   *  navigation bug, not just a style nit (axe's `page-has-heading-one`/`heading-order` rules
+   *  both flag it). */
+  headingLevel?: "h1" | "h2";
+  /** Issue #160: render "Explore the demo" inside this card's alternatives block. Only HomePage
+   *  passes it (and only when the server said so) -- `LoginGate`'s LAN path leaves it false, so a
+   *  self-hosted box can never grow a demo button by accident. See GuestDemoButton.tsx's header
+   *  comment for why the button lives inside this card rather than beside it. */
+  guestAvailable?: boolean;
+}
+
+export function AuthForm({ headingLevel = "h1", guestAvailable = false }: AuthFormProps = {}) {
   const [email, setEmail] = useState("");
   const [mode, setMode] = useState<Mode>("email");
   const [name, setName] = useState("");
@@ -528,13 +558,17 @@ export function AuthForm({ headingLevel = "h1" }: { headingLevel?: "h1" | "h2" }
             {submitting ? "Continuing…" : mode === "forgot" ? "Send reset link" : "Continue"}
           </button>
         )}
-        {mode === "email" && googleAvailable && (
+        {/* The alternatives block: everything that is not "type an email and a password". Gated to
+            "email" mode for the same reason the Google button always was -- once someone has
+            committed to an address and is looking at a password field, offering two other ways in
+            is noise on the one screen that most needs to be single-purpose. Both options are
+            optional and independent, so the shared divider is conditioned on either being present,
+            never on Google alone. */}
+        {mode === "email" && (googleAvailable || guestAvailable) && (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "16px 0" }}>
-              <div style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
-              <span style={{ fontSize: 11, color: "var(--text-dim)" }}>or</span>
-              <div style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
-            </div>
+            <AlternativesDivider />
+            {googleAvailable && (
+            <>
             {/* A plain page navigation, not a fetch/submit -- issue #113's OAuth flow needs the
                 browser to actually leave this page for accounts.google.com; see oauth.ts's header
                 comment for the full mechanism. Ends in a redirect back to "/", which naturally
@@ -573,6 +607,17 @@ export function AuthForm({ headingLevel = "h1" }: { headingLevel?: "h1" | "h2" }
               </svg>
               Continue with Google
             </a>
+            </>
+            )}
+            {/* Last in the block, and last on the card: a returning daily user's eyes should still
+                land on the password field first. The demo is for the first-time visitor, who is
+                reading top to bottom anyway. `marginTop` only when a Google button precedes it --
+                the divider already provides the spacing when it doesn't. */}
+            {guestAvailable && (
+              <div style={{ marginTop: googleAvailable ? 12 : 0 }}>
+                <GuestDemoButton />
+              </div>
+            )}
           </>
         )}
       </form>

@@ -363,9 +363,18 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   /* AuthForm's own card has a fixed width (360px, see LoginGate.tsx's cardStyle) -- without this,
      the grid's default justify-items:stretch stretches this cell but the fixed-width card inside
      just sits flush against its left edge, leaving an unbalanced gap on the right instead of the
-     centered look LoginGate's own standalone (fully centered) usage has. */
+     centered look LoginGate's own standalone (fully centered) usage has.
+
+     `column` + `align-items: center`, NOT the bare `justify-content: center` this used to be: as a
+     flex ROW, any second child of this cell becomes a second item on the same line and both items
+     shrink to share it. That actually shipped -- issue #160's demo button was mounted here as a
+     sibling of the card and squeezed it from 360px to 175px (heading and email placeholder
+     clipped), pushing the demo block into the right margin and overflowing the viewport by 116px
+     at 390px wide. The demo button now lives inside the card instead, so this cell has one child
+     again; column direction is what makes the failure non-recurring rather than merely fixed. */
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
 }
 .home-screenshot {
   grid-area: screenshot;
