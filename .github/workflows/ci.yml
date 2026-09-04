@@ -105,6 +105,11 @@ jobs:
   docker-smoke:
     name: docker build + boot smoke test
     runs-on: ubuntu-latest
+    # Guest mode is off by default (see guestMode.ts on why), so docker-compose.yml would start it
+    # disabled and the guest smoke steps below would have nothing to test. Turning it on here is
+    # also the point: it means CI exercises the code path the public deployment actually runs.
+    env:
+      SNOWPRO_ENABLE_GUEST: "1"
     steps:
       - uses: actions/checkout@v7
       # Fresh checkout has no ./data (gitignored). The final image stage runs as non-root `node`
@@ -149,6 +154,39 @@ jobs:
           body=$(curl --fail -sS http://localhost:8080/api/oauth/google/available)
           echo "$body"
           echo "$body" | jq -e 'has("available") and (.available == false)'
+      # Guest mode (#160). The admin-route assertion is the reason these live here rather than in a
+      # unit test: it proves express middleware ORDERING inside the real container -- that
+      # requireAdmin actually sits in front of /api/admin/* for a session minted by the
+      # unauthenticated guest endpoint. No unit test can establish that.
+      - name: Smoke-test guest mode (create, identify, isolate)
+        run: |
+          jar=$(mktemp)
+          body=$(curl --fail -sS -c "$jar" -X POST http://localhost:8080/api/auth/guest)
+          echo "created: $body"
+          echo "$body" | jq -e '.isGuest == true'
+          echo "$body" | jq -e '.email | endswith("@guest.invalid")'
+
+          me=$(curl --fail -sS -b "$jar" http://localhost:8080/api/me)
+          echo "me: $me"
+          echo "$me" | jq -e '.isGuest == true'
+          echo "$me" | jq -e '.role == "user"'
+
+          curl --fail -sS -b "$jar" http://localhost:8080/api/progress -o /dev/null
+
+          code=$(curl -sS -b "$jar" -o /dev/null -w '%{http_code}' http://localhost:8080/api/admin/users)
+          echo "admin route as guest: $code"
+          test "$code" = "403" || { echo "::error::A guest reached /api/admin/users (got $code, want 403)"; exit 1; }
+
+          # Idempotent for a browser that already holds a guest session -- otherwise every refresh
+          # or double-click mints another row.
+          again=$(curl --fail -sS -b "$jar" -c "$jar" -X POST http://localhost:8080/api/auth/guest)
+          test "$(echo "$again" | jq -r .email)" = "$(echo "$body" | jq -r .email)" \
+            || { echo "::error::Second POST /api/auth/guest minted a new account instead of reusing the session"; exit 1; }
+      - name: Smoke-test that /api/me advertises guest availability
+        run: |
+          body=$(curl -sS http://localhost:8080/api/me)
+          echo "$body"
+          echo "$body" | jq -e '.guestAvailable == true'
       - name: Dump container logs on failure
         if: failure()
         run: docker compose logs
