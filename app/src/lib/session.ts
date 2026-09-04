@@ -38,6 +38,10 @@ export interface SessionUser {
    *  this is `"admin"`. Purely a UX convenience; the real enforcement is server-side
    *  (`requireAdmin` in `pipeline/src/server.ts`). */
   role: "user" | "admin";
+  /** Issue #160: `true` for an ephemeral demo account created by "Explore the demo". Drives the
+   *  guest banner and the mock-exam gate. Like `role`, this is presentation only — a guest's real
+   *  limits are enforced server-side, and the content bundle is public regardless. */
+  isGuest: boolean;
 }
 
 let currentUser: SessionUser | null = null;
@@ -62,7 +66,7 @@ export function useSessionUser(): SessionUser | null {
 
 export type MeResult =
   | { authRequired: false }
-  | { authRequired: true; user: SessionUser | null; isPublicHost: boolean };
+  | { authRequired: true; user: SessionUser | null; isPublicHost: boolean; guestAvailable: boolean };
 
 /** Called once from App.tsx on boot to decide landing/gate-screen vs. the real app. `isPublicHost`
  *  (issue #121) only matters when `user` is `null` -- it's the server's per-request
@@ -73,14 +77,22 @@ export async function fetchMe(): Promise<MeResult> {
   try {
     const res = await fetch("/api/me");
     if (res.status === 401) {
-      const body = (await res.json().catch(() => ({}))) as { isPublicHost?: boolean };
-      return { authRequired: true, user: null, isPublicHost: body.isPublicHost === true };
+      const body = (await res.json().catch(() => ({}))) as { isPublicHost?: boolean; guestAvailable?: boolean };
+      return {
+        authRequired: true,
+        user: null,
+        isPublicHost: body.isPublicHost === true,
+        // Issue #160: rides this existing 401 body rather than its own /available route (as the
+        // Google button needed) -- App.tsx already fetches exactly this, so advertising guest mode
+        // costs no extra round trip on the cold visitor's critical path.
+        guestAvailable: body.guestAvailable === true,
+      };
     }
     if (!res.ok) return { authRequired: false };
     const user = (await res.json()) as SessionUser;
     currentUser = user;
     emit();
-    return { authRequired: true, user, isPublicHost: false };
+    return { authRequired: true, user, isPublicHost: false, guestAvailable: false };
   } catch {
     return { authRequired: false };
   }
@@ -245,6 +257,29 @@ export async function confirmPasswordReset(token: string, newPassword: string): 
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       return { ok: false, error: body.error ?? `Failed (${res.status}).` };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error." };
+  }
+}
+
+/** "Explore the demo" (issue #160): mints an ephemeral guest account and signs this browser in.
+ *
+ *  The caller MUST `window.location.reload()` on success, for exactly the reason `login()`'s own
+ *  comment gives: progress.ts's module-level `backend`/`rev` state was set by its boot-time probe
+ *  against the *previous* (nonexistent) session, and only a fresh page load re-runs that probe
+ *  against the cookie this call just set. Transitioning in place would leave progress writes
+ *  pointed at the wrong backend.
+ *
+ *  Safe to call more than once: the server returns the existing session rather than minting a
+ *  second account for a browser that already holds a guest cookie. */
+export async function startGuestSession(): Promise<PasswordActionResult> {
+  try {
+    const res = await fetch("/api/auth/guest", { method: "POST" });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      return { ok: false, error: body.error ?? `Couldn't start the demo (${res.status}).` };
     }
     return { ok: true };
   } catch (err) {
