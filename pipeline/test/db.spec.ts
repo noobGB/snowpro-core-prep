@@ -17,6 +17,8 @@ import {
   completeMustChangePassword,
   completePasswordReset,
   countAdmins,
+  createGuestUser,
+  ensureConfiguredAdmins,
   createPasswordResetToken,
   createSession,
   createUserByAdmin,
@@ -26,20 +28,26 @@ import {
   findUserByEmail,
   findUserById,
   getProgressRow,
+  guestUsersCount,
+  humanUsersCount,
   listAllUsers,
   migrateFlatFileProgress,
   normalizeEmail,
   openDb,
+  parseAdminEmails,
   ProgressConflictError,
+  reapGuests,
   resolveSession,
   setPassword,
   setPasswordIfUnset,
   setUserRole,
+  upgradeGuest,
   upsertUserOnLogin,
   usersCount,
   writeProgressRow,
   type Db,
 } from "../src/db.js";
+import { hashPassword } from "../src/passwords.js";
 
 /** Same rationale as progressStore.spec.ts's sleepSync(): writeProgressRow()'s revision is an
  *  ISO timestamp with millisecond precision, so two writes issued back-to-back in the same test
@@ -718,5 +726,275 @@ describe("setPassword / setPasswordIfUnset also clear must_change_password", () 
     const user = upsertUserOnLogin(db, "alice@example.com", "Alice"); // passwordHash null, legacy claim path
     setPasswordIfUnset(db, user.id, "scrypt$16384$8$1$claimed$hash");
     expect(findUserById(db, user.id)?.mustChangePassword).toBe(false);
+  });
+});
+
+/**
+ * Guest (demo) accounts. The tests that matter most here are the ones asserting what reapGuests()
+ * must NEVER do -- it is the only function in this module that destroys user data automatically,
+ * and it ships against a deployment with no automated backup.
+ */
+describe("guest accounts", () => {
+  const DAY = 86_400_000;
+
+  /** Forces a row's age. created_at is written as "now", so anything TTL-related has to be aged
+   *  directly rather than by waiting. */
+  function ageUser(userId: number, daysAgo: number): void {
+    const ts = new Date(Date.now() - daysAgo * DAY).toISOString();
+    db.prepare("UPDATE users SET created_at = ? WHERE id = ?").run(ts, userId);
+  }
+  function ageProgress(userId: number, daysAgo: number): void {
+    const ts = new Date(Date.now() - daysAgo * DAY).toISOString();
+    db.prepare("UPDATE progress SET updated_at = ? WHERE user_id = ?").run(ts, userId);
+  }
+
+  it("creates a guest that is a real, isolated, unusable-by-password account", () => {
+    const g = createGuestUser(db);
+    expect(g.isGuest).toBe(true);
+    expect(g.role).toBe("user");
+    expect(g.mustChangePassword).toBe(false);
+    // RFC 2606 reserved TLD -- can never route to a real person if something tries to email it.
+    expect(g.email).toMatch(/^guest-[0-9a-f]{32}@guest\.invalid$/);
+    // NOT null: a null hash would drop the row into POST /api/session's "claim a password" branch,
+    // letting anyone who saw the guest's email take over the account.
+    expect(g.passwordHash).not.toBeNull();
+
+    const g2 = createGuestUser(db);
+    expect(g2.email).not.toBe(g.email);
+    expect(g2.id).not.toBe(g.id);
+  });
+
+  it("round-trips isGuest through findUserById and resolveSession", () => {
+    // resolveSession has a hand-written column list that TypeScript cannot check (it casts).
+    // Omitting is_guest there makes `undefined !== 0` true, flagging every real signed-in user as
+    // a guest -- so assert both directions explicitly.
+    const guest = createGuestUser(db);
+    const human = upsertUserOnLogin(db, "real@example.com", "Real");
+
+    expect(findUserById(db, guest.id)?.isGuest).toBe(true);
+    expect(findUserById(db, human.id)?.isGuest).toBe(false);
+    expect(resolveSession(db, createSession(db, guest.id))?.isGuest).toBe(true);
+    expect(resolveSession(db, createSession(db, human.id))?.isGuest).toBe(false);
+  });
+
+  it("keeps guests out of the human count, so admin bootstrap still works", () => {
+    // The regression this exists for: server.ts granted admin to the first account when
+    // usersCount() === 0. With guests, an anonymous visitor arriving before the operator's own
+    // signup would silently lock the operator out of /admin on a brand new instance.
+    for (let i = 0; i < 50; i++) createGuestUser(db);
+    expect(usersCount(db)).toBe(50);
+    expect(humanUsersCount(db)).toBe(0);
+    expect(guestUsersCount(db)).toBe(50);
+
+    const owner = upsertUserOnLogin(db, "owner@example.com", "Owner", undefined, "admin");
+    expect(owner.role).toBe("admin");
+    expect(humanUsersCount(db)).toBe(1);
+  });
+
+  it("skips guests when resolving the first/owner account", () => {
+    // findFirstUser() is the MCP server's owner fallback and the flat-file migration target.
+    // A guest created before any human must not become either.
+    createGuestUser(db);
+    const human = upsertUserOnLogin(db, "owner@example.com", "Owner");
+    expect(findFirstUser(db)?.id).toBe(human.id);
+  });
+
+  it("excludes guests from the admin user table but counts them separately", () => {
+    upsertUserOnLogin(db, "real@example.com", "Real");
+    createGuestUser(db);
+    createGuestUser(db);
+    const listed = listAllUsers(db);
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.email).toBe("real@example.com");
+    expect(guestUsersCount(db)).toBe(2);
+  });
+
+  it("reaps an idle guest across every table that references it", () => {
+    const g = createGuestUser(db);
+    const token = createSession(db, g.id);
+    writeProgressRow(db, g.id, defaultProgressJson(), "0");
+    ageUser(g.id, 30);
+    ageProgress(g.id, 30);
+
+    const result = reapGuests(db, { ttlMs: 7 * DAY });
+    expect(result.deleted).toBe(true);
+    expect(result.ids).toEqual([g.id]);
+
+    expect(findUserById(db, g.id)).toBeUndefined();
+    expect(resolveSession(db, token)).toBeUndefined();
+    expect(getProgressRow(db, g.id)).toBeUndefined();
+  });
+
+  it("NEVER reaps a real account, even when its timestamps qualify", () => {
+    // The safety-critical assertion. Deleting real accounts is the only way this function can do
+    // irreversible harm, so the property under test is the guard, not the happy path.
+    const human = upsertUserOnLogin(db, "real@example.com", "Real");
+    writeProgressRow(db, human.id, defaultProgressJson(), "0");
+    ageUser(human.id, 3650);
+    ageProgress(human.id, 3650);
+
+    const result = reapGuests(db, { ttlMs: 7 * DAY });
+    expect(result.ids).not.toContain(human.id);
+    expect(findUserById(db, human.id)).toBeDefined();
+    expect(getProgressRow(db, human.id)).toBeDefined();
+  });
+
+  it("spares a guest who is mid-exam despite an old created_at", () => {
+    // A 115-minute mock writes progress on every answer, so updated_at stays fresh. This is what
+    // makes it structurally impossible to delete someone during an exam.
+    const g = createGuestUser(db);
+    writeProgressRow(db, g.id, defaultProgressJson(), "0");
+    ageUser(g.id, 30); // signed in a month ago...
+    // ...but progress.updated_at is left at "now".
+
+    const result = reapGuests(db, { ttlMs: 7 * DAY });
+    expect(result.ids).not.toContain(g.id);
+    expect(findUserById(db, g.id)).toBeDefined();
+  });
+
+  it("reaps a guest who never wrote any progress at all", () => {
+    const g = createGuestUser(db);
+    ageUser(g.id, 30);
+    const result = reapGuests(db, { ttlMs: 7 * DAY });
+    expect(result.ids).toEqual([g.id]);
+    expect(findUserById(db, g.id)).toBeUndefined();
+  });
+
+  it("reports but does not delete in dry-run mode", () => {
+    const g = createGuestUser(db);
+    ageUser(g.id, 30);
+    const result = reapGuests(db, { ttlMs: 7 * DAY, dryRun: true });
+    expect(result.ids).toEqual([g.id]);
+    expect(result.deleted).toBe(false);
+    expect(findUserById(db, g.id)).toBeDefined();
+  });
+
+  it("upgrades a guest in place, preserving the progress blob byte-for-byte", () => {
+    const g = createGuestUser(db);
+    const payload = defaultProgressJson({ examDate: "2026-12-01" });
+    writeProgressRow(db, g.id, payload, "0");
+    const before = getProgressRow(db, g.id);
+
+    const upgraded = upgradeGuest(db, g.id, {
+      email: "New@Example.com",
+      name: "New Person",
+      passwordHash: hashPassword("correct-horse-battery"),
+    });
+
+    expect(upgraded).not.toBeNull();
+    expect(upgraded?.id).toBe(g.id); // same row -- no data movement
+    expect(upgraded?.isGuest).toBe(false);
+    expect(upgraded?.email).toBe("new@example.com"); // normalized
+    expect(getProgressRow(db, g.id)?.data).toBe(before?.data);
+    expect(findUserByEmail(db, "new@example.com")?.id).toBe(g.id);
+    expect(humanUsersCount(db)).toBe(1);
+    expect(guestUsersCount(db)).toBe(0);
+  });
+
+  it("refuses to upgrade onto an email that already exists", () => {
+    upsertUserOnLogin(db, "taken@example.com", "Taken");
+    const g = createGuestUser(db);
+    const result = upgradeGuest(db, g.id, {
+      email: "taken@example.com",
+      name: "Impostor",
+      passwordHash: hashPassword("password123"),
+    });
+    expect(result).toBeNull();
+    expect(findUserById(db, g.id)?.isGuest).toBe(true); // untouched
+  });
+
+  it("refuses to upgrade a row that is not a guest", () => {
+    // Guards against a caller passing the wrong id and overwriting a real account's credentials.
+    const human = upsertUserOnLogin(db, "real@example.com", "Real");
+    const result = upgradeGuest(db, human.id, {
+      email: "hijack@example.com",
+      name: "Hijack",
+      passwordHash: hashPassword("password123"),
+    });
+    expect(result).toBeNull();
+    expect(findUserById(db, human.id)?.email).toBe("real@example.com");
+  });
+
+  it("adds is_guest to a pre-existing database with every existing row a non-guest", () => {
+    // Simulates upgrading a live database: build a users table without the column, then reopen.
+    const legacyFile = path.join(tmpDir, "legacy.sqlite");
+    const legacy = new Database(legacyFile);
+    legacy.exec(`
+      CREATE TABLE users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO users (email, name, created_at) VALUES ('old@example.com', 'Old', '2026-01-01T00:00:00.000Z');
+    `);
+    legacy.close();
+
+    const migrated = openDb(legacyFile);
+    expect(findUserByEmail(migrated, "old@example.com")?.isGuest).toBe(false);
+    expect(humanUsersCount(migrated)).toBe(1);
+    migrated.close();
+    // Idempotent: opening again must not throw on a duplicate ALTER.
+    const again = openDb(legacyFile);
+    expect(humanUsersCount(again)).toBe(1);
+    again.close();
+  });
+});
+
+/**
+ * Env-declared admin bootstrap (SNOWPRO_ADMIN_EMAILS). Replaces "whoever signed up first is the
+ * admin" as the primary mechanism -- on a public deployment that rule hands administrator rights
+ * to the first stranger who signs up after a fresh deploy.
+ */
+describe("configured admin bootstrap", () => {
+  it("parses a comma-separated list, normalizing and dropping blanks", () => {
+    expect(parseAdminEmails("  Owner@Example.com , second@example.com ,,")).toEqual([
+      "owner@example.com",
+      "second@example.com",
+    ]);
+    expect(parseAdminEmails(undefined)).toEqual([]);
+    expect(parseAdminEmails("")).toEqual([]);
+    expect(parseAdminEmails("   ")).toEqual([]);
+  });
+
+  it("promotes a matching existing account, case-insensitively", () => {
+    const u = upsertUserOnLogin(db, "owner@example.com", "Owner");
+    expect(u.role).toBe("user");
+
+    const promoted = ensureConfiguredAdmins(db, parseAdminEmails("Owner@Example.COM"));
+    expect(promoted).toEqual(["owner@example.com"]);
+    expect(findUserById(db, u.id)?.role).toBe("admin");
+  });
+
+  it("is idempotent and reports only rows it actually changed", () => {
+    upsertUserOnLogin(db, "owner@example.com", "Owner");
+    expect(ensureConfiguredAdmins(db, ["owner@example.com"])).toEqual(["owner@example.com"]);
+    // Second run changes nothing, so reports nothing -- this is what makes it safe on every boot.
+    expect(ensureConfiguredAdmins(db, ["owner@example.com"])).toEqual([]);
+    expect(countAdmins(db)).toBe(1);
+  });
+
+  it("never demotes anyone, whatever the variable says", () => {
+    // The failure mode this guards: a typo'd or briefly-unset env var must mean "change nothing",
+    // not "strip every admin" -- which would lock the owner out of their own instance.
+    const existing = upsertUserOnLogin(db, "admin@example.com", "Admin", undefined, "admin");
+    ensureConfiguredAdmins(db, ["someone-else@example.com"]);
+    expect(findUserById(db, existing.id)?.role).toBe("admin");
+    ensureConfiguredAdmins(db, []);
+    expect(findUserById(db, existing.id)?.role).toBe("admin");
+    expect(countAdmins(db)).toBe(1);
+  });
+
+  it("tolerates an address with no account yet", () => {
+    // Setting the variable before the owner has ever signed in is the normal Railway ordering.
+    expect(ensureConfiguredAdmins(db, ["nobody@example.com"])).toEqual([]);
+    expect(countAdmins(db)).toBe(0);
+  });
+
+  it("refuses to promote a guest row", () => {
+    const g = createGuestUser(db);
+    ensureConfiguredAdmins(db, [g.email]);
+    expect(findUserById(db, g.id)?.role).toBe("user");
+    expect(countAdmins(db)).toBe(0);
   });
 });
