@@ -5,22 +5,48 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" href="/favicon.ico" />
+    <!-- Issue #154. This file is served for EVERY SPA route via server.ts's catch-all, so a
+         hardcoded canonical means every route self-canonicalizes to the home page. That's correct
+         here rather than a bug: every route behind this shell requires a session, so none of them
+         should be indexed as a separate URL in the first place. The corollary is that the
+         pipeline-generated /guide/ pages must never be served through this file -- they're real
+         files handled by express.static (which runs ahead of the catch-all) and each carries its
+         own canonical. True by construction today; stated here so it stays true. -->
+    <link rel="canonical" href="https://snowpro.gauravbarwalia.com/" />
+    <meta name="author" content="Gaurav Barwalia" />
     <!-- Issue #121: a shared link (LinkedIn/Slack/README) previously unfurled with no preview text
          at all -- only <title> existed. Values mirror LandingPage.tsx's own pitch copy so the
          unfurl and the landing page tell the same story. -->
     <meta name="description" content="Everything you need to pass the Snowflake SnowPro Core (COF-C03) exam — timed mock exams, a readiness score weighted by the real exam's domain weights, flashcards, and a day-by-day study plan." />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="SnowPro Core Prep" />
+    <meta property="og:url" content="https://snowpro.gauravbarwalia.com/" />
+    <meta property="og:site_name" content="SnowPro Core Prep" />
     <meta property="og:description" content="Everything you need to pass the Snowflake SnowPro Core (COF-C03) exam — timed mock exams, a readiness score weighted by the real exam's domain weights, flashcards, and a day-by-day study plan." />
     <!-- og:image/twitter:image need an absolute URL per spec, and this file is static (no
          server-side templating, see the theme-sync script's own comment above on why) -- hardcoded
          to the public deployment's own domain, since that's the only host a shared link actually
          points at; a LAN/localhost visitor never triggers a link-unfurl in the first place. -->
     <meta property="og:image" content="https://snowpro.gauravbarwalia.com/landing-dashboard.png" />
+    <!-- Explicit dimensions: LinkedIn and Slack render a large-image card more reliably when they
+         don't have to fetch the file to learn its aspect ratio, and LinkedIn is where this link
+         actually gets shared. These are the real dimensions of landing-dashboard.png (1280x860);
+         declaring anything else would be worse than declaring nothing. Note 1280x860 is 1.49:1
+         against the 1.91:1 those cards are cut for, so it gets centre-cropped -- a purpose-built
+         1200x630 OG image is tracked separately, not faked here. -->
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="860" />
+    <!-- Mirrors the same screenshot's alt text in HomePage.tsx. Keep the two identical: they
+         describe one image, and there's no mechanism stopping them drifting apart except this. -->
+    <meta property="og:image:alt" content="Dashboard: exam countdown, weighted readiness, and today's plan tasks in one view." />
+    <!-- twitter:site/twitter:creator are deliberately absent -- there's no handle to point them at,
+         and a card tag naming a handle that doesn't exist is worse than omitting it. The
+         summary_large_image card renders fine without them. -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="SnowPro Core Prep" />
     <meta name="twitter:description" content="Everything you need to pass the Snowflake SnowPro Core (COF-C03) exam — timed mock exams, a readiness score weighted by the real exam's domain weights, flashcards, and a day-by-day study plan." />
     <meta name="twitter:image" content="https://snowpro.gauravbarwalia.com/landing-dashboard.png" />
+    <meta name="twitter:image:alt" content="Dashboard: exam countdown, weighted readiness, and today's plan tasks in one view." />
     <script>
       // Pre-paint theme sync — avoids a flash of dark UI before React mounts and App.tsx's effect
       // runs. Only "light" needs handling here: "dark"/"system"/missing/invalid data all already
@@ -49,6 +75,62 @@
     <title>SnowPro Core Prep</title>
   </head>
   <body>
+    <!-- Issue #154. This app is entirely client-rendered, so without this block the document a
+         crawler receives is a ~3.7 KB shell: a title, a meta description, and an empty #root. The
+         hero, the pitch, all eight feature cards -- invisible. Google executes JS and sees the real
+         page, so this barely moves Google; the audience here is the AI/answer-engine crawlers that
+         mostly don't, and for them it's the difference between an empty shell and a real
+         description of what lives at this URL.
+         Scope, stated honestly so this doesn't get mistaken for the whole SEO story: a <noscript>
+         block *describing* an app is thin content. The pipeline-generated /guide/ pages are the
+         ones that answer a real question ("what are the COF-C03 domain weights") and are what
+         actually earns a citation. This is the cheap, zero-risk baseline, not a substitute.
+         A human with JS disabled also sees this, so it's written to read as a real page.
+         The copy below is duplicated verbatim from HomePage.tsx (kicker, h1, pitch, FEATURES) --
+         deliberately character-identical rather than reworded, so the two can be diffed by grep.
+         Note FEATURES intentionally omits the MCP server: see HomePage.tsx's own comment on why
+         advertising it on the public deployment would be a false claim about what signing in here
+         gets you. Don't "helpfully" add it back in this copy either. -->
+    <noscript>
+      <div style="max-width: 780px; margin: 0 auto; padding: 48px 24px; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; line-height: 1.6;">
+        <p style="font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.7;">COF-C03 · SNOWPRO CORE PREP</p>
+        <h1>Everything you need to pass the SnowPro Core exam.</h1>
+        <p>
+          Timed mock exams, a readiness score weighted by the real exam&rsquo;s domain weights, and
+          a study plan that adapts to your exam date &mdash; sign in to start tracking your
+          progress.
+        </p>
+        <p><strong>This app needs JavaScript enabled to run.</strong></p>
+        <h2>What&rsquo;s inside</h2>
+        <dl>
+          <dt><strong>Timed mock exams</strong></dt>
+          <dd>Full-length, matching the real exam's question count and domain split -- flag questions, jump between them, and review your wrong answers first.</dd>
+          <dt><strong>Weighted readiness</strong></dt>
+          <dd>A dashboard scored against the real exam's actual domain weights, not a flat percentage -- so you always know exactly where to focus next.</dd>
+          <dt><strong>Practice, domain by domain</strong></dt>
+          <dd>Untimed drills, one domain at a time. Every wrong answer joins a missed-question notebook you can retry as its own focused set.</dd>
+          <dt><strong>Flashcards that adapt</strong></dt>
+          <dd>A quick knew-it/missed-it rating after every card biases which ones resurface first next session, so weak spots get more repetition automatically.</dd>
+          <dt><strong>Adaptive study plan</strong></dt>
+          <dd>A day-by-day plan that remaps itself to your actual exam date, not a fixed calendar -- compresses automatically into a prioritized checklist if your exam is close.</dd>
+          <dt><strong>Pacing analytics</strong></dt>
+          <dd>A per-question timing chart flags your slowest questions and links straight back to review them, benchmarked against the real exam's own time budget.</dd>
+          <dt><strong>Backup and reset, on your terms</strong></dt>
+          <dd>Export your entire progress as one file, restore it on another device, or wipe the slate clean for a fresh start -- always your call, never automatic.</dd>
+          <dt><strong>Your data stays private</strong></dt>
+          <dd>Your study activity isn't sold, tracked, or shared with anyone. It's yours, and it stays that way.</dd>
+        </dl>
+        <p>
+          SnowPro Core Prep is a free, open-source, self-hostable study app for the Snowflake
+          SnowPro Core (COF-C03) certification. Source and setup instructions:
+          <a href="https://github.com/noobGB/snowpro-core-prep">github.com/noobGB/snowpro-core-prep</a>.
+        </p>
+        <p style="opacity: 0.7; font-size: 13px;">
+          An independent, unofficial project &mdash; not affiliated with, endorsed by, or sponsored
+          by Snowflake Inc.
+        </p>
+      </div>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
