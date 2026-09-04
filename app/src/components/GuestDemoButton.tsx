@@ -59,11 +59,25 @@ export function GuestDemoButton() {
           padding: "0 12px",
           minHeight: 40,
           borderRadius: 6,
-          border: "1px solid var(--hairline)",
-          background: "transparent",
+          // Accent border + a soft accent wash, rather than the neutral hairline this first shipped
+          // with. For a visitor arriving from a shared link -- the entire audience this button
+          // exists for -- there is no account yet, so this is their only usable way in, and it read
+          // as a tertiary afterthought sitting under a solid-accent "Continue" and a white Google
+          // button. It now reads as a real, inviting action.
+          //
+          // Deliberately NOT a solid --accent fill like Continue: two solid accent buttons on one
+          // card means neither is the primary, which is worse for the returning user without being
+          // better for the new one. Outline-plus-wash is the step between.
+          //
+          // color-mix follows tokens.css's existing .home-hero-glow pattern, and the text stays
+          // --text-heading rather than --accent: this card's colours were contrast-audited against
+          // --raised (see tokens.css), and accent-on-accent-wash is exactly the pairing that audit
+          // would have to re-check.
+          border: "1px solid var(--accent)",
+          background: "color-mix(in srgb, var(--accent) 12%, transparent)",
           color: "var(--text-heading)",
           fontSize: 14,
-          fontWeight: 500,
+          fontWeight: 600,
           cursor: busy ? "default" : "pointer",
           opacity: busy ? 0.6 : 1,
         }}

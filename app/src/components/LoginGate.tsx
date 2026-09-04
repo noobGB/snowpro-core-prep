@@ -567,6 +567,16 @@ export function AuthForm({ headingLevel = "h1", guestAvailable = false }: AuthFo
         {mode === "email" && (googleAvailable || guestAvailable) && (
           <>
             <AlternativesDivider />
+            {/* FIRST in the alternatives block, ahead of Google. The password field above the
+                divider is still the first thing a returning daily user sees, so their muscle memory
+                is untouched -- but within the "other ways in" group this is the one that works for
+                someone who has no account yet, which is everyone arriving from a shared link. It
+                was previously last, under Google, where it read as an afterthought. */}
+            {guestAvailable && (
+              <div style={{ marginBottom: googleAvailable ? 12 : 0 }}>
+                <GuestDemoButton />
+              </div>
+            )}
             {googleAvailable && (
             <>
             {/* A plain page navigation, not a fetch/submit -- issue #113's OAuth flow needs the
@@ -608,15 +618,6 @@ export function AuthForm({ headingLevel = "h1", guestAvailable = false }: AuthFo
               Continue with Google
             </a>
             </>
-            )}
-            {/* Last in the block, and last on the card: a returning daily user's eyes should still
-                land on the password field first. The demo is for the first-time visitor, who is
-                reading top to bottom anyway. `marginTop` only when a Google button precedes it --
-                the divider already provides the spacing when it doesn't. */}
-            {guestAvailable && (
-              <div style={{ marginTop: googleAvailable ? 12 : 0 }}>
-                <GuestDemoButton />
-              </div>
             )}
           </>
         )}
