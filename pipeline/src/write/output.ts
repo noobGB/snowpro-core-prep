@@ -14,6 +14,7 @@
 import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { ContentBundle, DomainNotes, SearchIndexEntry } from "../types.js";
+import { renderStaticPages } from "./staticPages.js";
 
 export function writeOutput(
   outputDir: string,
@@ -31,6 +32,28 @@ export function writeOutput(
   writeFileSync(path.join(tempDir, "search-index.json"), JSON.stringify(searchIndex, null, 2), "utf8");
   for (const notes of notesByDomain.values()) {
     writeFileSync(path.join(tempDir, "notes", `${notes.domainId}.json`), JSON.stringify(notes, null, 2), "utf8");
+  }
+
+  // Crawlable /guide/ pages, sitemap.xml and the site's llms.txt (see staticPages.ts). Written
+  // INSIDE tempDir, before the rename, so they inherit the same all-or-nothing guarantee as the
+  // JSON above rather than landing in a directory the rename is about to replace.
+  //
+  // Wrapped, deliberately: this writer runs on the container's boot path (server.ts calls it before
+  // binding the port), and a throw there means process.exit(1) -- the whole site down. These pages
+  // are an SEO surface, not the application; if rendering them ever breaks, the right outcome is a
+  // loud warning and a site that still serves. CI's docker-smoke job asserts GET /guide/ returns
+  // 200, so a silent skip is caught there rather than in production.
+  try {
+    for (const file of renderStaticPages(bundle, notesByDomain)) {
+      const dest = path.join(tempDir, file.relPath);
+      mkdirSync(path.dirname(dest), { recursive: true });
+      writeFileSync(dest, file.contents, "utf8");
+    }
+  } catch (err) {
+    console.warn(
+      `⚠ Static guide pages were not generated: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    console.warn("  The app itself is unaffected; /guide/ will 404 until this is fixed.");
   }
 
   if (existsSync(outputDir)) rmSync(outputDir, { recursive: true, force: true });
