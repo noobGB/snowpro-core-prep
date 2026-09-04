@@ -73,6 +73,86 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
     />
     <title>SnowPro Core Prep</title>
+    <!-- Issue #155: structured data, so search and answer engines have a machine-readable statement
+         of what this is, that it's free and open source, and who wrote it.
+
+         GOVERNING RULE: this file is hand-written, so nothing here carries a number that changes
+         when the content bank does — no question counts, no domain weights, no durations. Those
+         belong in the pipeline-generated /guide/ pages, where they're derived from content.json and
+         cannot go stale. DOCS_MAP.md's opening paragraphs exist because this repo has already been
+         bitten by exactly that drift.
+
+         The existing CSP already allows inline <script> (script-src 'self' 'unsafe-inline', see
+         server.ts), so this needs no CSP change. Verified in the browser console, not assumed.
+
+         Deliberately NOT included, so nobody adds them later:
+          - aggregateRating/Review: there are no reviews. Inventing them is schema spam and a real
+            manual-action risk, and it would be a lie about a study tool people trust with an exam.
+          - Organization: there isn't one. Person is both the truth and the stronger authorship claim.
+          - Quiz/Question: would mean publishing question text as schema — commoditizes the bank for
+            zero citation benefit.
+          - SearchAction/sitelinks searchbox: there is no public search endpoint, so declaring one
+            claims a capability that doesn't exist.
+          - BreadcrumbList: no hierarchy on this page. It belongs on the /guide/ pages, which have one. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://snowpro.gauravbarwalia.com/#website",
+            "url": "https://snowpro.gauravbarwalia.com/",
+            "name": "SnowPro Core Prep",
+            "description": "A free, open-source, self-hostable study app for the Snowflake SnowPro Core (COF-C03) certification.",
+            "inLanguage": "en",
+            "publisher": { "@id": "https://snowpro.gauravbarwalia.com/#gaurav" }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://snowpro.gauravbarwalia.com/#app",
+            "name": "SnowPro Core Prep",
+            "url": "https://snowpro.gauravbarwalia.com/",
+            "applicationCategory": "EducationalApplication",
+            "operatingSystem": "Web",
+            "description": "Timed mock exams, a readiness score weighted by the real exam's domain weights, flashcards, and a day-by-day study plan for the Snowflake SnowPro Core (COF-C03) certification.",
+            "isAccessibleForFree": true,
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "license": "https://opensource.org/licenses/MIT",
+            "codeRepository": "https://github.com/noobGB/snowpro-core-prep",
+            "screenshot": "https://snowpro.gauravbarwalia.com/landing-dashboard.png",
+            "author": { "@id": "https://snowpro.gauravbarwalia.com/#gaurav" },
+            "featureList": [
+              "Timed mock exams",
+              "Weighted readiness",
+              "Practice, domain by domain",
+              "Flashcards that adapt",
+              "Adaptive study plan",
+              "Pacing analytics",
+              "Backup and reset, on your terms",
+              "Your data stays private"
+            ]
+          },
+          {
+            "@type": "Person",
+            "@id": "https://snowpro.gauravbarwalia.com/#gaurav",
+            "name": "Gaurav Barwalia",
+            "url": "https://gauravbarwalia.com/",
+            "jobTitle": "Data Engineer",
+            "sameAs": [
+              "https://github.com/noobGB",
+              "https://achieve.snowflake.com/a6ae5831-336d-42d2-b909-d5bf23f5a969"
+            ],
+            "hasCredential": {
+              "@type": "EducationalOccupationalCredential",
+              "name": "SnowPro Core Certified (COF-C03)",
+              "credentialCategory": "certificate",
+              "url": "https://achieve.snowflake.com/a6ae5831-336d-42d2-b909-d5bf23f5a969",
+              "recognizedBy": { "@type": "Organization", "name": "Snowflake Inc." }
+            }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <!-- Issue #154. This app is entirely client-rendered, so without this block the document a
