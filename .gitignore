@@ -53,3 +53,6 @@ marketing/
 # Windows launcher build output (see Launch-SnowPro.ps1 / README's "Windows one-click launcher") —
 # an unsigned local build artifact, not committed; build it yourself with ps2exe.
 *.exe
+
+# tools/og renders the committed OG card; its browser download must not be committed.
+tools/og/node_modules/
