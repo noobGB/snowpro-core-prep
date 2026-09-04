@@ -19,6 +19,9 @@
 import Database from "better-sqlite3";
 import { existsSync, readFileSync, renameSync } from "node:fs";
 import { randomBytes } from "node:crypto";
+// Only used to give guest rows an unusable-but-real password hash (see createGuestUser). passwords.ts
+// imports nothing from here, so this doesn't create a cycle.
+import { hashPassword } from "./passwords.js";
 
 export type Db = InstanceType<typeof Database>;
 
@@ -49,6 +52,16 @@ export interface UserRow {
    *  "disconnect Google" admin action or a support question ("how did this account sign up") has a
    *  real answer instead of a guess. Set once, on first Google sign-in, by `linkGoogleAccount()`. */
   googleSub: string | null;
+  /** `true` for an ephemeral demo account minted by `createGuestUser()` (the "Explore the demo"
+   *  button on the public home page). A guest is a *real* row on purpose: progress, scoring,
+   *  readiness and analytics then work with zero new code paths, and two concurrent visitors are
+   *  isolated by construction. Reaped after a TTL of inactivity by `reapGuests()`, or promoted to
+   *  a permanent account in place by `upgradeGuest()`.
+   *
+   *  Anything that asks "is this a real person's account" must filter on this -- see
+   *  `humanUsersCount()` and `findFirstUser()` for the two places where forgetting to would have
+   *  quietly broken admin bootstrap and MCP owner resolution. */
+  isGuest: boolean;
 }
 
 export interface ProgressRow {
@@ -138,6 +151,7 @@ export function openDb(filePath: string): Db {
   addRoleColumnIfMissing(db);
   addMustChangePasswordColumnIfMissing(db);
   addGoogleSubColumnIfMissing(db);
+  addIsGuestColumnIfMissing(db);
   return db;
 }
 
@@ -183,6 +197,19 @@ function addMustChangePasswordColumnIfMissing(db: Db): void {
  *  route) already has to look it up before linking, so enforcing uniqueness in application code
  *  there is no extra work, and avoids a second migration if this column's constraints ever need to
  *  change. */
+/** Adds `users.is_guest` for the demo-mode accounts (see `UserRow.isGuest`), in the same
+ *  `PRAGMA table_info`-guarded way as the columns above.
+ *
+ *  `INTEGER NOT NULL DEFAULT 0` rather than nullable: every row that already exists is a real
+ *  person's account, and that has to be true of them *immediately* on upgrade, not once something
+ *  backfills. A nullable column would make `is_guest = 0` filters silently miss every pre-existing
+ *  row, which is exactly the direction this must never fail in -- `reapGuests()` deletes rows. */
+function addIsGuestColumnIfMissing(db: Db): void {
+  const columns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+  if (columns.some((c) => c.name === "is_guest")) return;
+  db.exec("ALTER TABLE users ADD COLUMN is_guest INTEGER NOT NULL DEFAULT 0");
+}
+
 function addGoogleSubColumnIfMissing(db: Db): void {
   const columns = db.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
   if (columns.some((c) => c.name === "google_sub")) return;
@@ -201,15 +228,18 @@ export function normalizeEmail(email: string): string {
 
 const USER_COLUMNS =
   "id, email, name, created_at AS createdAt, password_hash AS passwordHash, role, " +
-  "must_change_password AS mustChangePassword, google_sub AS googleSub";
+  "must_change_password AS mustChangePassword, google_sub AS googleSub, is_guest AS isGuest";
 
 /** better-sqlite3 returns `INTEGER` columns as raw JS numbers, not booleans — every query that
  *  selects `must_change_password AS mustChangePassword` via `USER_COLUMNS` (or the equivalent
  *  hand-written column list in `resolveSession()`) needs this to actually produce a `boolean` for
- *  `UserRow.mustChangePassword`, not a `0 | 1` silently mistyped as one. */
-type RawUserRow = Omit<UserRow, "mustChangePassword"> & { mustChangePassword: number };
+ *  `UserRow.mustChangePassword`, not a `0 | 1` silently mistyped as one. Same for `is_guest`. */
+type RawUserRow = Omit<UserRow, "mustChangePassword" | "isGuest"> & {
+  mustChangePassword: number;
+  isGuest: number;
+};
 function toUserRow(row: RawUserRow): UserRow {
-  return { ...row, mustChangePassword: row.mustChangePassword !== 0 };
+  return { ...row, mustChangePassword: row.mustChangePassword !== 0, isGuest: row.isGuest !== 0 };
 }
 
 export function findUserByEmail(db: Db, email: string): UserRow | undefined {
@@ -238,14 +268,33 @@ export function findUserByGoogleSub(db: Db, sub: string): UserRow | undefined {
  *  `mcp-server/` uses when `SNOWPRO_OWNER_EMAIL` isn't set: whichever user row was created first
  *  (lowest id — `id` is `AUTOINCREMENT`, so this is exactly creation order). */
 export function findFirstUser(db: Db): UserRow | undefined {
-  const row = db.prepare(`SELECT ${USER_COLUMNS} FROM users ORDER BY id ASC LIMIT 1`).get() as
-    | RawUserRow
-    | undefined;
+  const row = db
+    .prepare(`SELECT ${USER_COLUMNS} FROM users WHERE is_guest = 0 ORDER BY id ASC LIMIT 1`)
+    .get() as RawUserRow | undefined;
   return row && toUserRow(row);
 }
 
 export function usersCount(db: Db): number {
   const row = db.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number };
+  return row.n;
+}
+
+/** Real people's accounts only, excluding demo guests.
+ *
+ *  This exists because `usersCount(db) === 0` was the admin-bootstrap test in server.ts's
+ *  `POST /api/session` ("the first ever account becomes admin"). Once guests can be minted by an
+ *  anonymous visitor, that test breaks in a way nobody would notice until it mattered: a guest
+ *  arriving before the operator's own first signup makes the count non-zero, so the operator
+ *  signs up as a plain user and is locked out of `/admin` permanently, on a brand new
+ *  self-hosted instance. Guests must never count toward "has anyone signed up yet". */
+export function humanUsersCount(db: Db): number {
+  const row = db.prepare("SELECT COUNT(*) AS n FROM users WHERE is_guest = 0").get() as { n: number };
+  return row.n;
+}
+
+/** Live demo-guest rows, for the admin page's "N active guest sessions" line. */
+export function guestUsersCount(db: Db): number {
+  const row = db.prepare("SELECT COUNT(*) AS n FROM users WHERE is_guest = 1").get() as { n: number };
   return row.n;
 }
 
@@ -307,6 +356,9 @@ export function upsertUserOnLogin(
     role,
     mustChangePassword: false,
     googleSub: null,
+    // This is the ordinary signup/login path, never the guest path -- guests are only ever created
+    // by createGuestUser(), which is the single place is_guest is set to 1.
+    isGuest: false,
   };
 }
 
@@ -397,9 +449,15 @@ export function resolveSession(db: Db, token: string, maxAgeMs: number = SESSION
   }
   const row = db
     .prepare(
+      // Keep this list in sync with USER_COLUMNS. It's hand-written because of the JOIN's table
+      // qualifiers, and the `as RawUserRow` cast below means TypeScript cannot check it: a column
+      // omitted here arrives as `undefined` and is silently coerced by toUserRow(). That is not
+      // theoretical -- omitting is_guest makes `undefined !== 0` evaluate true, flagging every
+      // signed-in real user as a guest.
       `SELECT users.id AS id, users.email AS email, users.name AS name, users.created_at AS createdAt,
               users.password_hash AS passwordHash, users.role AS role,
-              users.must_change_password AS mustChangePassword, users.google_sub AS googleSub
+              users.must_change_password AS mustChangePassword, users.google_sub AS googleSub,
+              users.is_guest AS isGuest
        FROM sessions JOIN users ON users.id = sessions.user_id
        WHERE sessions.token = ?`,
     )
@@ -467,7 +525,12 @@ export interface AdminUserRow {
 /** Backs `GET /api/admin/users` — same shape as `admin-users.mjs`'s own `list` query (id, email,
  *  name, role, createdAt, hasPassword, mustChangePassword, live session count), returned as data
  *  instead of printed, for the `/admin` page's table. No pagination -- this app targets a small
- *  LAN/group, matching the CLI's own unpaginated style. */
+ *  LAN/group, matching the CLI's own unpaginated style.
+ *
+ *  Demo guests are excluded. They are ephemeral, self-reaping and unmanageable (there is no useful
+ *  admin action to take on one), and on a public deployment they would outnumber real accounts by
+ *  orders of magnitude -- an unpaginated table listing them is not a table anyone can use. The
+ *  count is surfaced separately via `guestUsersCount()`. */
 export function listAllUsers(db: Db): AdminUserRow[] {
   const rows = db
     .prepare(
@@ -477,6 +540,7 @@ export function listAllUsers(db: Db): AdminUserRow[] {
               users.must_change_password AS mustChangePassword,
               (SELECT COUNT(*) FROM sessions WHERE sessions.user_id = users.id) AS sessionCount
        FROM users
+       WHERE users.is_guest = 0
        ORDER BY users.id`,
     )
     .all() as Array<Omit<AdminUserRow, "hasPassword" | "mustChangePassword"> & { hasPassword: number; mustChangePassword: number }>;
@@ -509,7 +573,142 @@ export function createUserByAdmin(db: Db, email: string, name: string, passwordH
     role: "user",
     mustChangePassword: true,
     googleSub: null,
+    isGuest: false,
   };
+}
+
+/** Mints an ephemeral demo account for an anonymous visitor ("Explore the demo").
+ *
+ *  A real `users` row, deliberately, rather than a synthetic session or a shared demo account:
+ *   - `progress.user_id` is a foreign key into `users`, so there is no way to persist a guest's
+ *     progress without one anyway;
+ *   - a *shared* account would be actively broken under launch traffic, because `writeProgressRow()`
+ *     is optimistic-concurrency on a single row per user -- two concurrent visitors would produce a
+ *     permanent 409 storm and each would see the other's attempts.
+ *  Being a real row means every downstream consumer (scoring, readiness, analytics, the runner)
+ *  needs no guest-awareness at all.
+ *
+ *  Two details that matter for security, not tidiness:
+ *   - `@guest.invalid` uses the RFC 2606 reserved TLD, which is guaranteed never to resolve. If a
+ *     future code path ever tries to email a guest, it cannot reach a real person.
+ *   - `password_hash` is a real hash of random bytes, NOT `null`. `null` would put the row into
+ *     `POST /api/session`'s legacy "claim a password for this account" branch (`setPasswordIfUnset`),
+ *     so anyone who learned a guest's email -- which is visible to that guest in the UI -- could
+ *     claim the account. With an unusable hash there is no path in except the session cookie, and
+ *     no path out except `upgradeGuest()`.
+ *  `role` is hardcoded 'user' and never derived from any first-account rule. */
+export function createGuestUser(db: Db): UserRow {
+  const email = `guest-${randomBytes(16).toString("hex")}@guest.invalid`;
+  const createdAt = new Date().toISOString();
+  const passwordHash = hashPassword(randomBytes(32).toString("hex"));
+  const info = db
+    .prepare(
+      `INSERT INTO users (email, name, created_at, password_hash, role, must_change_password, is_guest)
+       VALUES (?, 'Guest', ?, ?, 'user', 0, 1)`,
+    )
+    .run(email, createdAt, passwordHash);
+  return {
+    id: Number(info.lastInsertRowid),
+    email,
+    name: "Guest",
+    createdAt,
+    passwordHash,
+    role: "user",
+    mustChangePassword: false,
+    googleSub: null,
+    isGuest: true,
+  };
+}
+
+export interface ReapGuestsResult {
+  /** User ids matched by the TTL predicate. Populated in dry-run mode too -- that's the point. */
+  ids: number[];
+  /** False when called in dry-run mode, i.e. nothing was actually deleted. */
+  deleted: boolean;
+}
+
+/** Deletes demo-guest accounts idle for longer than `ttlMs`, so the SQLite file doesn't grow
+ *  without bound on a small volume once the demo is public.
+ *
+ *  Idleness is `progress.updated_at`, which `writeProgressRow()` already maintains on every single
+ *  save -- during a quiz that's every answer. So it is a genuine last-activity timestamp obtained
+ *  for free, with no new column and no new write path. `COALESCE` to `users.created_at` covers a
+ *  guest who signed in and never answered anything. Both must be older than the TTL, which is what
+ *  makes it structurally impossible to reap someone mid-exam: a 115-minute mock writes continuously,
+ *  so their `updated_at` is minutes old, not days.
+ *
+ *  `WHERE is_guest = 1` is the safety-critical clause. It is asserted directly by a test that sets a
+ *  *real* user's timestamps far past the TTL and requires them to survive -- deleting real accounts
+ *  is the only way this function can cause irreversible harm, so that's the property under test,
+ *  not the happy path.
+ *
+ *  Deletes `password_resets` too. Guests never receive reset tokens, so it's dead weight for them
+ *  today -- but `foreign_keys = ON` and `password_resets.user_id` references `users(id)`, so
+ *  omitting it would make this throw the moment that assumption stopped holding. (`deleteUser()`
+ *  above has exactly that gap; tracked separately.)
+ *
+ *  `dryRun` exists because this is the first automatic user-row DELETE in this system, against a
+ *  deployment with no automated backup. One release of "here is what I would have deleted" is
+ *  cheap insurance; see `SNOWPRO_GUEST_REAP` in server.ts. */
+export function reapGuests(db: Db, options: { ttlMs: number; dryRun?: boolean }): ReapGuestsResult {
+  const cutoff = new Date(Date.now() - options.ttlMs).toISOString();
+  const rows = db
+    .prepare(
+      `SELECT users.id AS id
+         FROM users
+         LEFT JOIN progress ON progress.user_id = users.id
+        WHERE users.is_guest = 1
+          AND users.created_at < ?
+          AND COALESCE(progress.updated_at, users.created_at) < ?`,
+    )
+    .all(cutoff, cutoff) as Array<{ id: number }>;
+  const ids = rows.map((r) => r.id);
+  if (ids.length === 0 || options.dryRun) return { ids, deleted: false };
+
+  const run = db.transaction((victims: number[]) => {
+    const del = (table: string) =>
+      db.prepare(`DELETE FROM ${table} WHERE user_id = ?`);
+    for (const uid of victims) {
+      del("password_resets").run(uid);
+      del("sessions").run(uid);
+      del("progress").run(uid);
+      // Re-assert is_guest here as well as in the SELECT: this is the statement that actually
+      // destroys data, and it should be impossible to widen by editing the query above alone.
+      db.prepare("DELETE FROM users WHERE id = ? AND is_guest = 1").run(uid);
+    }
+  });
+  run(ids);
+  return { ids, deleted: true };
+}
+
+/** Promotes a demo guest into a permanent account in place, preserving everything they did.
+ *
+ *  The progress row is keyed by `user_id` and is deliberately NOT touched -- no copy, no merge, no
+ *  migration. That's the whole reason guests are real rows: conversion is one UPDATE.
+ *
+ *  Returns `null` when the email already belongs to someone (the caller reports a 409). Merging two
+ *  accounts' progress is a genuinely different feature with real conflict semantics, and silently
+ *  guessing at it here would be the wrong kind of helpful.
+ *
+ *  `AND is_guest = 1` in the UPDATE makes this unable to overwrite a real account's credentials even
+ *  if a caller passed the wrong id. */
+export function upgradeGuest(
+  db: Db,
+  userId: number,
+  fields: { email: string; name: string; passwordHash: string },
+): UserRow | null {
+  const normalized = normalizeEmail(fields.email);
+  const existing = findUserByEmail(db, normalized);
+  if (existing && existing.id !== userId) return null;
+  const info = db
+    .prepare(
+      `UPDATE users
+          SET email = ?, name = ?, password_hash = ?, must_change_password = 0, is_guest = 0
+        WHERE id = ? AND is_guest = 1`,
+    )
+    .run(normalized, fields.name, fields.passwordHash, userId);
+  if (info.changes === 0) return null;
+  return findUserById(db, userId) ?? null;
 }
 
 /** Admin-removing an account (issue #62) — same transaction shape as `admin-users.mjs`'s own
@@ -530,6 +729,52 @@ export function deleteUser(db: Db, userId: number): void {
 
 export function setUserRole(db: Db, userId: number, role: UserRole): void {
   db.prepare("UPDATE users SET role = ? WHERE id = ?").run(role, userId);
+}
+
+/** Promotes the accounts named by `SNOWPRO_ADMIN_EMAILS` to admin. Returns the emails promoted.
+ *
+ *  WHY THIS EXISTS, and why it's better than the rule it backs up: admin was granted to whichever
+ *  account happened to be created first. On a LAN box that's fine -- the operator is the only
+ *  person who can reach it. On a *public* deployment it is a real hole: the first stranger to sign
+ *  up after a fresh deploy becomes the administrator, before the owner ever visits. Guest mode
+ *  didn't create that problem, it just made it far likelier to be hit. Declaring the owner out of
+ *  band removes the race entirely instead of narrowing it, and it survives a database reset, which
+ *  a "first account" rule by definition cannot.
+ *
+ *  Deliberately grant-only, never revoke. A typo'd or momentarily-unset environment variable must
+ *  mean "change nothing," not "demote every administrator" -- the failure mode of the second is
+ *  locking the owner out of their own instance, which is precisely what this exists to prevent.
+ *  Removing an admin stays a deliberate act via the admin page or the CLI.
+ *
+ *  Guests are excluded belt-and-braces. They can't hold a matching address (their emails are
+ *  generated `@guest.invalid`), but this function's whole job is to hand out privilege, so it
+ *  states the constraint rather than relying on one.
+ *
+ *  Idempotent: safe to call on every boot, and it only writes rows that aren't already admin. */
+export function ensureConfiguredAdmins(db: Db, emails: string[]): string[] {
+  const promoted: string[] = [];
+  for (const raw of emails) {
+    const email = normalizeEmail(raw);
+    if (!email) continue;
+    const info = db
+      .prepare("UPDATE users SET role = 'admin' WHERE email = ? AND is_guest = 0 AND role != 'admin'")
+      .run(email);
+    if (info.changes > 0) promoted.push(email);
+  }
+  return promoted;
+}
+
+/** Parses the comma-separated `SNOWPRO_ADMIN_EMAILS` value into normalized addresses.
+ *
+ *  Kept beside `ensureConfiguredAdmins()` rather than in server.ts so both the parsing and the
+ *  promotion are unit-testable without an Express app or environment mutation, matching how
+ *  `passwords.ts`/`oauth.ts` keep their pure logic out of the route layer. */
+export function parseAdminEmails(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((e) => normalizeEmail(e))
+    .filter((e) => e.length > 0);
 }
 
 export function countAdmins(db: Db): number {
