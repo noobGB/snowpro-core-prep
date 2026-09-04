@@ -33,6 +33,14 @@
  */
 
 import { AuthForm } from "./LoginGate";
+import { GuestDemoButton } from "./GuestDemoButton";
+
+interface HomePageProps {
+  /** Issue #160: whether this instance offers "Explore the demo" (SNOWPRO_ENABLE_GUEST, and never
+   *  on a LAN host). Passed down rather than fetched here -- App.tsx already has it from the same
+   *  /api/me call that decided to render this page at all. */
+  guestAvailable?: boolean;
+}
 
 interface Feature {
   title: string;
@@ -86,7 +94,7 @@ const featureCardStyle: React.CSSProperties = {
   padding: 20,
 };
 
-export function HomePage() {
+export function HomePage({ guestAvailable = false }: HomePageProps) {
   return (
     <div className="home-page" style={{ minHeight: "100vh", background: "var(--canvas)" }}>
       {/* Standard skip-nav pattern (WCAG 2.4.1) -- invisible until focused. A sighted user never
@@ -115,6 +123,9 @@ export function HomePage() {
 
           <div className="home-form">
             <AuthForm headingLevel="h2" />
+            {/* Below the form, not above: a returning daily user's eyes should still land on the
+                password field first. The demo is for the first-time visitor, who is reading. */}
+            {guestAvailable && <GuestDemoButton />}
           </div>
 
           {/* Its own grid item (not nested in .home-hero) so tokens.css can place it after the

@@ -9,6 +9,8 @@
  */
 
 import { Link } from "react-router-dom";
+import { useSessionUser } from "../lib/session";
+import { openSettings } from "../lib/settingsStore";
 import { useContent } from "../lib/useContent";
 import { useProgress } from "../lib/progress";
 
@@ -56,6 +58,16 @@ function DifficultyBadge({ difficulty }: { difficulty: string }) {
 export function MockExams() {
   const { content, error } = useContent();
   const progress = useProgress();
+  // Issue #160: mock exams are the one thing a demo guest doesn't get. Practice, flashcards, notes,
+  // the plan and analytics are all open -- those are what demonstrate the product, and they're
+  // short enough to actually try. A full 115-minute timed exam isn't something a first-time visitor
+  // starts anyway, so gating it costs almost nothing in perceived value while giving the account
+  // prompt a natural home: it lands after someone has answered real questions and seen a readiness
+  // score computed from their own data, not before.
+  //
+  // Presentation only, deliberately. The content bundle is public and scoring happens client-side,
+  // so this is an honest affordance, not a security boundary -- there's nothing here to protect.
+  const isGuest = useSessionUser()?.isGuest === true;
 
   if (error) return <div style={{ color: "var(--status-incorrect)" }}>Couldn't load content: {error.message}</div>;
   if (!content) return <div style={{ color: "var(--text-dim)" }}>Loading…</div>;
@@ -87,6 +99,15 @@ export function MockExams() {
         {mockSets[0]?.durationMin ?? 115} min · no pause
       </p>
 
+      {isGuest && (
+        <div style={{ padding: "12px 16px", margin: "0 0 20px", borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--raised)", fontSize: 13, lineHeight: 1.55, color: "var(--text-muted)" }}>
+          Mock exams are the one part of the demo that needs a free account — they&rsquo;re
+          full-length and timed, and your results only mean something if they&rsquo;re saved
+          somewhere permanent. Everything else here is open: practice sets, flashcards, the notes,
+          your study plan and your readiness analytics.
+        </div>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {mockSets.map((set) => {
           const attempts = [...progress.attempts]
@@ -110,7 +131,18 @@ export function MockExams() {
                     {set.questionIds.length}Q{split ? ` · ${split}` : ""}
                   </div>
                 </div>
-                {isThisResumable ? (
+                {isGuest ? (
+                  <div style={{ textAlign: "right" }}>
+                    <button
+                      type="button"
+                      onClick={openSettings}
+                      style={{ display: "inline-flex", alignItems: "center", background: "transparent", color: "var(--text-heading)", border: "1px solid var(--hairline)", borderRadius: 6, padding: "9px 16px", minHeight: 40, fontSize: 13, fontWeight: 500, cursor: "pointer" }}
+                    >
+                      Create a free account
+                    </button>
+                    <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 6 }}>Full mocks need an account</div>
+                  </div>
+                ) : isThisResumable ? (
                   <Link
                     to={`/session/${set.id}`}
                     style={{ display: "inline-flex", alignItems: "center", background: "var(--accent)", color: "var(--canvas)", borderRadius: 6, padding: "9px 16px", minHeight: 40, fontSize: 13, fontWeight: 500 }}

@@ -9,6 +9,8 @@ import { Sidebar } from "./Sidebar";
 import { MobileTopBar } from "./MobileTopBar";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { ConflictBanner } from "./ConflictBanner";
+import { GuestBanner } from "./GuestBanner";
+import { openSettings } from "../lib/settingsStore";
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -24,6 +26,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             stays left-aligned next to the sidebar, leaving a large dead zone on the right at
             ultrawide widths instead of centering the content column. */}
         <main className="app-main" style={{ flex: 1, minWidth: 0, padding: "32px 40px 96px", maxWidth: 1180, margin: "0 auto" }}>
+          {/* Inside <main>, not up beside ConflictBanner: this needs to sit within the content
+              column so it lines up with the page rather than spanning under the sidebar. It still
+              inherits the property that matters -- Runner bypasses AppShell entirely, so a guest
+              never sees this during an exam. Renders null for a normal account. */}
+          <GuestBanner onCreateAccount={openSettings} />
           {children}
         </main>
       </div>
