@@ -1,0 +1,11 @@
+# blank_issues_enabled: false pushes people through the two templates below, which is worth doing
+# here specifically -- the most valuable report this project gets is "this practice question is
+# wrong", and the bug template asks for the question id that makes it actionable.
+#
+# No Discussions link: Discussions isn't enabled on this repo (checked, not assumed), and a contact
+# link to a disabled feature is just a 404 in the one place someone is already looking for help.
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/noobGB/snowpro-core-prep/security/advisories/new
+    about: Please report security issues privately, not as a public issue. See SECURITY.md.
