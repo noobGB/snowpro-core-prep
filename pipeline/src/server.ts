@@ -63,6 +63,7 @@ import { createLoginLockout } from "./loginLockout.js";
 import { createRegistrationLimiter } from "./registrationLimit.js";
 import { createGuestLimiter } from "./guestLimit.js";
 import { resolveGuestConfig } from "./guestMode.js";
+import { resolveLegalConfig } from "./write/legalConfig.js";
 import { randomBytes } from "node:crypto";
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -344,6 +345,17 @@ const registrationLimiter = createRegistrationLimiter();
 // guestLimit.ts for why it needs a global bucket on top of the per-IP window.
 const guestLimiter = createGuestLimiter();
 const guestConfig = resolveGuestConfig();
+
+/** Whether this deployment publishes the legal pages (issue #182 -- they exist only when an
+ *  operator identity is configured). Reported by /api/me so SiteFooter links to them only when
+ *  they are really there.
+ *
+ *  This has to be advertised rather than assumed: the SPA catch-all answers any unknown path with
+ *  the app shell at 200, so a link to a page that was never generated does not 404 -- it silently
+ *  drops the reader into the application instead of a policy, which is worse than no link.
+ *
+ *  Resolved once. The environment cannot change under a running container. */
+const LEGAL_PAGES_AVAILABLE = resolveLegalConfig() !== null;
 
 /** Issue #159: accounts declared admin out of band, so administrator rights don't depend on who
  *  happened to sign up first. Read once at boot -- changing it is a deploy/restart, matching every
@@ -983,6 +995,7 @@ app.get("/api/me", (req, res) => {
       // visitor's critical path. Also false on a LAN host -- a guest row on a self-hosted box is
       // litter with no conversion upside, and the visitor was invited by the operator anyway.
       guestAvailable: guestConfig.enabled && !isPrivateNetworkHost(req.hostname),
+      legalPages: LEGAL_PAGES_AVAILABLE,
     });
     return;
   }
@@ -995,6 +1008,7 @@ app.get("/api/me", (req, res) => {
     hasPassword: user.passwordHash !== null,
     role: user.role,
     isGuest: user.isGuest,
+    legalPages: LEGAL_PAGES_AVAILABLE,
   });
 });
 

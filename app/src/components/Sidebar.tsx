@@ -17,6 +17,7 @@ import { closePalette, openPalette } from "../lib/paletteStore";
 import { closeSettings, openSettings } from "../lib/settingsStore";
 import { modKeyLabel } from "../lib/platform";
 import { useSessionUser } from "../lib/session";
+import { SidebarDisclaimer } from "./SiteFooter";
 import { Logo } from "./Logo";
 
 interface NavItem {
@@ -154,6 +155,10 @@ export function Sidebar() {
           </svg>
           <span>Settings</span>
         </button>
+        {/* Issue #184: the product carries someone else's trademark on every screen, so the fact
+            that it is unofficial cannot live only on the signed-out landing page. One muted line,
+            deliberately without the legal-page links -- those would compete with navigation. */}
+        <SidebarDisclaimer />
       </div>
     </aside>
   );

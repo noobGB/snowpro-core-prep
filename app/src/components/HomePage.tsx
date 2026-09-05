@@ -34,11 +34,16 @@
 
 import { AuthForm } from "./LoginGate";
 
+import { SiteFooter } from "./SiteFooter";
+
 interface HomePageProps {
   /** Issue #160: whether this instance offers "Explore the demo" (SNOWPRO_ENABLE_GUEST, and never
    *  on a LAN host). Passed down rather than fetched here -- App.tsx already has it from the same
    *  /api/me call that decided to render this page at all. */
   guestAvailable?: boolean;
+  /** Issue #184: whether this deployment publishes the legal pages. Same journey as
+   *  `guestAvailable` — one /api/me call, passed down rather than refetched. */
+  legalPages?: boolean;
 }
 
 interface Feature {
@@ -93,7 +98,7 @@ const featureCardStyle: React.CSSProperties = {
   padding: 20,
 };
 
-export function HomePage({ guestAvailable = false }: HomePageProps) {
+export function HomePage({ guestAvailable = false, legalPages = false }: HomePageProps) {
   return (
     <div className="home-page" style={{ minHeight: "100vh", background: "var(--canvas)" }}>
       {/* Standard skip-nav pattern (WCAG 2.4.1) -- invisible until focused. A sighted user never
@@ -155,6 +160,15 @@ export function HomePage({ guestAvailable = false }: HomePageProps) {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Issue #184. The disclaimer's home: this is the public landing page, the one surface a
+              visitor -- and anyone at Snowflake looking at how their trademark is being used --
+              actually loads first. Its own grid area, spanning both columns: without one, auto
+              placement drops it into column 1 and it reads as part of the feature grid rather than
+              as the page's footer. */}
+          <div className="home-footer">
+            <SiteFooter legalPages={legalPages} />
           </div>
         </div>
       </div>
