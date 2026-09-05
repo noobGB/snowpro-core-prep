@@ -67,6 +67,18 @@ function copyRootAssets(): Plugin {
 export default defineConfig({
   plugins: [react(), copyRootAssets()],
   publicDir: path.resolve(import.meta.dirname, "../content"),
+  build: {
+    // Never inline font files. Vite's default inlines any asset under 4 KB as a data: URI, and one
+    // JetBrains Mono subset falls under it -- which produced a real CSP violation once issue #189
+    // tightened font-src to 'self', because a data: URI is not 'self'.
+    //
+    // Loosening the CSP to `font-src 'self' data:` would have been the smaller diff and the wrong
+    // trade: the whole point of that issue was getting to a policy with no exceptions in it. Not
+    // inlining is also better on its own terms -- base64 is ~33% larger than the binary, it lands
+    // in the render-blocking CSS instead of a separately cacheable file, and it is re-downloaded
+    // whenever any unrelated style changes.
+    assetsInlineLimit: (filePath) => (/\.(woff2?|ttf|otf|eot)$/i.test(filePath) ? false : undefined),
+  },
   test: {
     // Today's suite only covers pure src/lib/*.ts (no DOM). Switch to "jsdom" (per-file via a
     // docblock, or globally here) if a future test needs to render a component.
