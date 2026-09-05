@@ -47,6 +47,10 @@ export interface SessionUser {
    *  shows the links only when the server says they are really there — a link to an ungenerated
    *  page would not 404, it would drop the reader into the app via the SPA catch-all. */
   legalPages: boolean;
+  /** Issue #193: whether this instance can actually deliver a support message (a support address
+   *  AND a configured mailer). Gates the entry points, so we never offer a contact form that
+   *  silently drops what someone writes. */
+  supportAvailable: boolean;
 }
 
 let currentUser: SessionUser | null = null;
@@ -71,7 +75,7 @@ export function useSessionUser(): SessionUser | null {
 
 export type MeResult =
   | { authRequired: false }
-  | { authRequired: true; user: SessionUser | null; isPublicHost: boolean; guestAvailable: boolean; legalPages: boolean };
+  | { authRequired: true; user: SessionUser | null; isPublicHost: boolean; guestAvailable: boolean; legalPages: boolean; supportAvailable: boolean };
 
 /** Called once from App.tsx on boot to decide landing/gate-screen vs. the real app. `isPublicHost`
  *  (issue #121) only matters when `user` is `null` -- it's the server's per-request
@@ -86,6 +90,7 @@ export async function fetchMe(): Promise<MeResult> {
         isPublicHost?: boolean;
         guestAvailable?: boolean;
         legalPages?: boolean;
+        supportAvailable?: boolean;
       };
       return {
         authRequired: true,
@@ -96,13 +101,14 @@ export async function fetchMe(): Promise<MeResult> {
         // costs no extra round trip on the cold visitor's critical path.
         guestAvailable: body.guestAvailable === true,
         legalPages: body.legalPages === true,
+        supportAvailable: body.supportAvailable === true,
       };
     }
     if (!res.ok) return { authRequired: false };
     const user = (await res.json()) as SessionUser;
     currentUser = user;
     emit();
-    return { authRequired: true, user, isPublicHost: false, guestAvailable: false, legalPages: user.legalPages === true };
+    return { authRequired: true, user, isPublicHost: false, guestAvailable: false, legalPages: user.legalPages === true, supportAvailable: user.supportAvailable === true };
   } catch {
     return { authRequired: false };
   }

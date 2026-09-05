@@ -57,10 +57,18 @@ import {
   type UserRow,
 } from "./db.js";
 import { hashPassword, verifyPassword, generateTemporaryPassword, MIN_PASSWORD_LENGTH } from "./passwords.js";
-import { isMailerConfigured, sendAdminCreatedAccountEmail, sendPasswordResetEmail, sendWelcomeEmail } from "./mailer.js";
+import {
+  isMailerConfigured,
+  sendAdminCreatedAccountEmail,
+  sendPasswordResetEmail,
+  sendSupportMessage,
+  sendWelcomeEmail,
+  supportRecipient,
+} from "./mailer.js";
 import { buildAuthUrl, exchangeCodeForIdentity, isGoogleOAuthConfigured, resolveGoogleAccountLink } from "./oauth.js";
 import { createLoginLockout } from "./loginLockout.js";
 import { createRegistrationLimiter } from "./registrationLimit.js";
+import { createSupportLimiter } from "./supportLimit.js";
 import { createGuestLimiter } from "./guestLimit.js";
 import { resolveGuestConfig } from "./guestMode.js";
 import { resolveLegalConfig } from "./write/legalConfig.js";
@@ -360,6 +368,15 @@ const guestConfig = resolveGuestConfig();
  *
  *  Resolved once. The environment cannot change under a running container. */
 const LEGAL_PAGES_AVAILABLE = resolveLegalConfig() !== null;
+
+/** Issue #193. Resolved once -- the environment cannot change under a running container. */
+const SUPPORT_RECIPIENT = supportRecipient();
+const supportLimiter = createSupportLimiter();
+const MAX_SUPPORT_MESSAGE = 5000;
+/** Reported by /api/me so the client hides the support entry points on an instance that cannot
+ *  actually deliver a message -- an offer to contact support that silently goes nowhere is worse
+ *  than no offer. Mirrors how `legalPages` gates the footer links. */
+const SUPPORT_AVAILABLE = SUPPORT_RECIPIENT !== undefined && isMailerConfigured();
 
 /** Issue #159: accounts declared admin out of band, so administrator rights don't depend on who
  *  happened to sign up first. Read once at boot -- changing it is a deploy/restart, matching every
@@ -1000,6 +1017,7 @@ app.get("/api/me", (req, res) => {
       // litter with no conversion upside, and the visitor was invited by the operator anyway.
       guestAvailable: guestConfig.enabled && !isPrivateNetworkHost(req.hostname),
       legalPages: LEGAL_PAGES_AVAILABLE,
+      supportAvailable: SUPPORT_AVAILABLE,
     });
     return;
   }
@@ -1013,6 +1031,7 @@ app.get("/api/me", (req, res) => {
     role: user.role,
     isGuest: user.isGuest,
     legalPages: LEGAL_PAGES_AVAILABLE,
+    supportAvailable: SUPPORT_AVAILABLE,
   });
 });
 
@@ -1020,6 +1039,89 @@ app.post("/api/logout", (req, res) => {
   const token = getCookie(req, SESSION_COOKIE);
   if (token) deleteSession(db, token);
   res.clearCookie(SESSION_COOKIE, { path: "/" });
+  res.status(204).end();
+});
+
+/** Issue #193 -- the in-app support form. Before this there was no way to report anything from
+ *  inside the app: #177 removed the link to the issue tracker (the site does not present itself as
+ *  having a public upstream), and nothing replaced it. A user who spotted a wrong answer had
+ *  nowhere to send it.
+ *
+ *  DELIBERATELY NOT BEHIND requireSession. The most urgent support request is "I can't sign in",
+ *  and that person has no session by definition. Gating this would refuse help to exactly the
+ *  people who most need it.
+ *
+ *  THE RECIPIENT IS FIXED SERVER-SIDE (see `supportRecipient()`), never read from the request. That
+ *  is the one property that keeps an unauthenticated send-email endpoint from being an open relay:
+ *  a caller controls what the message says, never who receives it. Their own address goes in
+ *  Reply-To, which reaches them without letting them address mail through this server.
+ *
+ *  404 when no support address is configured, rather than accepting a message it would silently
+ *  drop -- the same rule the legal pages follow, and the client hides the entry points to match. */
+app.post("/api/support", express.json({ limit: "16kb" }), (req, res) => {
+  if (!SUPPORT_RECIPIENT || !isMailerConfigured()) {
+    res.status(404).json({ error: "Support requests aren't enabled on this instance." });
+    return;
+  }
+
+  const body = req.body as { email?: unknown; name?: unknown; message?: unknown; website?: unknown; path?: unknown } | null;
+
+  // Honeypot. A real form keeps this hidden and empty; bots fill every field they find. Answered
+  // with 204 rather than an error on purpose -- telling a bot which check it failed just teaches it
+  // to pass next time, and there is no human on the other end to confuse.
+  if (typeof body?.website === "string" && body.website.trim() !== "") {
+    res.status(204).end();
+    return;
+  }
+
+  const message = typeof body?.message === "string" ? body.message.trim() : "";
+  if (message.length < 10) {
+    res.status(400).json({ error: "Please describe the problem in a little more detail." });
+    return;
+  }
+  if (message.length > MAX_SUPPORT_MESSAGE) {
+    res.status(400).json({ error: `Please keep it under ${MAX_SUPPORT_MESSAGE} characters.` });
+    return;
+  }
+
+  // A signed-in real account's own address is authoritative and cannot be spoofed by the body. A
+  // guest's cannot be used: createGuestUser() mints `guest-<32 hex>@guest.invalid`, an RFC 2606
+  // address that can never receive a reply, so a guest has to supply a real one like a signed-out
+  // visitor does.
+  const user = currentUser(req);
+  const accountEmail = user && !user.isGuest ? user.email : null;
+  const suppliedEmail = typeof body?.email === "string" ? body.email.trim() : "";
+  const fromEmail = accountEmail ?? suppliedEmail;
+  if (!EMAIL_RE.test(fromEmail)) {
+    res.status(400).json({ error: "Enter an email address we can reply to." });
+    return;
+  }
+
+  const suppliedName = typeof body?.name === "string" ? body.name.trim().slice(0, 80) : "";
+  const fromName = (user && !user.isGuest ? user.name : suppliedName) || "Someone";
+
+  if (supportLimiter.isRateLimited(req.ip ?? "")) {
+    res.status(429).json({ error: "You've sent a few messages already — please give it a few minutes." });
+    return;
+  }
+
+  // Context the operator needs and the reporter would not think to include. "One of the questions
+  // was wrong" is unactionable; the same message with the page it came from is not.
+  const context = [
+    `Account: ${user ? (user.isGuest ? "guest (demo)" : `${user.email} (id ${user.id})`) : "not signed in"}`,
+    `Page: ${typeof body?.path === "string" ? body.path.slice(0, 200) : "(unknown)"}`,
+    `Sent: ${new Date().toISOString()}`,
+  ];
+
+  supportLimiter.recordSend(req.ip ?? "");
+
+  // Fire-and-forget, matching the welcome/reset sends: the reporter should not wait on an SMTP
+  // round trip, and a delivery failure is an operator problem, not something to hand back to
+  // someone who has already written out their issue.
+  sendSupportMessage({ to: SUPPORT_RECIPIENT, fromEmail, fromName, message, context }).catch((err: unknown) => {
+    console.error(`Failed to deliver a support message from ${fromEmail}:`, err);
+  });
+
   res.status(204).end();
 });
 

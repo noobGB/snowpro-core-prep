@@ -630,7 +630,7 @@ export function AuthForm({ headingLevel = "h1", guestAvailable = false }: AuthFo
  *  App.tsx's isPublicHost branch), who gets a bare login screen with no pitch content, unchanged
  *  from before issue #123's redesign. A public-host visitor gets `AuthForm` mounted directly
  *  inside `HomePage.tsx`'s split-screen layout instead of this wrapper. */
-export function LoginGate({ legalPages = false }: { legalPages?: boolean }) {
+export function LoginGate({ legalPages = false, supportAvailable = false }: { legalPages?: boolean; supportAvailable?: boolean }) {
   return (
     <div
       style={{
@@ -648,7 +648,7 @@ export function LoginGate({ legalPages = false }: { legalPages?: boolean }) {
       <AuthForm />
       {/* The other signed-out surface. A LAN instance usually has legalPages false, in which case
           this is the disclaimer alone -- which is the part that is true everywhere. */}
-      <SiteFooter legalPages={legalPages} />
+      <SiteFooter legalPages={legalPages} supportAvailable={supportAvailable} />
     </div>
   );
 }

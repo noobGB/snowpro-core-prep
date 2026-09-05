@@ -4,6 +4,7 @@ import { AppShell } from "./components/AppShell";
 import { CommandPalette } from "./components/CommandPalette";
 import { HomePage } from "./components/HomePage";
 import { LoginGate } from "./components/LoginGate";
+import { SupportPage } from "./components/SupportPage";
 import { ResetPasswordPage } from "./components/ResetPasswordPage";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { applyTheme } from "./lib/theme";
@@ -54,6 +55,7 @@ export default function App() {
   // Issue #184: whether this deployment publishes /privacy/ and friends. Rides the same 401
   // body for the same reason -- no extra request on the cold visitor's path.
   const [legalPages, setLegalPages] = useState(false);
+  const [supportAvailable, setSupportAvailable] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,6 +68,7 @@ export default function App() {
       setIsPublicHost(result.isPublicHost);
       setGuestAvailable(result.guestAvailable);
       setLegalPages(result.legalPages);
+      setSupportAvailable(result.supportAvailable);
       setAuthState("gate");
     });
     return () => {
@@ -87,13 +90,17 @@ export default function App() {
   // completes fine, but the point of this path IS having no session, so there's nothing gate-vs-
   // ready needs to decide first). Checked ahead of every authState branch below, unconditionally.
   if (window.location.pathname === "/reset-password") return <ResetPasswordPage />;
+  // Issue #193: same treatment, and for the same reason -- the most urgent support request is
+  // "I can't sign in", so this must render before any auth-state branch can send that person to
+  // the gate instead.
+  if (window.location.pathname === "/support") return <SupportPage />;
 
   if (authState === "loading") return null; // brief -- a same-origin fetch, not worth a spinner
   if (authState === "gate")
     return isPublicHost ? (
-      <HomePage guestAvailable={guestAvailable} legalPages={legalPages} />
+      <HomePage guestAvailable={guestAvailable} legalPages={legalPages} supportAvailable={supportAvailable} />
     ) : (
-      <LoginGate legalPages={legalPages} />
+      <LoginGate legalPages={legalPages} supportAvailable={supportAvailable} />
     );
 
   return (
