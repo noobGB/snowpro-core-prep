@@ -340,6 +340,43 @@ export async function upgradeToAccount(
  *  `window.location.reload()` (same reasoning as login() above, in reverse — a clean reload is
  *  what resets progress.ts's in-memory state so the next person on this shared machine doesn't
  *  see the previous person's cached data for a moment before the gate screen appears). */
+/** The phrase a passwordless account types to confirm deletion. Must stay in step with
+ *  `DELETE_CONFIRM_PHRASE` in pipeline/src/server.ts — the server is the one that enforces it; this
+ *  copy exists only so the UI can enable the button and show the phrase. */
+export const DELETE_CONFIRM_PHRASE = "delete my account";
+
+/** SettingsPanel's "Delete account" action (issue #180) — the right of erasure.
+ *
+ *  Takes the same shape as `changePassword()` and for the same reason: a live session is not
+ *  sufficient authorisation for a destructive change. Here it matters more, because this is
+ *  irreversible and there is nothing to restore from.
+ *
+ *  Pass `password` for an account that has one; pass `confirm` (the typed phrase) for a Google-only
+ *  account or a guest, neither of which has a usable password hash to verify against. The server
+ *  decides which one it requires — sending the wrong field just fails, it can't bypass anything.
+ *
+ *  The caller must reload afterwards rather than trusting this to tidy up: the account is gone
+ *  server-side, so every cached page and in-memory store in this tab is now describing something
+ *  that no longer exists. */
+export async function deleteAccount(args: { password?: string; confirm?: string }): Promise<PasswordActionResult> {
+  try {
+    const res = await fetch("/api/account", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(args),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      return { ok: false, error: body.error ?? `Failed (${res.status}).` };
+    }
+    currentUser = null;
+    emit();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error." };
+  }
+}
+
 export async function logout(): Promise<void> {
   try {
     await fetch("/api/logout", { method: "POST" });

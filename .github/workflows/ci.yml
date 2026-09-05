@@ -187,6 +187,70 @@ jobs:
           body=$(curl -sS http://localhost:8080/api/me)
           echo "$body"
           echo "$body" | jq -e '.guestAvailable == true'
+      # Self-service erasure (#180). Lives here rather than in a unit test for the same reason the
+      # guest block does: there is no server.spec.ts, and what matters is the real route behind real
+      # middleware in the real container -- including that a 204 actually clears the session cookie.
+      #
+      # Deliberately creates its OWN account rather than reusing ci-smoke-test@example.invalid. That
+      # one is the first account this container ever saw, so roleForNewAccount() made it admin, and
+      # the route correctly refuses to delete the last remaining admin. Reusing it would test the
+      # guard, not the happy path -- and would look like a broken endpoint.
+      # Self-service erasure (#180). Lives here rather than in a unit test for the same reason the
+      # guest block does: there is no server.spec.ts, and what matters is the real route behind real
+      # middleware in the real container -- including that a 204 actually clears the session cookie.
+      #
+      # Two accounts, deliberately. The step above posts only {email}, which returns status "new"
+      # WITHOUT creating a row, and guests aren't counted by humanUsersCount() -- so the first
+      # account created here is the first human this container has seen and roleForNewAccount()
+      # makes it admin. The route correctly refuses to delete the last remaining admin, so a
+      # single-account version of this test would assert the guard while looking like a broken
+      # endpoint. Account A proves the guard; account B proves the happy path.
+      - name: Smoke-test DELETE /api/account (re-auth required, then erases)
+        run: |
+          jarA=$(mktemp)
+          curl --fail -sS -c "$jarA" -X POST http://localhost:8080/api/session             -H 'Content-Type: application/json'             -d '{"email":"ci-admin@example.invalid","password":"correct-horse-battery","name":"CI Admin"}' -o /dev/null
+          meA=$(curl --fail -sS -b "$jarA" http://localhost:8080/api/me)
+          echo "A: $meA"
+          echo "$meA" | jq -e '.role == "admin"'             || { echo "::error::Expected the first human account to be admin; the two-account setup below depends on it"; exit 1; }
+
+          code=$(curl -sS -b "$jarA" -o /dev/null -w '%{http_code}' -X DELETE http://localhost:8080/api/account             -H 'Content-Type: application/json' -d '{"password":"correct-horse-battery"}')
+          test "$code" = "400" || { echo "::error::The last remaining admin deleted itself (got $code, want 400)"; exit 1; }
+
+          jar=$(mktemp)
+          curl --fail -sS -c "$jar" -X POST http://localhost:8080/api/session             -H 'Content-Type: application/json'             -d '{"email":"ci-delete-me@example.invalid","password":"correct-horse-battery","name":"CI Delete"}' -o /dev/null
+          me=$(curl --fail -sS -b "$jar" http://localhost:8080/api/me)
+          echo "B: $me"
+          echo "$me" | jq -e '.role == "user"'
+
+          # A live session must NOT be sufficient on its own.
+          code=$(curl -sS -b "$jar" -o /dev/null -w '%{http_code}' -X DELETE http://localhost:8080/api/account             -H 'Content-Type: application/json' -d '{}')
+          test "$code" = "403" || { echo "::error::DELETE /api/account accepted no password (got $code, want 403)"; exit 1; }
+
+          code=$(curl -sS -b "$jar" -o /dev/null -w '%{http_code}' -X DELETE http://localhost:8080/api/account             -H 'Content-Type: application/json' -d '{"password":"wrong-password"}')
+          test "$code" = "403" || { echo "::error::DELETE /api/account accepted a wrong password (got $code, want 403)"; exit 1; }
+
+          code=$(curl -sS -b "$jar" -c "$jar" -o /dev/null -w '%{http_code}' -X DELETE http://localhost:8080/api/account             -H 'Content-Type: application/json' -d '{"password":"correct-horse-battery"}')
+          test "$code" = "204" || { echo "::error::DELETE /api/account failed for a valid password (got $code, want 204)"; exit 1; }
+
+          # The cookie must be gone, and the account with it.
+          code=$(curl -sS -b "$jar" -o /dev/null -w '%{http_code}' http://localhost:8080/api/me)
+          test "$code" = "401" || { echo "::error::Session survived account deletion (got $code, want 401)"; exit 1; }
+
+          # The address is reusable -- proof the row is gone, not merely flagged.
+          body=$(curl --fail -sS -X POST http://localhost:8080/api/session             -H 'Content-Type: application/json' -d '{"email":"ci-delete-me@example.invalid"}')
+          echo "$body" | jq -e '.status == "new"'             || { echo "::error::Deleted email is not reusable -- the users row survived"; exit 1; }
+      - name: Smoke-test DELETE /api/account for a guest (phrase, not password)
+        run: |
+          jar=$(mktemp)
+          curl --fail -sS -c "$jar" -X POST http://localhost:8080/api/auth/guest -o /dev/null
+
+          # A guest's password hash is the deliberately unusable sentinel from createGuestUser(), so
+          # verifyPassword() can never succeed -- demanding a password would make guests undeletable.
+          code=$(curl -sS -b "$jar" -o /dev/null -w '%{http_code}' -X DELETE http://localhost:8080/api/account             -H 'Content-Type: application/json' -d '{"confirm":"nope"}')
+          test "$code" = "400" || { echo "::error::Guest deletion accepted a wrong phrase (got $code, want 400)"; exit 1; }
+
+          code=$(curl -sS -b "$jar" -c "$jar" -o /dev/null -w '%{http_code}' -X DELETE http://localhost:8080/api/account             -H 'Content-Type: application/json' -d '{"confirm":"delete my account"}')
+          test "$code" = "204" || { echo "::error::Guest could not delete their own account (got $code, want 204)"; exit 1; }
       # Generated crawlable pages. writeOutput() wraps rendering in a try/catch so a failure can
       # never take the container down on boot -- which means a broken generator would otherwise fail
       # SILENTLY, with the site up and /guide/ quietly 404ing. These steps are what turns that into
