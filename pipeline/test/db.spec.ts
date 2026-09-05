@@ -673,6 +673,53 @@ describe("deleteUser", () => {
     deleteUser(db, alice.id);
     expect(findUserById(db, bob.id)).toMatchObject({ email: "bob@example.com" });
   });
+
+  // Issue #175. The test above passes without password_resets ever existing, which is precisely
+  // how the bug shipped: with foreign_keys = ON and no ON DELETE CASCADE, a forgotten child row
+  // isn't a leaked orphan, it's a FOREIGN KEY constraint failure that rolls the delete back. Only
+  // an outstanding token makes it reachable, so it presented intermittently in the admin route.
+  it("deletes a user holding an unconsumed password-reset token", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+    createPasswordResetToken(db, user.id, 60_000);
+
+    expect(() => deleteUser(db, user.id)).not.toThrow();
+    expect(findUserById(db, user.id)).toBeUndefined();
+  });
+
+  // Self-maintaining on purpose: it discovers the child tables from the live schema instead of
+  // listing them, so adding a table that references users(id) fails here until deleteUser() is
+  // taught about it. Listing them by hand would just re-encode the assumption that caused #175.
+  it("leaves no rows behind in ANY table referencing users(id)", () => {
+    const user = upsertUserOnLogin(db, "alice@example.com", "Alice");
+    createSession(db, user.id);
+    writeProgressRow(db, user.id, "{}", "0");
+    createPasswordResetToken(db, user.id, 60_000);
+
+    const tableNames = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+      .all() as Array<{ name: string }>;
+
+    const children: Array<{ table: string; column: string }> = [];
+    for (const { name } of tableNames) {
+      const fks = db.pragma(`foreign_key_list("${name}")`) as Array<{ table: string; from: string }>;
+      for (const fk of fks) {
+        if (fk.table === "users") children.push({ table: name, column: fk.from });
+      }
+    }
+
+    // Guards the discovery itself: if this query ever silently returns nothing, every assertion
+    // below would vacuously pass and the test would be worthless.
+    expect(children.length).toBeGreaterThanOrEqual(3);
+
+    deleteUser(db, user.id);
+
+    for (const { table, column } of children) {
+      const { n } = db
+        .prepare(`SELECT COUNT(*) AS n FROM "${table}" WHERE "${column}" = ?`)
+        .get(user.id) as { n: number };
+      expect(n, `${table}.${column} still has rows for the deleted user`).toBe(0);
+    }
+  });
 });
 
 describe("setUserRole / countAdmins", () => {
