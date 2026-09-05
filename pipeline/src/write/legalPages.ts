@@ -42,6 +42,26 @@ const GUEST_TTL_DAYS = 7;
  *  boot, so this only goes stale if a container runs untouched for longer than this. */
 const SECURITY_TXT_VALID_DAYS = 365;
 
+/** Minimum age to hold an account.
+ *
+ *  EIGHTEEN, NOT SIXTEEN, and this is the one number here most likely to be "corrected" back by
+ *  someone recognising 16 as the familiar figure. 16 is GDPR Art. 8's default — the age at which a
+ *  child may consent to an information society service without parental authorisation. Two reasons
+ *  it is the wrong number for this deployment:
+ *
+ *   1. Art. 8 governs processing based on CONSENT. The stated basis here is performance of a
+ *      contract (see the privacy page), so Art. 8 was never the operative rule.
+ *   2. India's DPDP Act 2023 defines a child as anyone under 18 (s.2(f)) and requires verifiable
+ *      parental consent to process their data (s.9). That is the operator's own jurisdiction, and
+ *      the terms page states the agreement is governed by its law — so 16 made the document
+ *      contradict itself.
+ *
+ *  The substantive reason a minimum age belongs in the terms at all is contractual capacity: a
+ *  minor generally cannot form a binding contract, so "you agree to these terms" would rest on
+ *  nothing. 18 satisfies that too, and costs nothing for an audience of working professionals
+ *  sitting a vendor certification. */
+const MINIMUM_AGE = 18;
+
 /** Shared footer for the legal pages. Cross-links the set so any one of them is one click from the
  *  others — a privacy policy that doesn't lead to the terms makes someone hunt. */
 function legalFooter(cfg: LegalConfig): string {
@@ -165,8 +185,8 @@ may complain to the Data Protection Board. Raising it directly first is usually 
 
 <h2>Children</h2>
 <p>This service is intended for people preparing for a professional certification and is not directed at children. If
-you are under 16, please do not create an account. If you believe a child has, write to the address above and it will
-be deleted.</p>
+you are under ${MINIMUM_AGE}, please do not create an account. If you believe a child has, write to the address above
+and it will be deleted.</p>
 
 <h2>Security</h2>
 <p>Passwords are hashed with scrypt. Sessions use <code>HttpOnly</code> cookies. Traffic is served over HTTPS with
@@ -222,7 +242,7 @@ and delete it whenever you like, both from Settings. Deleting your account is im
 level promised. If it is ever shut down, reasonable notice will be given on this site so you can export your data.</p>
 
 <h2>Age</h2>
-<p>This service is not directed at children and you must be at least 16 to create an account.</p>
+<p>This service is not directed at children and you must be at least ${MINIMUM_AGE} to create an account.</p>
 
 <h2>Trademarks</h2>
 <p>This is an independent, unofficial project. It is <strong>not affiliated with, endorsed by, or sponsored by

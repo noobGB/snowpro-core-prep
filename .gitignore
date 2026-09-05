@@ -56,3 +56,11 @@ marketing/
 
 # tools/og renders the committed OG card; its browser download must not be committed.
 tools/og/node_modules/
+
+# Backups of .env. A timestamped copy (.env.bak-20260905-133838) was created next to it during a
+# local rebuild and was NOT covered by the `.env` rule above -- it got staged, and only GitHub's
+# secret-scanning push protection stopped it reaching the remote. A gitignore rule is the control
+# that should have caught it; push protection is a backstop, not the fix.
+.env.bak*
+.env.backup*
+*.env.bak
