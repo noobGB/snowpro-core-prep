@@ -61,14 +61,23 @@ const WELCOME_BACK_MS = 700;
 type Mode = "email" | "new" | "claim" | "password" | "forgot" | "must_change_password";
 
 const cardStyle: React.CSSProperties = {
-  width: 360,
-  // `100%`, not the `calc(100vw - 32px)` this used to be. Both mounts wrap this card in a flex
-  // container, so a percentage resolves against that container's content box and is correct for
-  // each: LoginGate's full-screen wrapper (100vw minus its own 16px padding, i.e. exactly what the
-  // old calc() hardcoded) AND HomePage's `.home-form` grid cell, which is narrower than the
-  // viewport because the page has its own 24px gutters -- there the viewport-relative calc()
-  // resolved 16px too wide and overflowed.
-  maxWidth: "100%",
+  // `width: 100%` capped at 360 -- NOT `width: 360` capped at `100%`, which is what this was and
+  // which quietly stretched the entire landing page (issue #199).
+  //
+  // Why the old pair could not work: `max-width: 100%` resolves against the containing block. On
+  // HomePage that block is a grid column whose default `min-width: auto` sizes it to its content's
+  // min-content -- which `width: 360` set to 360. So the column became 360, and 100% of 360 is 360.
+  // Circular, no constraint. The result was a 360px column inside a 342px container at 390px wide,
+  // and because a grid column stretches every row, the hero, the screenshot and the feature grid
+  // all inherited the overflow: 24px of gutter on the left, 6px on the right, and at a 360px
+  // viewport the right edge ran off-screen entirely. #185's `overflow-x: clip` hid the scrollbar,
+  // so it read as "off-centre" rather than "broken".
+  //
+  // This way round the card fills its container and stops at 360, so it can never widen anything.
+  // Desktop is unchanged: `.home-form` is a 400px grid column, so 100%-capped-at-360 is still 360.
+  // LoginGate's own full-screen wrapper is likewise wider than 360, so that mount is unchanged too.
+  width: "100%",
+  maxWidth: 360,
   background: "var(--raised)",
   border: "1px solid var(--hairline)",
   borderRadius: 12,

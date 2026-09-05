@@ -392,6 +392,13 @@ input[type="date"]::-webkit-calendar-picker-indicator {
      secondary scroll content below. Independent of DOM order (hero -> form -> screenshot ->
      features in the markup) since each is its own named grid item. */
   grid-template-areas: "hero" "form" "screenshot" "features" "footer";
+  /* minmax(0, 1fr), not the implicit `auto` this relied on (issue #199). A grid column defaults to
+     `min-width: auto`, so it refuses to shrink below its widest child's min-content -- one child
+     with a fixed width then stretches the whole column, and with it every row: hero, screenshot and
+     feature grid all inherited an overflow none of them caused. The desktop rule below already
+     spells out `minmax(0, 1fr) 400px`; the single-column case was simply never given the same
+     protection. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 32px;
 }
 @media (min-width: 900px) {
