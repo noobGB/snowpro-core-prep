@@ -172,4 +172,37 @@ describe("renderStaticPages", () => {
     const html = fileByPath(renderStaticPages(bundle(), notes()), "guide/2-data-collaboration/index.html");
     expect(html).toContain("Data Collaboration");
   });
+
+  // Issue #177. The repository is open source; this site is a product built on it and does not
+  // present itself as having a public upstream. That is a positioning decision, not a licensing
+  // one -- MIT's notice obligation is triggered by distributing copies, and hosting is not
+  // distribution, so nothing is owed here.
+  //
+  // This is a test rather than a comment because the leak was never in one obvious place: the
+  // strings were spread across a footer, a FAQ answer, a Course description, a CTA on every domain
+  // page, and llms.txt, several of them split across lines inside template literals so a source
+  // grep missed them. Only scanning the rendered output caught them all. An assertion runs on every
+  // change; a convention does not.
+  it("never presents the site as open source", () => {
+    const forbidden = [
+      /open[\s-]?source/i,
+      /self[\s-]?host/i,
+      /\bMIT\b/,
+      /github\.com/i,
+      /\bdocker\b/i,
+      /opensource\.org/i,
+    ];
+
+    const files = renderStaticPages(bundle(), notes());
+    expect(files.length).toBeGreaterThan(0);
+
+    for (const file of files) {
+      for (const pattern of forbidden) {
+        expect(
+          file.contents,
+          `${file.relPath} presents the site as open source (matched ${pattern})`,
+        ).not.toMatch(pattern);
+      }
+    }
+  });
 });

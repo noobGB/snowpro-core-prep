@@ -2,22 +2,24 @@
  * Hands-on setup — spec §6.11, reworked 2026-08-18 from a single flat list into two sections
  * ("Setup Steps" you actually do, in order, and "Known Issues & Fixes" for things that went
  * wrong along the way) matching the source log's own structure (see
- * pipeline/src/parsers/setupLog.ts). Each card shows only the entry's one-line summary and its
- * commands, not the full narrative — a "Full details" link jumps straight to that heading in the
- * source file on GitHub for whoever wants the complete story. Checkable (progress.setup.checked),
- * commands copyable, same as before.
+ * pipeline/src/parsers/setupLog.ts). Each card shows the entry's one-line summary and its
+ * commands. Checkable (progress.setup.checked), commands copyable.
+ *
+ * Issue #177 removed the per-card "Full details →" link, which deep-linked to the source markdown
+ * on GitHub. This site does not present itself as having a public upstream, and an in-app link to
+ * a repository is the most explicit possible contradiction of that.
+ *
+ * The narrative those links pointed at is genuinely useful and is currently unreachable from the
+ * app: the parser tracks each entry's body line range but the bundle only carries `summary`,
+ * `commands` and `sourceAnchor`, so there is nothing to render. Surfacing it in-app means emitting
+ * the rendered body into ContentBundle — a shape change across three packages, tracked separately
+ * rather than smuggled into an identity change.
  */
 
 import { useState } from "react";
 import { useContent } from "../lib/useContent";
 import { updateProgress, useProgress } from "../lib/progress";
 import type { SetupItem } from "../lib/content";
-
-// This app's own repo — a fork with different content should update this (or drop the link
-// entirely) alongside replacing SnowPro_Notes_and_Questions/. Matches the URL README's own CI
-// badge already hardcodes, so this isn't a new precedent.
-const SETUP_LOG_URL =
-  "https://github.com/noobGB/snowpro-core-prep/blob/master/SnowPro_Notes_and_Questions/15_Hands_On_Snowflake_Setup_Log.md";
 
 const cardStyle: React.CSSProperties = {
   background: "var(--card)",
@@ -176,14 +178,6 @@ function StepCard({
               <CopyButton text={cmd} />
             </div>
           ))}
-          <a
-            href={`${SETUP_LOG_URL}#${step.sourceAnchor}`}
-            target="_blank"
-            rel="noreferrer"
-            style={{ fontSize: 12, color: "var(--accent)" }}
-          >
-            Full details →
-          </a>
         </div>
       </div>
     </div>

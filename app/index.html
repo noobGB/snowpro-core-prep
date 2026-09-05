@@ -33,11 +33,11 @@
          landing-dashboard.png, which at 1280x860 (1.49:1) was centre-cropped into a composition
          nobody chose. Declaring the dimensions also lets those platforms lay out the card without
          fetching the file first.
-         Generated from marketing/og/og-card.html -- regenerate with `cd marketing/video && npm run og`
+         Generated from tools/og/og-card.html -- regenerate with `cd tools/og && npm run og`
          rather than editing the PNG, so the card can't drift from the product's own wording. -->
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="SnowPro Core Prep — pass the SnowPro Core exam, free and open source. Timed mock exams, weighted readiness, and an adaptive study plan." />
+    <meta property="og:image:alt" content="SnowPro Core Prep — pass the SnowPro Core exam. Free, no signup. Timed mock exams, weighted readiness, and an adaptive study plan." />
     <!-- twitter:site/twitter:creator are deliberately absent -- there's no handle to point them at,
          and a card tag naming a handle that doesn't exist is worse than omitting it. The
          summary_large_image card renders fine without them. -->
@@ -45,7 +45,7 @@
     <meta name="twitter:title" content="SnowPro Core Prep" />
     <meta name="twitter:description" content="Everything you need to pass the Snowflake SnowPro Core (COF-C03) exam — timed mock exams, a readiness score weighted by the real exam's domain weights, flashcards, and a day-by-day study plan." />
     <meta name="twitter:image" content="https://snowpro.gauravbarwalia.com/og-card.png" />
-    <meta name="twitter:image:alt" content="SnowPro Core Prep — pass the SnowPro Core exam, free and open source. Timed mock exams, weighted readiness, and an adaptive study plan." />
+    <meta name="twitter:image:alt" content="SnowPro Core Prep — pass the SnowPro Core exam. Free, no signup. Timed mock exams, weighted readiness, and an adaptive study plan." />
     <script>
       // Pre-paint theme sync — avoids a flash of dark UI before React mounts and App.tsx's effect
       // runs. Only "light" needs handling here: "dark"/"system"/missing/invalid data all already
@@ -73,7 +73,7 @@
     />
     <title>SnowPro Core Prep</title>
     <!-- Issue #155: structured data, so search and answer engines have a machine-readable statement
-         of what this is, that it's free and open source, and who wrote it.
+         of what this is, that it's free, and who wrote it.
 
          GOVERNING RULE: this file is hand-written, so nothing here carries a number that changes
          when the content bank does — no question counts, no domain weights, no durations. Those
@@ -102,7 +102,7 @@
             "@id": "https://snowpro.gauravbarwalia.com/#website",
             "url": "https://snowpro.gauravbarwalia.com/",
             "name": "SnowPro Core Prep",
-            "description": "A free, open-source, self-hostable study app for the Snowflake SnowPro Core (COF-C03) certification.",
+            "description": "A free study app for the Snowflake SnowPro Core (COF-C03) certification. No signup needed to try it.",
             "inLanguage": "en",
             "publisher": { "@id": "https://snowpro.gauravbarwalia.com/#gaurav" }
           },
@@ -116,8 +116,6 @@
             "description": "Timed mock exams, a readiness score weighted by the real exam's domain weights, flashcards, and a day-by-day study plan for the Snowflake SnowPro Core (COF-C03) certification.",
             "isAccessibleForFree": true,
             "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-            "license": "https://opensource.org/licenses/MIT",
-            "codeRepository": "https://github.com/noobGB/snowpro-core-prep",
             "screenshot": "https://snowpro.gauravbarwalia.com/og-card.png",
             "author": { "@id": "https://snowpro.gauravbarwalia.com/#gaurav" },
             "featureList": [
@@ -200,9 +198,10 @@
           <dd>Your study activity isn't sold, tracked, or shared with anyone. It's yours, and it stays that way.</dd>
         </dl>
         <p>
-          SnowPro Core Prep is a free, open-source, self-hostable study app for the Snowflake
-          SnowPro Core (COF-C03) certification. Source and setup instructions:
-          <a href="https://github.com/noobGB/snowpro-core-prep">github.com/noobGB/snowpro-core-prep</a>.
+          SnowPro Core Prep is a free study app for the Snowflake SnowPro Core (COF-C03)
+          certification. There&rsquo;s no signup to try it &mdash; the demo drops you straight into
+          the real app, and you can turn that into a permanent account later without losing your
+          progress.
         </p>
         <p style="opacity: 0.7; font-size: 13px;">
           An independent, unofficial project &mdash; not affiliated with, endorsed by, or sponsored
