@@ -4,9 +4,9 @@
 # publicDir is repurposed to ../content (the pipeline output), so this file needs the same
 # hand-copy treatment the favicons get. See that file's own comment for the full reasoning.
 #
-# Note this one file also ships in the image self-hosters run, so a LAN box serves a Sitemap:
-# line pointing at the public domain. Harmless (no crawler reaches a LAN box), and it's the same
-# tradeoff app/index.html already documents for its hardcoded absolute og:image URL.
+# Note this file ships unchanged in every deployment of the image, so a LAN or localhost instance
+# also serves a Sitemap: line pointing at the public domain. Harmless (no crawler reaches a private
+# host), and it's the same tradeoff app/index.html already documents for its absolute og:image URL.
 #
 # IMPORTANT if you edit this: a crawler obeys exactly ONE group -- the most specific one matching
 # its token -- and does NOT inherit rules from `User-agent: *`. So the Disallow set has to be
@@ -21,9 +21,9 @@ Disallow: /api/
 Disallow: /admin
 Disallow: /reset-password
 # The generated content bundle is the practice/mock question bank *including every answer key and
-# explanation*. It is served unauthenticated on purpose -- the same questions live in public
-# markdown in this MIT-licensed repo, and gating it while that is true would be theater. Keeping it
-# out of search indexes and training corpora is the control that actually means something here.
+# explanation*. It is served unauthenticated on purpose: guest mode mints a session in one click, so
+# an auth gate here would stop no scraper while costing every real visitor a round trip. Keeping the
+# bank out of search indexes and training corpora is the control that actually means something.
 Disallow: /content.json
 Disallow: /notes/
 Disallow: /search-index.json

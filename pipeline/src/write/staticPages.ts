@@ -17,10 +17,14 @@
  * So a real file at /guide/ wins over the catch-all with zero server changes, and the pages are
  * regenerated from the same bundle on every boot — they cannot go stale.
  *
- * WHAT IS AND ISN'T PUBLISHED: the domain notes go public. They are already MIT-licensed and
- * readable in `SnowPro_Notes_and_Questions/` on GitHub, and being cited is the entire point. The
- * practice and mock QUESTIONS are deliberately absent — they are the product, and putting them in
- * crawlable HTML would commoditize the bank for no citation benefit. Do not add them here.
+ * WHAT IS AND ISN'T PUBLISHED: the domain notes go public, because being cited by search engines
+ * and answer engines is the entire point of these pages — that is the reason, on its own. (It used
+ * to be justified here by the notes already being MIT-licensed and readable on GitHub. That is a
+ * fact about the repository, not about this site, and this site does not present itself as having
+ * a public upstream — see issue #177. Reasoning from the repo would lead the next reader to the
+ * wrong constraint.) The practice and mock QUESTIONS are deliberately absent — they are the
+ * product, and putting them in crawlable HTML would commoditize the bank for no citation benefit.
+ * Do not add them here.
  *
  * STYLING is a small inline <style> block: no external stylesheet, no JS. The pipeline cannot know
  * the hashed filename of the app's built CSS bundle, and coupling boot-time output to a build
@@ -141,8 +145,8 @@ ${jsonLdSafe(options.jsonLd)}
 <div class="wrap">
 ${options.body}
 <footer>
-<p><strong>SnowPro Core Prep</strong> — a free, open-source study app for the Snowflake SnowPro Core (COF-C03) exam.
-<a href="${SITE}/">Try the demo</a> · <a href="https://github.com/noobGB/snowpro-core-prep">Source on GitHub</a></p>
+<p><strong>SnowPro Core Prep</strong> — a free study app for the Snowflake SnowPro Core (COF-C03) exam.
+<a href="${SITE}/">Try the demo — no signup</a></p>
 <p>An independent, unofficial project — not affiliated with, endorsed by, or sponsored by Snowflake Inc.
 All notes are original, independently authored, and verified against Snowflake&#39;s publicly available exam guide and documentation.</p>
 </footer>
@@ -223,7 +227,7 @@ ${intro}
     },
     {
       q: "Is SnowPro Core Prep free?",
-      a: "Yes. It is MIT licensed and open source. You can use the hosted demo without signing up, or run the whole thing yourself with one Docker command.",
+      a: "Yes, entirely. There is no paywall, no trial, and no signup needed to try it — the demo drops you straight into the real app, and you can turn that into a permanent account later without losing your progress.",
     },
   ];
 
@@ -239,7 +243,7 @@ ${intro}
           "@type": "Course",
           "@id": `${SITE}/guide/#course`,
           name: "Snowflake SnowPro Core (COF-C03) exam preparation",
-          description: `Free, open-source preparation for the Snowflake SnowPro Core certification: ${mockCount} full-length mock exams, domain-weighted readiness scoring, flashcards and an adaptive study plan.`,
+          description: `Free preparation for the Snowflake SnowPro Core certification: ${mockCount} full-length mock exams, domain-weighted readiness scoring, flashcards and an adaptive study plan.`,
           url: `${SITE}/guide/`,
           inLanguage: "en",
           isAccessibleForFree: true,
@@ -301,8 +305,8 @@ ${faqHtml}
 
 <h2>Practise against these weights</h2>
 <p>SnowPro Core Prep scores your readiness using the weights in the table above rather than a flat
-average, so a domain you have not touched still counts against you. It is free and open source, and
-you can explore the whole app without creating an account.</p>
+average, so a domain you have not touched still counts against you. It is free, and you can explore
+the whole app without creating an account.</p>
 <p><a class="cta" href="${SITE}/">Try the demo — no signup</a></p>`;
 
   return {
@@ -364,8 +368,8 @@ function renderDomainPage(
 ${sections}
 <h2>Test yourself on this domain</h2>
 <p>Reading is not the same as being able to answer under time pressure. SnowPro Core Prep has practice
-questions for this domain and full-length mock exams weighted to the real split — free, open source,
-and explorable without an account.</p>
+questions for this domain and full-length mock exams weighted to the real split — free, and
+explorable without an account.</p>
 <p><a class="cta" href="${SITE}/">Try the demo — no signup</a></p>`;
 
   return {
@@ -428,10 +432,9 @@ function renderLlmsTxt(bundle: ContentBundle): StaticFile {
     relPath: "llms.txt",
     contents: `# SnowPro Core Prep
 
-> A free, open-source, self-hostable study application for the Snowflake SnowPro Core (COF-C03)
-> certification. Unlike the paywalled question banks and ad-funded content sites that dominate this
-> topic, the entire application and all of its content are MIT licensed and can be run locally with
-> one Docker command.
+> A free study application for the Snowflake SnowPro Core (COF-C03) certification. Unlike the
+> paywalled question banks and ad-funded content sites that dominate this topic, it costs nothing
+> and needs no signup to try — the demo opens the real application immediately.
 
 Written and maintained by Gaurav Barwalia, who holds the SnowPro Core certification
 (https://achieve.snowflake.com/a6ae5831-336d-42d2-b909-d5bf23f5a969).
@@ -458,7 +461,6 @@ Written and maintained by Gaurav Barwalia, who holds the SnowPro Core certificat
   is on the COF-C03 exam and how it is weighted.
 ${domainLines}
 - [Live application](${SITE}/): explorable without creating an account.
-- [Source code](https://github.com/noobGB/snowpro-core-prep): MIT licensed.
 
 ## Notes for automated readers
 
