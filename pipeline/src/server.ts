@@ -168,18 +168,22 @@ app.set("trust proxy", 1);
 //     can't be moved into a same-origin external file the normal way) -- hash-pinning that one
 //     script instead was considered, but the file has no server-side templating (a documented,
 //     deliberate gap -- see the same comment) to inject a per-request nonce, and a static hash goes
-//     silently stale the moment anyone edits that script without remembering to recompute it. Every
-//     *other* directive here is as strict as this app's actual resource use allows (Google Fonts is
-//     the only external origin loaded anywhere) -- this is a real, if incomplete, improvement over
-//     having no CSP at all, not a no-op. ---
+//     silently stale the moment anyone edits that script without remembering to recompute it.
+//
+//     Issue #189 removed the last external origin: the fonts are self-hosted now (see the @import
+//     at the top of app/src/styles/tokens.css), so style-src and font-src no longer name
+//     fonts.googleapis.com / fonts.gstatic.com and `default-src 'self'` is literally true. If you
+//     ever add a third-party origin here, that sentence stops being true -- rewrite it rather than
+//     leaving it to mislead the next reader. `'unsafe-inline'` on script-src remains the one real
+//     weakness, for the reason above. ---
 app.use((req, res, next) => {
   res.setHeader(
     "Content-Security-Policy",
     [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline'",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src 'self' https://fonts.gstatic.com",
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self'",
       "img-src 'self' data:",
       "connect-src 'self'",
       "frame-ancestors 'none'",

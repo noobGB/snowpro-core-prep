@@ -4,6 +4,23 @@
  * for the primary action, active nav state, and focus rings.
  */
 
+/* Issue #189: self-hosted webfonts, replacing the <link> to fonts.googleapis.com that used to live
+   in index.html. Two reasons, and the second is the one that generalises:
+
+   1. Hotlinking Google Fonts sends every visitor's IP to Google before they have agreed to
+      anything, and an IP is personal data. Self-hosting removes the question rather than answering
+      it.
+   2. It was the ONLY external origin this application loaded. Without it, the CSP's
+      `default-src 'self'` is literally true -- see the header block in pipeline/src/server.ts.
+
+   Variable fonts, so the weights actually used (Inter 300/400/500/600, JetBrains Mono 400/500)
+   come from one file per family rather than six static ones. Vite fingerprints and inlines these
+   through the normal asset pipeline, so they are served same-origin with the hashed-asset cache
+   headers already configured for /assets. The --font-sans / --font-mono tokens below are unchanged;
+   nothing downstream needs to know where the faces came from. */
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
 :root {
   /* Colour */
   --canvas: #08090a;
@@ -45,8 +62,13 @@
   --warning-tint: rgba(255, 180, 60, 0.12);
 
   /* Type */
-  --font-sans: Inter, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", monospace;
+  /* "Inter Variable" FIRST, and it is not optional: @fontsource-variable/inter declares its
+     @font-face under that exact family name, not "Inter". Naming only "Inter" here silently fell
+     through to system-ui once the Google Fonts <link> was removed (issue #189) -- the page still
+     looked plausible, which is exactly why it nearly shipped. "Inter" is kept after it so a machine
+     with the font installed locally still uses it. */
+  --font-sans: "Inter Variable", Inter, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", monospace;
 
   /* Shape and rhythm — 4px base unit, 8/12/16/24/48 ladder */
   --space-1: 8px;
