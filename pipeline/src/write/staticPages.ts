@@ -33,11 +33,20 @@
  */
 
 import type { ContentBundle, DomainNotes } from "../types.js";
+import { LEGAL_PAGE_PATHS, renderLegalPages } from "./legalPages.js";
+import type { LegalConfig } from "./legalConfig.js";
 
-/** Absolute origin for canonicals, sitemap entries and JSON-LD ids. Hardcoded for the same reason
- *  `app/index.html`'s `og:image` is: these URLs are only ever consumed by a crawler fetching the
- *  public deployment, and a LAN/localhost visitor never triggers one. */
-const SITE = "https://snowpro.gauravbarwalia.com";
+/** Absolute origin for canonicals, sitemap entries and JSON-LD ids.
+ *
+ *  Read from SNOWPRO_SITE_ORIGIN so a deployment on another domain produces correct canonicals
+ *  rather than pointing search engines at this one. The fallback is this deployment's own origin,
+ *  kept so nothing changes for an instance that doesn't set it -- these URLs are only ever consumed
+ *  by a crawler fetching a public deployment, and a LAN/localhost visitor never triggers one.
+ *
+ *  It is deliberately the SAME variable legalConfig.ts requires, so the sitemap, the guide pages'
+ *  canonicals and the legal pages' canonicals cannot disagree about what site this is. Read once at
+ *  import: this value is fixed for the life of a container. */
+const SITE = (process.env.SNOWPRO_SITE_ORIGIN?.trim().replace(/\/+$/, "") || "https://snowpro.gauravbarwalia.com");
 
 /** The scaled score required to pass, out of 1000.
  *
@@ -46,6 +55,11 @@ const SITE = "https://snowpro.gauravbarwalia.com";
  *  app, so it is named rather than inlined. Promoting it into the content bundle so all three read
  *  one source is worth doing separately. */
 const PASS_LINE = 750;
+
+/** Author credited on generated pages. A stopgap default: it belongs in deployment config next to
+ *  SITE, and both are tracked for promotion (see the note on SITE above). The legal pages already
+ *  pass their configured operator rather than relying on this. */
+const DEFAULT_AUTHOR = "Gaurav Barwalia";
 
 export interface StaticFile {
   /** Path relative to the pipeline output directory, e.g. "guide/index.html". */
@@ -65,7 +79,7 @@ const ESCAPES: Record<string, string> = {
  *  domain titles contain "&" today ("Data Loading, Unloading & Connectivity"), which would produce
  *  invalid markup unescaped. Deliberately NOT applied to `DomainNotes.html`, which is already
  *  rendered HTML from the markdown pipeline. */
-function esc(value: string): string {
+export function esc(value: string): string {
   return value.replace(/[&<>"']/g, (c) => ESCAPES[c] ?? c);
 }
 
@@ -85,13 +99,22 @@ function domainPath(number: number, title: string): string {
 
 /** Shared page chrome. `bodyClass` is unused today but keeps the signature honest if a page ever
  *  needs a variant — deliberately not adding a theming system these pages don't need. */
-function layout(options: {
+export function layout(options: {
   title: string;
   description: string;
   canonicalPath: string;
   jsonLd: string;
   body: string;
+  /** Overrides the origin used for canonical/og:url. The legal pages pass their configured one so
+   *  a self-hosted deployment's policy canonicalises to its OWN domain rather than to this one --
+   *  a canonical is a claim about where the document lives, and getting it wrong points search
+   *  engines and readers at somebody else's site. Guide pages keep the module default. */
+  origin?: string;
+  /** Overrides the author meta, for the same reason. Defaults to this deployment's author. */
+  author?: string;
 }): string {
+  const origin = options.origin ?? SITE;
+  const author = options.author ?? DEFAULT_AUTHOR;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -99,14 +122,14 @@ function layout(options: {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${esc(options.title)}</title>
 <meta name="description" content="${esc(options.description)}">
-<link rel="canonical" href="${SITE}/${options.canonicalPath}">
+<link rel="canonical" href="${origin}/${options.canonicalPath}">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta property="og:type" content="article">
 <meta property="og:title" content="${esc(options.title)}">
 <meta property="og:description" content="${esc(options.description)}">
-<meta property="og:url" content="${SITE}/${options.canonicalPath}">
+<meta property="og:url" content="${origin}/${options.canonicalPath}">
 <meta property="og:site_name" content="SnowPro Core Prep">
-<meta name="author" content="Gaurav Barwalia">
+<meta name="author" content="${esc(author)}">
 <style>
 :root { color-scheme: light dark; --fg: #16181a; --muted: #55606a; --bg: #ffffff; --line: #e3e7ea; --accent: #0a7a80; --raised: #f6f8f9; }
 @media (prefers-color-scheme: dark) { :root { --fg: #e8ecee; --muted: #9aa5ad; --bg: #0e0f10; --line: #24272a; --accent: #2bd4d9; --raised: #161718; } }
@@ -146,7 +169,7 @@ ${jsonLdSafe(options.jsonLd)}
 ${options.body}
 <footer>
 <p><strong>SnowPro Core Prep</strong> — a free study app for the Snowflake SnowPro Core (COF-C03) exam.
-<a href="${SITE}/">Try the demo — no signup</a></p>
+<a href="${origin}/">Try the demo — no signup</a></p>
 <p>An independent, unofficial project — not affiliated with, endorsed by, or sponsored by Snowflake Inc.
 All notes are original, independently authored, and verified against Snowflake&#39;s publicly available exam guide and documentation.</p>
 </footer>
@@ -389,7 +412,7 @@ explorable without an account.</p>
  *  Deliberately lists only pages a crawler can actually read. Every SPA route behind the login is
  *  excluded — listing URLs that return a shell requiring a session would be asking a crawler to
  *  index nothing. */
-function renderSitemap(bundle: ContentBundle): StaticFile {
+function renderSitemap(bundle: ContentBundle, legal: LegalConfig | null): StaticFile {
   const today = new Date().toISOString().slice(0, 10);
   const paths = [
     { loc: `${SITE}/`, priority: "1.0" },
@@ -397,6 +420,9 @@ function renderSitemap(bundle: ContentBundle): StaticFile {
     ...[...bundle.domains]
       .sort((a, b) => a.number - b.number)
       .map((d) => ({ loc: `${SITE}/${domainPath(d.number, d.title)}/`, priority: "0.8" })),
+    // Listed only when they were actually generated -- an unconfigured deployment has no legal
+    // pages (see legalConfig.ts), and a sitemap advertising URLs that 404 is worse than a short one.
+    ...(legal ? LEGAL_PAGE_PATHS.map((path) => ({ loc: `${SITE}/${path}/`, priority: "0.3" })) : []),
   ];
   const urls = paths
     .map((p) => `  <url>\n    <loc>${p.loc}</loc>\n    <lastmod>${today}</lastmod>\n    <priority>${p.priority}</priority>\n  </url>`)
@@ -474,12 +500,17 @@ The practice and mock questions themselves are intentionally not published as cr
 }
 
 /** Every generated static file, ready for the atomic writer. */
-export function renderStaticPages(bundle: ContentBundle, notesByDomain: Map<string, DomainNotes>): StaticFile[] {
+export function renderStaticPages(
+  bundle: ContentBundle,
+  notesByDomain: Map<string, DomainNotes>,
+  legal: LegalConfig | null = null,
+): StaticFile[] {
   const files: StaticFile[] = [renderGuideIndex(bundle, notesByDomain)];
   for (const domain of [...bundle.domains].sort((a, b) => a.number - b.number)) {
     files.push(renderDomainPage(bundle, domain, notesByDomain.get(domain.id)));
   }
-  files.push(renderSitemap(bundle));
+  files.push(renderSitemap(bundle, legal));
   files.push(renderLlmsTxt(bundle));
+  files.push(...renderLegalPages(legal));
   return files;
 }
