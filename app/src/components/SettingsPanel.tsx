@@ -421,10 +421,20 @@ export function SettingsPanel() {
     // unlike CommandPalette (triggerable from anywhere via ⌘K, so no single "near the trigger"
     // position makes sense for it), Settings has exactly one fixed, always-visible trigger, so
     // anchoring near it keeps the spatial connection between click and result.
-    <div onClick={closeSettings} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "flex-end", justifyContent: "flex-start", padding: 16, zIndex: 60 }}>
+    <div className="settings-scrim" onClick={closeSettings} style={{ position: "fixed", inset: 0, background: "var(--scrim)", display: "flex", alignItems: "flex-end", justifyContent: "flex-start", padding: 16, zIndex: 60 }}>
+      {/* Issue #197: width, max-height and overflow live in tokens.css (.settings-panel) because
+          both need a breakpoint, which an inline style cannot express.
+
+          The max-height is the one that was an actual bug rather than a cosmetic one. The wrapper
+          is `align-items: flex-end`, so a card taller than the viewport is anchored to the BOTTOM
+          and grows UPWARD past y=0 -- and with nothing scrollable, the top is not merely ugly, it
+          is unreachable. On mobile that silently ate the whole Account section: heading, name and
+          email. It bites at any width once the content is tall enough; a phone just gets there
+          first. */}
       <div
+        className="settings-panel"
         onClick={(e) => e.stopPropagation()}
-        style={{ width: 320, background: "var(--raised)", border: "1px solid var(--hairline)", borderRadius: 12, padding: 20, boxShadow: "var(--overlay-shadow)" }}
+        style={{ background: "var(--raised)", border: "1px solid var(--hairline)", borderRadius: 12, padding: 20, boxShadow: "var(--overlay-shadow)" }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
           <span style={{ fontSize: 15, fontWeight: 500, color: "var(--text-heading)" }}>Settings</span>

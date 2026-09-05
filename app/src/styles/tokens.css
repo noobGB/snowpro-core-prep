@@ -361,6 +361,30 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   overflow-x: clip;
 }
 
+/* Issue #197 — the Settings overlay.
+
+   `max-height` + `overflow-y` are the fix for a real bug, not polish: the scrim is
+   `align-items: flex-end`, so a panel taller than the viewport anchors to the bottom and grows
+   upward past the top of the screen. With nothing scrollable that content is unreachable, and on a
+   phone it swallowed the entire Account section — heading, name, email — with no scrollbar to hint
+   that anything was missing.
+
+   Full width below the desktop breakpoint (the same 900px the rest of this file uses): a fixed
+   320px card on a 390px screen leaves a ~38px strip of the dimmed app down the right edge, which
+   reads as a broken layout rather than an intentional scrim. Above the breakpoint the panel keeps
+   its 320px and its bottom-left anchoring, which is deliberate — see SettingsPanel.tsx on why it
+   opens next to its trigger rather than in a corner. */
+.settings-panel {
+  width: 320px;
+  max-height: calc(100vh - 32px); /* 32px = the scrim's own 16px padding, top and bottom */
+  overflow-y: auto;
+}
+@media (max-width: 899px) {
+  .settings-panel {
+    width: 100%;
+  }
+}
+
 .home-grid {
   display: grid;
   /* Mobile: screenshot sits AFTER the form, ahead of the feature grid -- a compact hero, then the
