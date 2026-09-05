@@ -84,9 +84,9 @@ function fixtureBundle(): ContentBundle {
     ],
     resources: [],
     setup: [
-      { id: "s-1", kind: "step", group: "Install", title: "Install CLI", summary: "", commands: [], sourceAnchor: "install-cli" },
-      { id: "s-2", kind: "step", group: "Install", title: "Configure auth", summary: "", commands: [], sourceAnchor: "configure-auth" },
-      { id: "s-3", kind: "issue", group: "Known Issues", title: "Known blocker", summary: "", commands: [], sourceAnchor: "known-blocker" },
+      { id: "s-1", kind: "step", group: "Install", title: "Install CLI", summary: "", commands: [], sourceAnchor: "install-cli", bodyHtml: "" },
+      { id: "s-2", kind: "step", group: "Install", title: "Configure auth", summary: "", commands: [], sourceAnchor: "configure-auth", bodyHtml: "" },
+      { id: "s-3", kind: "issue", group: "Known Issues", title: "Known blocker", summary: "", commands: [], sourceAnchor: "known-blocker", bodyHtml: "" },
     ],
   };
 }

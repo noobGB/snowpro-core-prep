@@ -6,14 +6,13 @@
  * commands. Checkable (progress.setup.checked), commands copyable.
  *
  * Issue #177 removed the per-card "Full details →" link, which deep-linked to the source markdown
- * on GitHub. This site does not present itself as having a public upstream, and an in-app link to
- * a repository is the most explicit possible contradiction of that.
+ * on GitHub: this site does not present itself as having a public upstream, and an in-app link to a
+ * repository is the most explicit possible contradiction of that. That left the narrative
+ * unreachable, since the bundle carried only `summary`, `commands` and `sourceAnchor`.
  *
- * The narrative those links pointed at is genuinely useful and is currently unreachable from the
- * app: the parser tracks each entry's body line range but the bundle only carries `summary`,
- * `commands` and `sourceAnchor`, so there is nothing to render. Surfacing it in-app means emitting
- * the rendered body into ContentBundle — a shape change across three packages, tracked separately
- * rather than smuggled into an identity change.
+ * Issue #179 put it back by rendering it rather than linking to it — `SetupItem.bodyHtml`, produced
+ * by setupLog.ts from the line range the parser already tracked. Collapsed behind <details> so the
+ * page stays scannable; see the render site below.
  */
 
 import { useState } from "react";
@@ -62,8 +61,8 @@ export function Setup() {
         </div>
       </div>
       <p style={{ fontSize: 13, color: "var(--text-muted)", margin: "0 0 24px", maxWidth: "50em" }}>
-        Summaries only — each card links to the full walkthrough in{" "}
-        <code style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>15_Hands_On_Snowflake_Setup_Log.md</code>.
+        A real walkthrough of setting up a Snowflake account from scratch, including what went wrong.
+        Each card opens to the full write-up; tick them off as you go.
       </p>
 
       {steps.length > 0 && (
@@ -178,6 +177,32 @@ function StepCard({
               <CopyButton text={cmd} />
             </div>
           ))}
+          {/* Issue #179 restores what #177 removed. That used to be a "Full details →" link into
+              the source markdown on GitHub; the site does not present itself as having a public
+              upstream, so the link went and the narrative became unreachable. It is rendered in
+              place now instead of pointing somewhere.
+
+              Collapsed by default, deliberately: the card's job is the one-line summary and the
+              copyable commands, and a page of twenty entries that each expand to several
+              paragraphs is unscannable. <details> rather than a state toggle -- it is
+              keyboard-operable, findable by the browser's own in-page search when open, and needs
+              no JavaScript.
+
+              dangerouslySetInnerHTML is the same mechanism Notes.tsx uses for domain notes: the
+              HTML is produced by our own pipeline from our own markdown at build time, never from
+              user input. */}
+          {step.bodyHtml && (
+            <details style={{ marginTop: 4 }}>
+              <summary style={{ fontSize: 12, color: "var(--accent)", cursor: "pointer" }}>
+                Full details
+              </summary>
+              <div
+                className="notes-prose"
+                style={{ fontSize: 13, lineHeight: 1.65, color: "var(--text-muted)", marginTop: 8 }}
+                dangerouslySetInnerHTML={{ __html: step.bodyHtml }}
+              />
+            </details>
+          )}
         </div>
       </div>
     </div>

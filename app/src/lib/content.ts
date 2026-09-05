@@ -91,6 +91,9 @@ export interface SetupItem {
   summary: string;
   commands: string[];
   sourceAnchor: string;
+  /** Issue #179: the entry's narrative as HTML, minus the summary (rendered above it already).
+   *  Empty when the entry is only a summary and commands. Mirrors pipeline/src/types.ts. */
+  bodyHtml: string;
 }
 
 export interface ContentBundle {

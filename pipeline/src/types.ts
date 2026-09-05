@@ -105,7 +105,16 @@ export interface SetupItem {
   title: string; // this heading's own text
   summary: string; // the "> **Summary:** ..." blockquote immediately under the heading
   commands: string[]; // language-tagged fenced code blocks in this entry's range
-  sourceAnchor: string; // GitHub-slug of `title`, for a "full details" deep link back to the source file
+  sourceAnchor: string; // GitHub-slug of `title`, kept as a stable per-entry anchor
+  /** The entry's narrative, rendered to HTML (issue #179).
+   *
+   *  Excludes the summary blockquote, which the card already renders above it verbatim -- including
+   *  it would show the same sentence twice, once styled as a summary and once inside the prose.
+   *  Code blocks are KEPT, even though `commands` also lists them: they are the steps in context
+   *  there, and stripping them leaves instructions that say "run the following" with nothing after.
+   *
+   *  Empty string when an entry has no body beyond its summary and commands. */
+  bodyHtml: string;
 }
 
 export interface ContentBundle {
