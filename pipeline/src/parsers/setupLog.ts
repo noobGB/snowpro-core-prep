@@ -36,7 +36,7 @@
 import { visit } from "unist-util-visit";
 import type { Blockquote, Code, Heading, Paragraph, Root } from "mdast";
 import type { SetupItem } from "../types.js";
-import { flattenText, headingText, parseMd } from "../util/markdown.js";
+import { flattenText, headingText, nodesToHtml, parseMd } from "../util/markdown.js";
 
 const SUMMARY_PREFIX_RE = /^Summary:\s*/i;
 
@@ -80,6 +80,11 @@ interface EntryDraft {
   summary: string;
   commands: string[];
   sourceAnchor: string;
+  /** The blockquote consumed as `summary`, so the body render can leave it out -- the card already
+   *  shows that sentence above the disclosure. Identity comparison, not a line number: two
+   *  blockquotes can begin on the same line only if the document is malformed, but node identity is
+   *  exact regardless. */
+  summaryNode: Blockquote | null;
 }
 
 function collectBoundaries(root: Root): Boundary[] {
@@ -127,6 +132,7 @@ export function parseSetupLog(raw: string): SetupItem[] {
         summary: "",
         commands: [],
         sourceAnchor: anchor,
+        summaryNode: null,
       });
       currentH3Index = entries.length - 1;
       return;
@@ -144,6 +150,7 @@ export function parseSetupLog(raw: string): SetupItem[] {
       summary: "",
       commands: [],
       sourceAnchor: anchor,
+      summaryNode: null,
     });
   });
 
@@ -163,8 +170,24 @@ export function parseSetupLog(raw: string): SetupItem[] {
     const firstParagraph = node.children.find((c): c is Paragraph => c.type === "paragraph");
     if (!firstParagraph) return;
     const text = flattenText(firstParagraph);
-    if (SUMMARY_PREFIX_RE.test(text)) entry.summary = text.replace(SUMMARY_PREFIX_RE, "");
+    if (SUMMARY_PREFIX_RE.test(text)) {
+      entry.summary = text.replace(SUMMARY_PREFIX_RE, "");
+      entry.summaryNode = node;
+    }
   });
+
+  // Issue #179: render each entry's narrative. Only TOP-LEVEL nodes are considered -- a nested
+  // child (a paragraph inside a list item, say) also falls within the line range, and collecting it
+  // separately would emit it twice, once on its own and once inside its parent.
+  const bodyHtmlFor = (entry: EntryDraft): string => {
+    const nodes = root.children.filter((node) => {
+      if (!node.position) return false;
+      if (node === entry.summaryNode) return false;
+      const line = node.position.start.line;
+      return line >= entry.bodyStartLine && line <= entry.bodyEndLine;
+    });
+    return nodes.length === 0 ? "" : nodesToHtml(nodes);
+  };
 
   return entries.map((e) => ({
     id: e.id,
@@ -174,5 +197,6 @@ export function parseSetupLog(raw: string): SetupItem[] {
     summary: e.summary,
     commands: e.commands,
     sourceAnchor: e.sourceAnchor,
+    bodyHtml: bodyHtmlFor(e),
   }));
 }

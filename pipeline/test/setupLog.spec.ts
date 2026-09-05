@@ -127,4 +127,42 @@ describe("parseSetupLog", () => {
     const step1 = items.find((i) => i.title === "Step 1 — First step")!;
     expect(step1.sourceAnchor).toBe("step-1--first-step");
   });
+
+  describe("bodyHtml (issue #179)", () => {
+    const step1 = () => items.find((i) => i.title === "Step 1 — First step")!;
+
+    it("renders the entry's narrative as HTML", () => {
+      expect(step1().bodyHtml).toContain("<p>");
+    });
+
+    it("excludes the summary blockquote, which the card already shows above it", () => {
+      // The one duplication that would be visible: the same sentence rendered twice, once styled as
+      // a summary and once inside the prose directly beneath it.
+      const s = step1();
+      expect(s.summary.length).toBeGreaterThan(0);
+      expect(s.bodyHtml).not.toContain(s.summary);
+      expect(s.bodyHtml).not.toContain("Summary:");
+    });
+
+    it("keeps code blocks, so instructions still have their commands in context", () => {
+      // `commands` lists them separately for the copy buttons, but stripping them here would leave
+      // prose that says "run the following" with nothing after it.
+      expect(step1().bodyHtml).toContain("<pre>");
+      expect(step1().bodyHtml).toContain("SELECT 1;");
+    });
+
+    it("does not leak a neighbouring entry's body into this one", () => {
+      const step2 = items.find((i) => i.title === "Step 2 — Second step, has a sub-step")!;
+      expect(step1().bodyHtml).not.toContain("Do the sub-thing");
+      expect(step2.bodyHtml).not.toContain(step1().summary);
+    });
+
+    it("is an empty string, never undefined, when an entry has no narrative", () => {
+      // The app renders this conditionally; `undefined` and `""` behave the same there today, but
+      // only one of them is guaranteed by the type.
+      for (const item of items) {
+        expect(typeof item.bodyHtml).toBe("string");
+      }
+    });
+  });
 });

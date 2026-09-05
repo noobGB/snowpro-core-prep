@@ -91,6 +91,7 @@ describe("validateBundle", () => {
       summary: "",
       commands: [],
       sourceAnchor: "step-1--test",
+      bodyHtml: "",
     });
     const collector = new ErrorCollector();
     validateBundle(bundle, collector);
