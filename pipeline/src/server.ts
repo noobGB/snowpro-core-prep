@@ -1241,6 +1241,12 @@ app.use("/assets", express.static(path.join(DIST_DIR, "assets"), { maxAge: "365d
 app.use(
   express.static(config.outputDir, {
     maxAge: 0,
+    // express.static defaults to dotfiles: "ignore", which 404s any path containing a dot-prefixed
+    // segment -- so /.well-known/security.txt fell through to the SPA catch-all and answered with
+    // the app shell at 200 (issue #182). Every well-known URI is dot-prefixed by definition, so
+    // this has to be allowed for any of them to work. Safe here: this directory holds only
+    // pipeline-generated output, never user uploads or repository files.
+    dotfiles: "allow",
     setHeaders: (res) => res.setHeader("Cache-Control", "no-cache"),
   }),
 );

@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:f
 import path from "node:path";
 import type { ContentBundle, DomainNotes, SearchIndexEntry } from "../types.js";
 import { renderStaticPages } from "./staticPages.js";
+import { resolveLegalConfig } from "./legalConfig.js";
 
 export function writeOutput(
   outputDir: string,
@@ -44,7 +45,18 @@ export function writeOutput(
   // loud warning and a site that still serves. CI's docker-smoke job asserts GET /guide/ returns
   // 200, so a silent skip is caught there rather than in production.
   try {
-    for (const file of renderStaticPages(bundle, notesByDomain)) {
+    // Resolved here rather than threaded in from the caller: this is the only place the generated
+    // files are produced, and reading it here keeps writeOutput()'s signature (already called from
+    // both the CLI and the boot path) unchanged. Returns null on any deployment that hasn't
+    // declared an operator, and renderLegalPages() then emits nothing -- see legalConfig.ts for
+    // why publishing someone else's privacy policy is the failure mode being prevented.
+    const legal = resolveLegalConfig();
+    if (legal) {
+      console.log(`  legal pages: /privacy/ /terms/ /about/ /accessibility/ /security/ (operator: ${legal.operatorName})`);
+    } else {
+      console.log("  legal pages: skipped — set SNOWPRO_LEGAL_OPERATOR and SNOWPRO_LEGAL_CONTACT to publish them");
+    }
+    for (const file of renderStaticPages(bundle, notesByDomain, legal)) {
       const dest = path.join(tempDir, file.relPath);
       mkdirSync(path.dirname(dest), { recursive: true });
       writeFileSync(dest, file.contents, "utf8");
@@ -53,7 +65,7 @@ export function writeOutput(
     console.warn(
       `⚠ Static guide pages were not generated: ${err instanceof Error ? err.message : String(err)}`,
     );
-    console.warn("  The app itself is unaffected; /guide/ will 404 until this is fixed.");
+    console.warn("  The app itself is unaffected; /guide/ and the legal pages will 404 until this is fixed.");
   }
 
   if (existsSync(outputDir)) rmSync(outputDir, { recursive: true, force: true });

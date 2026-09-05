@@ -110,6 +110,13 @@ jobs:
     # also the point: it means CI exercises the code path the public deployment actually runs.
     env:
       SNOWPRO_ENABLE_GUEST: "1"
+      # Legal pages (#182) are generated only when an operator is declared -- see legalConfig.ts for
+      # why no default is possible. Declared here with obvious placeholders so CI exercises the
+      # configured path; the assertions below check the CONTENT, because an unconfigured deployment
+      # answers these URLs with the SPA shell at 200 and would sail through a status-code check.
+      SNOWPRO_LEGAL_OPERATOR: "CI Operator"
+      SNOWPRO_LEGAL_CONTACT: "ci@example.invalid"
+      SNOWPRO_SITE_ORIGIN: "https://ci.example.invalid"
     steps:
       - uses: actions/checkout@v7
       # Fresh checkout has no ./data (gitignored). The final image stage runs as non-root `node`
@@ -255,6 +262,48 @@ jobs:
       # never take the container down on boot -- which means a broken generator would otherwise fail
       # SILENTLY, with the site up and /guide/ quietly 404ing. These steps are what turns that into
       # a red build instead of a discovery weeks later.
+      # Legal pages (#182). CONTENT assertions, deliberately, not status codes: the SPA catch-all
+      # answers any unknown path with the app shell at 200, so a status check would pass on a
+      # deployment where the legal pages were never generated at all -- the exact false-positive
+      # failure mode issue #153 already hit for robots.txt. Getting this wrong in production means
+      # Google's OAuth consent screen accepts a privacy-policy URL with no policy behind it.
+      - name: Smoke-test the generated legal pages
+        run: |
+          for path in privacy terms about accessibility security; do
+            curl --fail -sS "http://localhost:8080/$path/" -o /tmp/legal.html
+            grep -q "CI Operator" /tmp/legal.html               || { echo "::error::/$path/ did not name the configured operator -- it is probably the SPA shell"; exit 1; }
+            grep -q "ci@example.invalid" /tmp/legal.html               || { echo "::error::/$path/ carries no contact address"; exit 1; }
+            grep -q 'rel="canonical" href="https://ci.example.invalid/'"$path"'/"' /tmp/legal.html               || { echo "::error::/$path/ does not canonicalise to the configured origin"; exit 1; }
+          done
+
+          # The complete storage inventory must be disclosed by name, and the anchor a "Cookie
+          # Policy" link would point at must exist.
+          curl --fail -sS http://localhost:8080/privacy/ -o /tmp/privacy.html
+          for token in snowprep_session snowprep_oauth_state snowprep.progress 'id="cookies"'; do
+            grep -q "$token" /tmp/privacy.html || { echo "::error::/privacy/ does not disclose $token"; exit 1; }
+          done
+      - name: Smoke-test /.well-known/security.txt (RFC 9116)
+        run: |
+          # This one exists because express.static defaults to dotfiles:"ignore", which silently
+          # 404s every well-known URI and hands back the SPA shell at 200 instead. Content type is
+          # the tell.
+          ct=$(curl --fail -sS -o /tmp/sec.txt -w '%{content_type}' http://localhost:8080/.well-known/security.txt)
+          echo "content-type: $ct"
+          case "$ct" in
+            text/plain*) ;;
+            *) echo "::error::security.txt served as '$ct' -- it fell through to the SPA catch-all"; exit 1;;
+          esac
+          grep -q '^Contact: mailto:ci@example.invalid$' /tmp/sec.txt || { echo "::error::security.txt has no Contact"; exit 1; }
+          grep -q '^Expires: ' /tmp/sec.txt || { echo "::error::security.txt has no Expires (mandatory in RFC 9116)"; exit 1; }
+          # The Policy URL must resolve to a real page, not the SPA shell.
+          policy=$(grep '^Policy: ' /tmp/sec.txt | cut -d' ' -f2 | sed 's|https://ci.example.invalid||')
+          curl --fail -sS "http://localhost:8080${policy}" | grep -q "CI Operator"             || { echo "::error::security.txt Policy URL does not resolve to a real security page"; exit 1; }
+      - name: Smoke-test that the sitemap lists the legal pages
+        run: |
+          curl --fail -sS http://localhost:8080/sitemap.xml -o /tmp/sitemap.xml
+          for path in privacy terms about accessibility security; do
+            grep -q "https://ci.example.invalid/$path/" /tmp/sitemap.xml               || { echo "::error::sitemap.xml omits /$path/"; exit 1; }
+          done
       - name: Smoke-test the generated /guide/ pages
         run: |
           ct=$(curl -sS -o /tmp/guide.html -w '%{content_type}' http://localhost:8080/guide/)

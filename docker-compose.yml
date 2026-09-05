@@ -55,4 +55,13 @@ services:
       # Ship a new deployment in log mode for one release and read the logs before switching -- this
       # is the only thing in the app that removes user rows on its own.
       SNOWPRO_GUEST_REAP: ${SNOWPRO_GUEST_REAP:-}
+      # Legal pages (#182). Unset means no /privacy/, /terms/, /about/, /accessibility/ or
+      # /security/ is generated -- correct for a private instance, and the only safe default for a
+      # public image, since a policy must name whoever is actually answerable for THIS deployment.
+      SNOWPRO_LEGAL_OPERATOR: ${SNOWPRO_LEGAL_OPERATOR:-}
+      SNOWPRO_LEGAL_CONTACT: ${SNOWPRO_LEGAL_CONTACT:-}
+      SNOWPRO_SITE_ORIGIN: ${SNOWPRO_SITE_ORIGIN:-}
+      SNOWPRO_LEGAL_JURISDICTION: ${SNOWPRO_LEGAL_JURISDICTION:-}
+      SNOWPRO_LEGAL_OPERATOR_FORM: ${SNOWPRO_LEGAL_OPERATOR_FORM:-}
+      SNOWPRO_LEGAL_PRODUCT_NAME: ${SNOWPRO_LEGAL_PRODUCT_NAME:-}
     restart: unless-stopped
