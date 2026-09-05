@@ -559,7 +559,6 @@ export function SettingsPanel() {
         <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: 16, marginBottom: 18 }}>
           <label style={{ display: "block", fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>
             Backup
-            {getStorageBackend() === "localStorage" && " — this browser is the only copy"}
           </label>
           <div style={{ display: "flex", gap: 8 }}>
             <button
@@ -586,6 +585,16 @@ export function SettingsPanel() {
             </label>
           </div>
           {importMessage && <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 8 }}>{importMessage}</div>}
+          {/* Issue #195: this sentence used to sit orphaned at the very bottom of the panel, below
+              the danger zone and above the legal links, where it read as unrelated boilerplate. It
+              is the answer to "what does Backup even do for me", so it belongs here. It also
+              replaces the old "— this browser is the only copy" suffix on the label above, which
+              said a narrower version of the same thing twice. */}
+          <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.55, marginTop: 10 }}>
+            {getStorageBackend() === "http"
+              ? "Progress is saved to this server — it survives clearing browser data."
+              : "Progress is saved in this browser only — clearing site data will erase it."}
+          </div>
         </div>
 
         <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: 16, marginBottom: 18 }}>
@@ -700,13 +709,15 @@ export function SettingsPanel() {
         )}
 
         {/* Issue #180 — the right of erasure, exercised by the person rather than requested from
-            the operator. Placed after sign-out because it is strictly more destructive and this is
-            the end of the menu; kept behind a disclosure so the resting state of Settings isn't a
-            red button. A guest sees nothing here: signing out already destroys a guest account
-            irreversibly (see the block above), and offering two differently-worded one-way doors
-            in the same panel is a way to get the wrong one clicked. */}
+            the operator. Directly after sign-out and, since issue #195, sharing its group rather
+            than sitting behind its own divider: both are things you do to your own account, and
+            two dividers made them read as unrelated sections. Kept behind a disclosure so the
+            resting state of Settings isn't a red button. A guest sees nothing here: signing out
+            already destroys a guest account irreversibly (see the block above), and offering two
+            differently-worded one-way doors in the same panel is a way to get the wrong one
+            clicked. */}
         {me && !isGuest && (
-          <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: 14, marginBottom: 18 }}>
+          <div style={{ marginTop: 10, marginBottom: 18 }}>
             {!deleteOpen ? (
               <button
                 type="button"
@@ -809,15 +820,39 @@ export function SettingsPanel() {
           </div>
         )}
 
-        <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: 14 }}>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6, marginBottom: 12 }}>
-            {getStorageBackend() === "http"
-              ? "Progress is saved to this server — it survives clearing browser data."
-              : "Progress is saved in this browser only — clearing site data will erase it."}
+        {/* Issue #195. "Contact support" used to sit inside the link row below, indistinguishable
+            from Privacy and Terms — but it is the one thing here a person DOES, while those are
+            documents they read. Given its own control, at the weight of the other actions in this
+            panel, so the row beneath can be what it actually is: quiet reference text. */}
+        {me?.supportAvailable === true && (
+          <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: 14, marginBottom: 18 }}>
+            <a
+              href="/support"
+              style={{
+                display: "block",
+                width: "100%",
+                boxSizing: "border-box",
+                textAlign: "center",
+                background: "transparent",
+                border: "1px solid var(--hairline)",
+                borderRadius: 6,
+                color: "var(--text-muted)",
+                fontSize: 13,
+                padding: "9px 0",
+                minHeight: 36,
+                textDecoration: "none",
+              }}
+            >
+              Contact support
+            </a>
           </div>
-          {/* Issue #184. Settings is where someone goes with a question about their account or
-              their data, so it is the right place inside the app to reach the policies from. */}
-          <SiteFooter legalPages={me?.legalPages === true} supportAvailable={me?.supportAvailable === true} variant="compact" />
+        )}
+
+        {/* Issue #184/#195. Reference documents only — support moved out, above. `supportAvailable`
+            is passed false deliberately rather than omitted: SiteFooter would otherwise render the
+            support link a second time. */}
+        <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: 14 }}>
+          <SiteFooter legalPages={me?.legalPages === true} supportAvailable={false} variant="compact" />
         </div>
       </div>
     </div>
