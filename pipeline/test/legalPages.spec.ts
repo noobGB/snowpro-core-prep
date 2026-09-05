@@ -163,6 +163,22 @@ describe("renderLegalPages", () => {
     expect(terms).toContain("Snowflake Inc.");
   });
 
+  it("states a minimum age of 18 in both places, consistently", () => {
+    // Issue #187. 16 is GDPR Art. 8's default and the number someone will reflexively "fix" this
+    // back to. It is wrong here twice over: Art. 8 governs CONSENT-based processing and the stated
+    // basis is contract, and India's DPDP Act — the law the terms say govern this agreement —
+    // defines a child as under 18. Asserted so the two pages cannot drift apart from each other
+    // either, which is how a document starts contradicting itself.
+    const files = renderLegalPages(cfg());
+    const terms = byPath(files, "terms/index.html");
+    const privacy = byPath(files, "privacy/index.html");
+    expect(terms).toContain("at least 18");
+    expect(privacy).toContain("under 18");
+    for (const [name, html] of [["terms", terms], ["privacy", privacy]] as const) {
+      expect(html, `${name} still references the GDPR Art. 8 age`).not.toMatch(/at least 16|under 16/);
+    }
+  });
+
   it("does not claim full accessibility conformance", () => {
     // An untested blanket claim is the one thing an accessibility statement must not do.
     const a11y = byPath(renderLegalPages(cfg()), "accessibility/index.html");
