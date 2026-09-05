@@ -130,23 +130,33 @@ function removeUser(db, email, actuallyDelete) {
   }
   const sessionCount = db.prepare("SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?").get(user.id).n;
   const hasProgress = db.prepare("SELECT 1 FROM progress WHERE user_id = ?").get(user.id) !== undefined;
+  const resetCount = db.prepare("SELECT COUNT(*) AS n FROM password_resets WHERE user_id = ?").get(user.id).n;
 
   if (!actuallyDelete) {
     console.log(
       `DRY RUN -- would delete account #${user.id} (${user.email}, "${user.name}"), ` +
-        `${sessionCount} session(s), and ${hasProgress ? "their progress row" : "no progress row (none exists)"}.`,
+        `${sessionCount} session(s), ${hasProgress ? "their progress row" : "no progress row (none exists)"}, ` +
+        `and ${resetCount} pending password-reset token(s).`,
     );
     console.log("Re-run with --yes to actually delete.");
     return;
   }
 
+  // Issue #175: password_resets must be cleared here too. better-sqlite3 enables foreign_keys by
+  // default -- this script never sets the pragma, which is exactly why the gap was easy to miss --
+  // and password_resets.user_id references users(id) with no ON DELETE CASCADE. Omitting it makes
+  // this throw "FOREIGN KEY constraint failed" for anyone holding an unconsumed reset token.
   const run = db.transaction((userId) => {
     db.prepare("DELETE FROM sessions WHERE user_id = ?").run(userId);
     db.prepare("DELETE FROM progress WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM password_resets WHERE user_id = ?").run(userId);
     db.prepare("DELETE FROM users WHERE id = ?").run(userId);
   });
   run(user.id);
-  console.log(`Deleted account #${user.id} (${user.email}), its sessions, and its progress row.`);
+  console.log(
+    `Deleted account #${user.id} (${user.email}), its sessions, its progress row, ` +
+      `and any pending password-reset tokens.`,
+  );
 }
 
 function resetAll(db, actuallyDelete, confirmed) {
@@ -157,18 +167,24 @@ function resetAll(db, actuallyDelete, confirmed) {
   }
 
   if (!actuallyDelete || !confirmed) {
-    console.log(`DRY RUN -- would delete ALL ${userCount} user(s), every session, and every progress row.`);
+    console.log(
+      `DRY RUN -- would delete ALL ${userCount} user(s), every session, every progress row, ` +
+        `and every pending password-reset token.`,
+    );
     console.log("This has no undo and this script takes no backup. Re-run with --yes --i-am-sure to proceed.");
     return;
   }
 
+  // Issue #175: see removeUser() above. This one is worse -- it deletes every user, so a single
+  // outstanding reset token anywhere in the database was enough to make the whole command throw.
   const run = db.transaction(() => {
     db.prepare("DELETE FROM sessions").run();
     db.prepare("DELETE FROM progress").run();
+    db.prepare("DELETE FROM password_resets").run();
     db.prepare("DELETE FROM users").run();
   });
   run();
-  console.log(`Deleted all ${userCount} user(s) and their sessions/progress.`);
+  console.log(`Deleted all ${userCount} user(s) and their sessions, progress, and reset tokens.`);
 }
 
 function usage() {

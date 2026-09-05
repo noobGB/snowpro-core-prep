@@ -720,16 +720,26 @@ export function upgradeGuest(
 }
 
 /** Admin-removing an account (issue #62) — same transaction shape as `admin-users.mjs`'s own
- *  `removeUser()` (sessions, then progress, then the user row), but as a reusable function for the
- *  new `DELETE /api/admin/users/:id` web route. Deliberately NOT shared code with the CLI script:
- *  that script's own header comment explains it's meant to work via direct DB access independent
- *  of the running app, and importing from here would break that independence. The route itself is
- *  responsible for the self-delete and last-admin guards -- this function unconditionally deletes
- *  whatever id it's given. */
+ *  `removeUser()`, but as a reusable function for the `DELETE /api/admin/users/:id` web route.
+ *  Deliberately NOT shared code with the CLI script: that script's own header comment explains
+ *  it's meant to work via direct DB access independent of the running app, and importing from here
+ *  would break that independence. The route itself is responsible for the self-delete and
+ *  last-admin guards -- this function unconditionally deletes whatever id it's given.
+ *
+ *  EVERY child table must be cleared here, in this transaction. `foreign_keys = ON` is set at
+ *  connection time and none of the `REFERENCES users(id)` columns declare `ON DELETE CASCADE`, so
+ *  a child row this function forgets is not a leaked orphan -- it is a `FOREIGN KEY constraint
+ *  failed` that rolls the whole delete back. That was issue #175: `password_resets` was missing,
+ *  so deleting anyone holding an unconsumed reset token failed with a 500. It presented
+ *  intermittently, because only an outstanding token makes it reachable.
+ *
+ *  If you add a table referencing `users(id)`, add its DELETE here and to the CLI script's
+ *  `removeUser()`/`resetAll()`, or you are shipping the same bug a third time. */
 export function deleteUser(db: Db, userId: number): void {
   const run = db.transaction((uid: number) => {
     db.prepare("DELETE FROM sessions WHERE user_id = ?").run(uid);
     db.prepare("DELETE FROM progress WHERE user_id = ?").run(uid);
+    db.prepare("DELETE FROM password_resets WHERE user_id = ?").run(uid);
     db.prepare("DELETE FROM users WHERE id = ?").run(uid);
   });
   run(userId);
