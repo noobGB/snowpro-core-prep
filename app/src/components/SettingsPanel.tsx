@@ -817,7 +817,7 @@ export function SettingsPanel() {
           </div>
           {/* Issue #184. Settings is where someone goes with a question about their account or
               their data, so it is the right place inside the app to reach the policies from. */}
-          <SiteFooter legalPages={me?.legalPages === true} variant="compact" />
+          <SiteFooter legalPages={me?.legalPages === true} supportAvailable={me?.supportAvailable === true} variant="compact" />
         </div>
       </div>
     </div>

@@ -44,6 +44,8 @@ interface HomePageProps {
   /** Issue #184: whether this deployment publishes the legal pages. Same journey as
    *  `guestAvailable` — one /api/me call, passed down rather than refetched. */
   legalPages?: boolean;
+  /** Issue #193: whether this deployment can deliver a support message. */
+  supportAvailable?: boolean;
 }
 
 interface Feature {
@@ -98,7 +100,7 @@ const featureCardStyle: React.CSSProperties = {
   padding: 20,
 };
 
-export function HomePage({ guestAvailable = false, legalPages = false }: HomePageProps) {
+export function HomePage({ guestAvailable = false, legalPages = false, supportAvailable = false }: HomePageProps) {
   return (
     <div className="home-page" style={{ minHeight: "100vh", background: "var(--canvas)" }}>
       {/* Standard skip-nav pattern (WCAG 2.4.1) -- invisible until focused. A sighted user never
@@ -168,7 +170,7 @@ export function HomePage({ guestAvailable = false, legalPages = false }: HomePag
               placement drops it into column 1 and it reads as part of the feature grid rather than
               as the page's footer. */}
           <div className="home-footer">
-            <SiteFooter legalPages={legalPages} />
+            <SiteFooter legalPages={legalPages} supportAvailable={supportAvailable} />
           </div>
         </div>
       </div>

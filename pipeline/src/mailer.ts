@@ -54,6 +54,10 @@ interface EmailMessage {
   subject: string;
   text: string;
   html: string;
+  /** Issue #193: where a reply should go, when that differs from the sender. Only the support
+   *  form uses it -- hitting reply on a support message must reach the person who wrote it, not
+   *  the support mailbox replying to itself. */
+  replyTo?: { email: string; name?: string };
 }
 
 /** The one place that actually calls Brevo. `config` is always pre-validated by the caller (each
@@ -73,6 +77,7 @@ async function sendViaBrevo(config: EmailConfig, message: EmailMessage): Promise
       subject: message.subject,
       textContent: message.text,
       htmlContent: message.html,
+      ...(message.replyTo ? { replyTo: message.replyTo } : {}),
     }),
   });
   if (!res.ok) {
@@ -172,4 +177,83 @@ export async function sendAdminCreatedAccountEmail(
       `<p>Email: <strong>${to}</strong><br>Temporary password: <strong>${tempPassword}</strong></p>` +
       `<p>You'll be asked to set your own password right away.</p>`,
   });
+}
+
+/** Where support messages are delivered (issue #193).
+ *
+ *  `SNOWPRO_SUPPORT_EMAIL`, falling back to `SNOWPRO_LEGAL_CONTACT` — which is already the address
+ *  published on /privacy/, /about/, /security/ and in security.txt, so the common case needs no new
+ *  configuration and cannot drift from the address users are told to write to. The separate
+ *  variable exists for the deployment that wants support routed somewhere other than its legal
+ *  contact.
+ *
+ *  `undefined` when neither is set, and `POST /api/support` then 404s rather than advertising a
+ *  feature it cannot deliver — the same rule the legal pages follow. */
+export function supportRecipient(): string | undefined {
+  const explicit = process.env.SNOWPRO_SUPPORT_EMAIL?.trim();
+  if (explicit) return explicit;
+  const legal = process.env.SNOWPRO_LEGAL_CONTACT?.trim();
+  return legal ? legal : undefined;
+}
+
+/** Delivers a support message to the operator (issue #193).
+ *
+ *  THE RECIPIENT IS NEVER TAKEN FROM THE REQUEST. It comes from `supportRecipient()` above, and
+ *  that is the single property keeping this endpoint from being an open spam relay: a caller can
+ *  choose what the message says, never who receives it. The sender's own address rides in
+ *  `replyTo` instead, so replying reaches them without ever letting them address mail through this
+ *  server.
+ *
+ *  `fromEmail`/`fromName` are untrusted user input. They go into the body and the Reply-To only --
+ *  never into the subject, and never into a header this function constructs by concatenation. */
+export async function sendSupportMessage(args: {
+  to: string;
+  fromEmail: string;
+  fromName: string;
+  message: string;
+  context: string[];
+}): Promise<void> {
+  const config = readConfig();
+  if (!config) {
+    throw new Error("Email isn't configured (SNOWPRO_EMAIL_API_KEY/SNOWPRO_EMAIL_FROM) — call isMailerConfigured() first.");
+  }
+
+  const contextLines = args.context.length > 0 ? args.context : ["(none)"];
+  const text = [
+    `From: ${args.fromName} <${args.fromEmail}>`,
+    "",
+    args.message,
+    "",
+    "---",
+    ...contextLines,
+  ].join("\n");
+
+  const html = [
+    `<p><strong>From:</strong> ${escapeHtml(args.fromName)} &lt;${escapeHtml(args.fromEmail)}&gt;</p>`,
+    `<div style="white-space:pre-wrap">${escapeHtml(args.message)}</div>`,
+    "<hr>",
+    `<p style="color:#666;font-size:12px">${contextLines.map(escapeHtml).join("<br>")}</p>`,
+  ].join("\n");
+
+  await sendViaBrevo(config, {
+    to: args.to,
+    // Fixed subject. The user's own words are the body -- putting them in the subject would let a
+    // newline in the input attempt header injection, and would also make threading unpredictable.
+    subject: "SnowPro Core Prep — support request",
+    text,
+    html,
+    replyTo: { email: args.fromEmail, name: args.fromName },
+  });
+}
+
+/** Minimal HTML escaping for user-supplied text going into an email body. The mail templates above
+ *  interpolate only values this codebase produced; this function exists for the support message,
+ *  which is the one place a stranger's text reaches an HTML email. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }

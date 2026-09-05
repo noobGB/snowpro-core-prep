@@ -64,4 +64,7 @@ services:
       SNOWPRO_LEGAL_JURISDICTION: ${SNOWPRO_LEGAL_JURISDICTION:-}
       SNOWPRO_LEGAL_OPERATOR_FORM: ${SNOWPRO_LEGAL_OPERATOR_FORM:-}
       SNOWPRO_LEGAL_PRODUCT_NAME: ${SNOWPRO_LEGAL_PRODUCT_NAME:-}
+      # Support form (#193). Unset falls back to SNOWPRO_LEGAL_CONTACT; with neither, /support
+      # 404s and the app hides the links rather than dropping messages silently.
+      SNOWPRO_SUPPORT_EMAIL: ${SNOWPRO_SUPPORT_EMAIL:-}
     restart: unless-stopped
