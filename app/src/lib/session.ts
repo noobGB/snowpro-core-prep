@@ -42,6 +42,11 @@ export interface SessionUser {
    *  guest banner and the mock-exam gate. Like `role`, this is presentation only — a guest's real
    *  limits are enforced server-side, and the content bundle is public regardless. */
   isGuest: boolean;
+  /** Issue #184: whether this deployment publishes /privacy/, /terms/ and the rest. They exist only
+   *  when an operator identity is configured (see pipeline/src/write/legalConfig.ts), so SiteFooter
+   *  shows the links only when the server says they are really there — a link to an ungenerated
+   *  page would not 404, it would drop the reader into the app via the SPA catch-all. */
+  legalPages: boolean;
 }
 
 let currentUser: SessionUser | null = null;
@@ -66,7 +71,7 @@ export function useSessionUser(): SessionUser | null {
 
 export type MeResult =
   | { authRequired: false }
-  | { authRequired: true; user: SessionUser | null; isPublicHost: boolean; guestAvailable: boolean };
+  | { authRequired: true; user: SessionUser | null; isPublicHost: boolean; guestAvailable: boolean; legalPages: boolean };
 
 /** Called once from App.tsx on boot to decide landing/gate-screen vs. the real app. `isPublicHost`
  *  (issue #121) only matters when `user` is `null` -- it's the server's per-request
@@ -77,7 +82,11 @@ export async function fetchMe(): Promise<MeResult> {
   try {
     const res = await fetch("/api/me");
     if (res.status === 401) {
-      const body = (await res.json().catch(() => ({}))) as { isPublicHost?: boolean; guestAvailable?: boolean };
+      const body = (await res.json().catch(() => ({}))) as {
+        isPublicHost?: boolean;
+        guestAvailable?: boolean;
+        legalPages?: boolean;
+      };
       return {
         authRequired: true,
         user: null,
@@ -86,13 +95,14 @@ export async function fetchMe(): Promise<MeResult> {
         // Google button needed) -- App.tsx already fetches exactly this, so advertising guest mode
         // costs no extra round trip on the cold visitor's critical path.
         guestAvailable: body.guestAvailable === true,
+        legalPages: body.legalPages === true,
       };
     }
     if (!res.ok) return { authRequired: false };
     const user = (await res.json()) as SessionUser;
     currentUser = user;
     emit();
-    return { authRequired: true, user, isPublicHost: false, guestAvailable: false };
+    return { authRequired: true, user, isPublicHost: false, guestAvailable: false, legalPages: user.legalPages === true };
   } catch {
     return { authRequired: false };
   }

@@ -16,6 +16,7 @@ import { isoDate } from "../lib/planDates";
 import { closeSettings, useSettingsIntent, useSettingsOpen } from "../lib/settingsStore";
 import { changePassword, deleteAccount, DELETE_CONFIRM_PHRASE, logout, setInitialPassword, upgradeToAccount, useSessionUser } from "../lib/session";
 import { PasswordInput } from "./PasswordInput";
+import { SiteFooter } from "./SiteFooter";
 
 const RESET_PHRASE = "RESET";
 // Mirrors LoginGate.tsx's own copy of this constant and pipeline/src/passwords.ts's
@@ -809,11 +810,14 @@ export function SettingsPanel() {
         )}
 
         <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: 14 }}>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6, marginBottom: 12 }}>
             {getStorageBackend() === "http"
               ? "Progress is saved to this server — it survives clearing browser data."
               : "Progress is saved in this browser only — clearing site data will erase it."}
           </div>
+          {/* Issue #184. Settings is where someone goes with a question about their account or
+              their data, so it is the right place inside the app to reach the policies from. */}
+          <SiteFooter legalPages={me?.legalPages === true} variant="compact" />
         </div>
       </div>
     </div>

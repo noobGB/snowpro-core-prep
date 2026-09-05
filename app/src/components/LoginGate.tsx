@@ -45,6 +45,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { login, requestPasswordReset, type LoginResult } from "../lib/session";
 import { GuestDemoButton } from "./GuestDemoButton";
 import { PasswordInput } from "./PasswordInput";
+import { SiteFooter } from "./SiteFooter";
 
 // Same pattern pipeline/src/server.ts's POST /api/session enforces server-side (its own EMAIL_RE
 // comment explains the choice) -- kept identical rather than relying on the browser's native
@@ -629,7 +630,7 @@ export function AuthForm({ headingLevel = "h1", guestAvailable = false }: AuthFo
  *  App.tsx's isPublicHost branch), who gets a bare login screen with no pitch content, unchanged
  *  from before issue #123's redesign. A public-host visitor gets `AuthForm` mounted directly
  *  inside `HomePage.tsx`'s split-screen layout instead of this wrapper. */
-export function LoginGate() {
+export function LoginGate({ legalPages = false }: { legalPages?: boolean }) {
   return (
     <div
       style={{
@@ -640,9 +641,14 @@ export function LoginGate() {
         justifyContent: "center",
         background: "var(--canvas)",
         padding: 16,
+        flexDirection: "column",
+        gap: 28,
       }}
     >
       <AuthForm />
+      {/* The other signed-out surface. A LAN instance usually has legalPages false, in which case
+          this is the disclaimer alone -- which is the part that is true everywhere. */}
+      <SiteFooter legalPages={legalPages} />
     </div>
   );
 }

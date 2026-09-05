@@ -330,14 +330,14 @@ input[type="date"]::-webkit-calendar-picker-indicator {
      form (what a daily returning visitor actually needs), with the screenshot and feature cards as
      secondary scroll content below. Independent of DOM order (hero -> form -> screenshot ->
      features in the markup) since each is its own named grid item. */
-  grid-template-areas: "hero" "form" "screenshot" "features";
+  grid-template-areas: "hero" "form" "screenshot" "features" "footer";
   gap: 32px;
 }
 @media (min-width: 900px) {
   .home-grid {
     grid-template-columns: minmax(0, 1fr) 400px;
     grid-template-rows: auto auto 1fr;
-    grid-template-areas: "hero form" "screenshot form" "features form";
+    grid-template-areas: "hero form" "screenshot form" "features form" "footer footer";
     column-gap: 48px;
     row-gap: 32px;
     align-items: start;
@@ -386,6 +386,11 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 .home-features {
   grid-area: features;
+}
+/* Spans both columns at every width -- a page footer that stops at the pitch column's edge reads
+   as belonging to the feature grid, with dead space beside it where the sticky form ends. */
+.home-footer {
+  grid-area: footer;
 }
 /* Fixed 2 columns rather than `repeat(auto-fit, minmax(...))` -- auto-fit reflows to however many
    columns fit the container width, which leaves an orphan card alone on its own row whenever the
