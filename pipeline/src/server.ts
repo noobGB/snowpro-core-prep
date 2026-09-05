@@ -1005,6 +1005,63 @@ app.post("/api/logout", (req, res) => {
   res.status(204).end();
 });
 
+/** The phrase a passwordless account has to type. Deliberately not "yes" or "confirm": it has to be
+ *  long enough that it cannot be produced by a stray keypress or an over-eager click-through. */
+const DELETE_CONFIRM_PHRASE = "delete my account";
+
+/** Issue #180 — self-service erasure (GDPR Art. 17 / DPDP). Previously an account could only be
+ *  removed by an admin or the operator CLI, which makes the right to erasure a favour the operator
+ *  performs rather than something the person controls.
+ *
+ *  RE-AUTHENTICATION IS REQUIRED, and the session cookie alone deliberately isn't enough. This is
+ *  irreversible and there is no soft delete, no backup, and nothing to restore from -- an unlocked
+ *  or borrowed browser must not be able to destroy someone's study history in one click. Which
+ *  proof is demanded depends on what the account actually has:
+ *
+ *   - A password account proves it with the password (`verifyPassword`), same as
+ *     `/api/account/password` already does for a far less destructive change.
+ *   - A Google-only account has `passwordHash === null`, and a guest's hash is the deliberately
+ *     unusable sentinel from `createGuestUser()` -- `verifyPassword()` returns false for it by
+ *     construction, so demanding a password would make those accounts undeletable. They type a
+ *     confirmation phrase instead. That is a deliberate-action check, not authentication, and it is
+ *     described that way in the UI rather than dressed up as something stronger.
+ *
+ *  Reuses `deleteUser()` rather than writing a second delete path. Issue #175 was the same bug
+ *  living in two hand-maintained copies at once; adding a third is how that repeats. */
+app.delete("/api/account", requireSession, express.json({ limit: "10kb" }), (req, res) => {
+  const user = (res.locals as { user: UserRow }).user;
+
+  // Unlike the admin route there is no "ask another admin" to suggest -- if the last admin deletes
+  // themselves, nobody can administer the instance and no UI path exists to fix it.
+  if (user.role === "admin" && countAdmins(db) <= 1) {
+    res.status(400).json({
+      error: "You're the only admin. Promote someone else first, or remove this account with the admin-users CLI.",
+    });
+    return;
+  }
+
+  const body = req.body as { password?: unknown; confirm?: unknown } | null;
+  const usesPassword = !user.isGuest && user.passwordHash !== null;
+
+  if (usesPassword) {
+    const password = typeof body?.password === "string" ? body.password : "";
+    if (!verifyPassword(password, user.passwordHash as string)) {
+      res.status(403).json({ error: "That password is incorrect." });
+      return;
+    }
+  } else {
+    const confirm = typeof body?.confirm === "string" ? body.confirm.trim().toLowerCase() : "";
+    if (confirm !== DELETE_CONFIRM_PHRASE) {
+      res.status(400).json({ error: `Type "${DELETE_CONFIRM_PHRASE}" to confirm.` });
+      return;
+    }
+  }
+
+  deleteUser(db, user.id);
+  res.clearCookie(SESSION_COOKIE, { path: "/" });
+  res.status(204).end();
+});
+
 // --- Issue #62: admin user management (list/add/remove/change-role). Every route below is
 //     `requireSession, requireAdmin` — see requireAdmin's own comment for why the frontend's own
 //     hiding of the Admin page is never trusted as the real gate. ---

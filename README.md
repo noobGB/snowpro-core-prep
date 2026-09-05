@@ -130,7 +130,7 @@ useful for a human doing the same.
   A LAN visitor still gets a bare login form with no pitch content, unchanged.
 - **Fully offline** — progress persists to a local SQLite database (via Docker, one row per
   logged-in person) or `localStorage` (without it); nothing ever leaves your machine or network.
-- **Settings** (gear icon, bottom of the sidebar) — four things live here:
+- **Settings** (gear icon, bottom of the sidebar) — five things live here:
   - **Profile** — your display name (editable any time, doesn't affect your login — email is the
     only real identity key) and **Sign out**, so a shared machine can hand off between people.
   - **Appearance** — Light/Dark theme, applied instantly, remembered per person.
@@ -141,6 +141,12 @@ useful for a human doing the same.
   - **Reset all progress** — type `RESET` into the field to enable the button, then confirm.
     Wipes every attempt, flashcard grade, and checklist back to a blank slate. **There is no
     undo** — Export first if there's any chance you'll want this data back.
+  - **Delete my account** — collapsed by default, below Sign out. Removes the account itself along
+    with everything in it, immediately and permanently. Requires your password again (or a typed
+    confirmation phrase, for an account that signs in with Google) — a live session on its own
+    isn't enough for something irreversible. The only account this refuses to delete is the last
+    remaining admin, since that would leave an instance nobody can administer; promote someone
+    else first, or use the admin CLI.
 
 ![Results & review](.github/screenshot-results.png)
 *Wrong answers explained first, each with a direct link back to the note that covers it.*

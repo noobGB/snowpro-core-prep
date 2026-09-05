@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { getProgress, getStorageBackend, resetProgressConfirmed, updateProgress, useProgress, type ProgressState } from "../lib/progress";
 import { isoDate } from "../lib/planDates";
 import { closeSettings, useSettingsIntent, useSettingsOpen } from "../lib/settingsStore";
-import { changePassword, logout, setInitialPassword, upgradeToAccount, useSessionUser } from "../lib/session";
+import { changePassword, deleteAccount, DELETE_CONFIRM_PHRASE, logout, setInitialPassword, upgradeToAccount, useSessionUser } from "../lib/session";
 import { PasswordInput } from "./PasswordInput";
 
 const RESET_PHRASE = "RESET";
@@ -314,6 +314,18 @@ export function SettingsPanel() {
   const [resetFailed, setResetFailed] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  // Issue #180. Collapsed by default so Settings doesn't rest on a delete control.
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Single source for "the delete button may fire", so the disabled attribute and the styling can
+  // never disagree — see the button's own comment.
+  const deleteArmed =
+    me?.hasPassword === true
+      ? deletePassword.length > 0
+      : deleteConfirm.trim().toLowerCase() === DELETE_CONFIRM_PHRASE;
   const [pwOpen, setPwOpen] = useState(false);
   const [currentPasswordInput, setCurrentPasswordInput] = useState("");
   const [newPasswordInput, setNewPasswordInput] = useState("");
@@ -682,6 +694,116 @@ export function SettingsPanel() {
               >
                 Keep exploring
               </button>
+            )}
+          </div>
+        )}
+
+        {/* Issue #180 — the right of erasure, exercised by the person rather than requested from
+            the operator. Placed after sign-out because it is strictly more destructive and this is
+            the end of the menu; kept behind a disclosure so the resting state of Settings isn't a
+            red button. A guest sees nothing here: signing out already destroys a guest account
+            irreversibly (see the block above), and offering two differently-worded one-way doors
+            in the same panel is a way to get the wrong one clicked. */}
+        {me && !isGuest && (
+          <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: 14, marginBottom: 18 }}>
+            {!deleteOpen ? (
+              <button
+                type="button"
+                onClick={() => setDeleteOpen(true)}
+                style={{ background: "transparent", border: "none", padding: 0, color: "var(--text-dim)", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}
+              >
+                Delete my account
+              </button>
+            ) : (
+              <>
+                <div style={{ fontSize: 12, color: "var(--status-incorrect)", lineHeight: 1.55, marginBottom: 8 }}>
+                  This deletes your account and everything in it — every practice and mock attempt,
+                  your study plan, and your flashcard history. It happens immediately, it cannot be
+                  undone, and there is no backup to restore from. Export your progress first if you
+                  want to keep a copy.
+                </div>
+                {/* A Google-only account has no password hash to verify, so there is nothing to
+                    authenticate against -- it types a phrase instead. Labelled as confirmation
+                    rather than dressed up as a security check, because that is what it is. */}
+                {me.hasPassword ? (
+                  <PasswordInput
+                    id="delete-account-password"
+                    value={deletePassword}
+                    onChange={setDeletePassword}
+                    placeholder="Your current password"
+                    autoComplete="current-password"
+                    style={panelInputStyle}
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={deleteConfirm}
+                    onChange={(e) => setDeleteConfirm(e.target.value)}
+                    placeholder={DELETE_CONFIRM_PHRASE}
+                    aria-label={`Type ${DELETE_CONFIRM_PHRASE} to confirm`}
+                    style={{ width: "100%", boxSizing: "border-box", background: "var(--card)", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-body)", fontSize: 13, padding: "7px 10px", minHeight: 36 }}
+                  />
+                )}
+                {!me.hasPassword && (
+                  <div style={{ fontSize: 11, color: "var(--text-dim)", marginTop: 6 }}>
+                    Type <strong>{DELETE_CONFIRM_PHRASE}</strong> to confirm.
+                  </div>
+                )}
+                {/* `armed` drives BOTH the disabled attribute and the styling. Keeping them in one
+                    expression is the point: the first version styled this red and enabled-looking
+                    while it was actually disabled, which on a destructive control reads as "this
+                    will fire" and produces a confused click rather than a prevented one. The Reset
+                    control above already greys out the same way. */}
+                <button
+                  type="button"
+                  disabled={!deleteArmed || deleting}
+                  onClick={async () => {
+                    setDeleting(true);
+                    setDeleteError(null);
+                    const result = await deleteAccount(
+                      me.hasPassword ? { password: deletePassword } : { confirm: deleteConfirm },
+                    );
+                    if (result.ok) {
+                      // Full reload, not a state update: the account no longer exists, so every
+                      // cached page and in-memory store in this tab now describes something gone.
+                      // Same reasoning login()/logout() document for their own reloads.
+                      window.location.reload();
+                      return;
+                    }
+                    setDeleting(false);
+                    setDeleteError(result.error);
+                  }}
+                  style={{
+                    width: "100%",
+                    marginTop: 8,
+                    background: "transparent",
+                    border: `1px solid ${deleteArmed && !deleting ? "var(--status-incorrect)" : "var(--hairline)"}`,
+                    borderRadius: 6,
+                    color: deleteArmed && !deleting ? "var(--status-incorrect)" : "var(--text-dim)",
+                    fontSize: 13,
+                    padding: "9px 0",
+                    minHeight: 36,
+                    cursor: deleteArmed && !deleting ? "pointer" : "not-allowed",
+                  }}
+                >
+                  {deleting ? "Deleting…" : "Permanently delete my account"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteOpen(false);
+                    setDeletePassword("");
+                    setDeleteConfirm("");
+                    setDeleteError(null);
+                  }}
+                  style={{ width: "100%", marginTop: 8, background: "transparent", border: "1px solid var(--hairline)", borderRadius: 6, color: "var(--text-muted)", fontSize: 13, padding: "9px 0", minHeight: 36, cursor: "pointer" }}
+                >
+                  Cancel
+                </button>
+                {deleteError && (
+                  <div style={{ fontSize: 12, color: "var(--status-incorrect)", marginTop: 6 }}>{deleteError}</div>
+                )}
+              </>
             )}
           </div>
         )}
