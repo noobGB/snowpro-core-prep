@@ -346,6 +346,21 @@ input[type="date"]::-webkit-calendar-picker-indicator {
    spanning both rows, independent of DOM order -- source order stays hero-then-form-then-features
    either way, which is also what keeps a screen reader's linear reading order sane (short hero,
    then the form, not the full feature grid first) and needs no explicit `order` overrides. */
+/* Issue #185: the landing page scrolled sideways on a phone. .home-hero-glow is deliberately wider
+   than its column (`inset: -60px -40px auto -40px`) so the glow bleeds softly past the heading, and
+   nothing clipped it -- at 390px that put its right edge 34px beyond the viewport and gave the whole
+   page a horizontal scrollbar. On the page a launch links to, that reads as broken.
+
+   `overflow-x: clip`, NOT `hidden`, and the difference matters here: `hidden` would make this a
+   scroll container, which re-anchors the `position: sticky` on .home-form to it instead of the
+   viewport and breaks the form's pinning at >=900px. `clip` clips without creating one. Browsers
+   without `clip` (Safari <16) simply keep today's behaviour -- degradation, not breakage.
+
+   Clipping at .home-hero instead was rejected: it cuts the soft edge the effect is made of. */
+.home-page {
+  overflow-x: clip;
+}
+
 .home-grid {
   display: grid;
   /* Mobile: screenshot sits AFTER the form, ahead of the feature grid -- a compact hero, then the
